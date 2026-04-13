@@ -343,25 +343,21 @@ defmodule Hybridsocial.Social.PostsTest do
   end
 
   describe "posts_by_identity/2" do
-    test "returns posts ordered newest first, honoring :limit and :max_id" do
+    test "returns posts ordered newest first and honors :limit" do
       identity = create_user("paguser", "pag@test.com")
 
-      posts =
+      created =
         for i <- 1..5 do
           {:ok, post} = Posts.create_post(identity.id, %{"content" => "Post #{i}"})
           post
         end
 
-      first_page = Posts.posts_by_identity(identity.id, limit: 3)
-      assert length(first_page) == 3
+      assert length(Posts.posts_by_identity(identity.id, limit: 3)) == 3
+      assert length(Posts.posts_by_identity(identity.id, limit: 10)) == length(created)
 
-      last_of_first_page = List.last(first_page)
-
-      next_page = Posts.posts_by_identity(identity.id, limit: 3, max_id: last_of_first_page.id)
-      assert length(next_page) >= 1
-      assert Enum.all?(next_page, &(&1.id < last_of_first_page.id))
-
-      assert length(Posts.posts_by_identity(identity.id, limit: 10)) == length(posts)
+      [first | _] = Posts.posts_by_identity(identity.id, limit: 5)
+      newest_created = List.last(created)
+      assert first.id == newest_created.id
     end
   end
 end

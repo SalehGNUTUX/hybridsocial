@@ -67,7 +67,22 @@ defmodule Hybridsocial.Federation.MRF.SimplePolicy do
     activity
     |> Map.update("to", [], fn to -> List.delete(List.wrap(to), public) end)
     |> Map.update("cc", [], fn cc -> List.delete(List.wrap(cc), public) end)
+    |> strip_object_public_addressing(public)
   end
+
+  # Visibility is computed from the embedded object's addressing in
+  # ActivityMapper.determine_visibility/1, so we must also strip Public
+  # there — otherwise silenced posts get stored with visibility: "public".
+  defp strip_object_public_addressing(%{"object" => %{} = object} = activity, public) do
+    new_object =
+      object
+      |> Map.update("to", [], fn to -> List.delete(List.wrap(to), public) end)
+      |> Map.update("cc", [], fn cc -> List.delete(List.wrap(cc), public) end)
+
+    Map.put(activity, "object", new_object)
+  end
+
+  defp strip_object_public_addressing(activity, _public), do: activity
 
   defp extract_domain(uri) when is_binary(uri) do
     case URI.parse(uri) do
