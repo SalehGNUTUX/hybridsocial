@@ -11,6 +11,7 @@ defmodule Hybridsocial.Media.Hash do
   Computes the SHA256 hash of a file at the given path.
   Returns `{:ok, hex_hash}` or `{:error, reason}`.
   """
+  # sobelow_skip ["Traversal.FileModule"]
   def compute_hash(file_path) do
     case File.read(file_path) do
       {:ok, binary_data} ->

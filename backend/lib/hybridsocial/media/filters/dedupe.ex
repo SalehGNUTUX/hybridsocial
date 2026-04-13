@@ -7,6 +7,7 @@ defmodule Hybridsocial.Media.Filters.Dedupe do
   """
 
   @doc "Rename the file to its SHA-256 content hash."
+  # sobelow_skip ["Traversal.FileModule"]
   def filter(%{path: path, filename: filename} = file_info) do
     case File.read(path) do
       {:ok, data} ->

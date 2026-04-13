@@ -47,6 +47,7 @@ defmodule HybridsocialWeb.Api.V1.ExportController do
   end
 
   # GET /api/v1/export/:id/download
+  # sobelow_skip ["Traversal.SendFile", "Traversal.FileModule"]
   def download(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
 
@@ -55,8 +56,10 @@ defmodule HybridsocialWeb.Api.V1.ExportController do
         conn |> put_status(:not_found) |> json(%{error: "export.not_found"})
 
       %{status: "completed", file_path: path} = export when is_binary(path) ->
-        if File.exists?(path) do
-          # Send the file, then delete it after download
+        # Defense in depth: the path comes from a DB record we wrote, but
+        # confirm it's actually under the exports dir before sending. Stops
+        # any future bug that lets a bad path land in the table.
+        if Portability.safe_export_path?(path) do
           conn =
             conn
             |> put_resp_content_type("application/gzip")
@@ -68,7 +71,7 @@ defmodule HybridsocialWeb.Api.V1.ExportController do
 
           # Clean up: delete file and mark export as downloaded
           Task.start(fn ->
-            File.rm(path)
+            if Portability.safe_export_path?(path), do: File.rm(path)
 
             export
             |> Ecto.Changeset.change(file_path: nil)

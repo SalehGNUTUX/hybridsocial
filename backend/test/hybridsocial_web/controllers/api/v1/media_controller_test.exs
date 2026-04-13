@@ -2,7 +2,6 @@ defmodule HybridsocialWeb.Api.V1.MediaControllerTest do
   use HybridsocialWeb.ConnCase, async: true
 
   alias Hybridsocial.Accounts
-  alias Hybridsocial.Media.Storage
 
   @jpeg_bytes <<0xFF, 0xD8, 0xFF, 0xE0, 0::size(160)>>
 
@@ -26,12 +25,9 @@ defmodule HybridsocialWeb.Api.V1.MediaControllerTest do
     %{"access_token" => token, "identity_id" => identity_id} = json_response(login_conn, 200)
     authed_conn = put_req_header(conn, "authorization", "Bearer #{token}")
 
-    on_exit(fn ->
-      uploads_dir = Storage.uploads_dir()
-      if File.exists?(uploads_dir), do: File.rm_rf!(uploads_dir)
-      File.mkdir_p!(uploads_dir)
-    end)
-
+    # Don't rm_rf the uploads dir on exit: tests run async and the wipe
+    # races with sibling tests' file writes. Each test cleans its own
+    # tmp file via the helper below.
     %{conn: conn, authed_conn: authed_conn, identity_id: identity_id}
   end
 

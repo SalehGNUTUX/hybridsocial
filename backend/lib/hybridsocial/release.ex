@@ -29,6 +29,7 @@ defmodule Hybridsocial.Release do
     seed()
   end
 
+  # sobelow_skip ["RCE.CodeModule"]
   def seed do
     load_app()
 

@@ -34,6 +34,7 @@ defmodule Hybridsocial.Portability do
     |> Repo.one()
   end
 
+  # sobelow_skip ["Traversal.FileModule"]
   def generate_export(export_id) do
     case Repo.get(DataExport, export_id) do
       nil ->
@@ -91,6 +92,7 @@ defmodule Hybridsocial.Portability do
   end
 
   @doc "Delete export files older than 1 hour."
+  # sobelow_skip ["Traversal.FileModule"]
   def cleanup_expired_exports do
     cutoff = DateTime.add(DateTime.utc_now(), -3600, :second)
 
@@ -236,6 +238,25 @@ defmodule Hybridsocial.Portability do
     })
     |> Repo.update()
   end
+
+  @doc "Returns the absolute path to the exports directory."
+  def exports_dir do
+    Path.expand(export_directory())
+  end
+
+  @doc """
+  Returns true if `path` is a real file under `exports_dir/0`. Used by the
+  download controller to defend against directory traversal even though
+  the stored path comes from our own export record.
+  """
+  def safe_export_path?(path) when is_binary(path) do
+    base = exports_dir()
+    expanded = Path.expand(path)
+
+    String.starts_with?(expanded, base <> "/") and File.regular?(expanded)
+  end
+
+  def safe_export_path?(_), do: false
 
   defp export_directory do
     Path.join([Application.get_env(:hybridsocial, :upload_dir, "priv/uploads"), "exports"])

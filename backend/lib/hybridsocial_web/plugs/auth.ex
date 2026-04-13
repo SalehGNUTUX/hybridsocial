@@ -38,10 +38,25 @@ defmodule HybridsocialWeb.Plugs.Auth do
       nil ->
         ip = get_client_ip(conn)
         safe_cache_raw_set(cache_key, "1", 300)
-        Task.start(fn -> Hybridsocial.Auth.touch_session(token_hash, ip) end)
+        spawn_session_touch(token_hash, ip)
 
       _ ->
         :ok
+    end
+  end
+
+  # In test, run synchronously so the DB write happens inside the request's
+  # sandbox. Spawning a Task would check out a separate connection that
+  # outlives the test owner and floods CI logs with disconnect warnings.
+  if Mix.env() == :test do
+    defp spawn_session_touch(token_hash, ip) do
+      Hybridsocial.Auth.touch_session(token_hash, ip)
+      :ok
+    end
+  else
+    defp spawn_session_touch(token_hash, ip) do
+      Task.start(fn -> Hybridsocial.Auth.touch_session(token_hash, ip) end)
+      :ok
     end
   end
 

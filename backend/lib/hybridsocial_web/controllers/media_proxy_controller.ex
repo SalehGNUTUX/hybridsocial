@@ -5,12 +5,19 @@ defmodule HybridsocialWeb.MediaProxyController do
 
   require Logger
 
+  # Only allow media MIME types through the proxy. A compromised or hostile
+  # upstream cannot trick the browser into rendering text/html as an HTML
+  # page even if it omits nosniff; anything off-allowlist is forced to
+  # application/octet-stream.
+  @safe_media_prefixes ["image/", "video/", "audio/"]
+
   @doc "Proxy a remote media URL through the local server."
+  # sobelow_skip ["XSS.SendResp"]
   def show(conn, %{"signature" => signature, "encoded_url" => encoded_url}) do
     with {:ok, remote_url} <- MediaProxy.verify_url(signature, encoded_url),
          :ok <- validate_remote_url(remote_url),
          {:ok, response} <- fetch_remote(remote_url) do
-      content_type = get_content_type(response)
+      content_type = sanitize_content_type(get_content_type(response))
 
       conn
       |> put_resp_header("content-type", content_type)
@@ -83,6 +90,18 @@ defmodule HybridsocialWeb.MediaProxyController do
       nil -> "application/octet-stream"
     end
   end
+
+  defp sanitize_content_type(content_type) when is_binary(content_type) do
+    base = content_type |> String.split(";", parts: 2) |> hd() |> String.downcase()
+
+    if Enum.any?(@safe_media_prefixes, &String.starts_with?(base, &1)) do
+      base
+    else
+      "application/octet-stream"
+    end
+  end
+
+  defp sanitize_content_type(_), do: "application/octet-stream"
 
   defp private_host?(host) do
     host in ["localhost", "127.0.0.1", "::1", "0.0.0.0"] or

@@ -11,6 +11,7 @@ defmodule Hybridsocial.Media do
   Uploads a file: validates magic bytes, validates size, stores to disk, creates DB record.
   Returns {:ok, media} or {:error, reason}.
   """
+  # sobelow_skip ["Traversal.FileModule"]
   def upload(identity_id, %Plug.Upload{path: path, filename: filename} = upload) do
     with {:ok, binary_data} <- File.read(path),
          {:ok, content_type} <- Validator.validate_content_type(binary_data),

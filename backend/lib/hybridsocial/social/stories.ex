@@ -49,11 +49,23 @@ defmodule Hybridsocial.Social.Stories do
   defp fetch_media_id(%{"media_id" => id}) when is_binary(id), do: {:ok, id}
   defp fetch_media_id(_), do: {:error, :media_id_required}
 
+  # Whitelist of allowed attribute keys. Never atomize unknown user input —
+  # atoms aren't garbage collected, so attacker-controlled strings would be
+  # a DoS vector.
+  @allowed_attrs ~w(media_id caption duration_hours identity_id)
+  @allowed_atoms Enum.map(@allowed_attrs, &String.to_atom/1)
+
   defp normalize_attrs(%{} = attrs) do
     attrs
-    |> Enum.map(fn
-      {k, v} when is_binary(k) -> {String.to_atom(k), v}
-      {k, v} -> {k, v}
+    |> Enum.flat_map(fn
+      {k, v} when is_binary(k) and k in @allowed_attrs ->
+        [{String.to_existing_atom(k), v}]
+
+      {k, v} when is_atom(k) and k in @allowed_atoms ->
+        [{k, v}]
+
+      _ ->
+        []
     end)
     |> Map.new()
     |> coerce_duration()

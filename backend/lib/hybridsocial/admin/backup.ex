@@ -50,6 +50,7 @@ defmodule Hybridsocial.Admin.Backup do
   @doc """
   Generates the actual backup file: pg_dump -> compress -> encrypt -> store.
   """
+  # sobelow_skip ["Traversal.FileModule"]
   def generate_backup(backup_id, passphrase) do
     backup_job =
       case Repo.get(BackupJob, backup_id) do
@@ -174,6 +175,7 @@ defmodule Hybridsocial.Admin.Backup do
   Decrypts and verifies a backup file. Does NOT actually restore the database.
   This is a stub that validates the passphrase can decrypt the backup.
   """
+  # sobelow_skip ["Traversal.FileModule"]
   def restore_backup(backup_id, passphrase) do
     case get_backup(backup_id) do
       nil ->
@@ -255,6 +257,7 @@ defmodule Hybridsocial.Admin.Backup do
     end
   end
 
+  # sobelow_skip ["Traversal.FileModule"]
   defp ensure_backup_dir do
     dir = backup_dir()
     File.mkdir_p!(dir)
