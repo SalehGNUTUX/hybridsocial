@@ -117,7 +117,7 @@ defmodule Hybridsocial.Federation.MRFTest do
     test "excludes collection URIs from the mention count" do
       recipients =
         ["https://www.w3.org/ns/activitystreams#Public"] ++
-          (for _ <- 1..9, do: "https://remote.example/u/followers")
+          for _ <- 1..9, do: "https://remote.example/u/followers"
 
       activity = create_activity(%{"to" => recipients, "cc" => []})
       assert {:ok, _} = HellthreadPolicy.filter(activity)
@@ -215,7 +215,9 @@ defmodule Hybridsocial.Federation.MRFTest do
 
     test "rejects posts with links from unknown actors" do
       activity =
-        create_activity(%{"object" => %{"content" => ~s(click <a href="https://spam.example">here</a>)}})
+        create_activity(%{
+          "object" => %{"content" => ~s(click <a href="https://spam.example">here</a>)}
+        })
 
       assert {:reject, _} = AntiLinkSpamPolicy.filter(activity)
     end

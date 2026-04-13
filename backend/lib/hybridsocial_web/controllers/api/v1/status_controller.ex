@@ -138,6 +138,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
       post ->
         text = post.content || ""
+
         case Hybridsocial.Content.Translation.translate(text, target_lang) do
           {:ok, translated} ->
             json(conn, %{
@@ -150,7 +151,9 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
             conn |> put_status(:service_unavailable) |> json(%{error: "translation.disabled"})
 
           {:error, reason} ->
-            conn |> put_status(:bad_gateway) |> json(%{error: "translation.failed", detail: inspect(reason)})
+            conn
+            |> put_status(:bad_gateway)
+            |> json(%{error: "translation.failed", detail: inspect(reason)})
         end
     end
   end
@@ -172,14 +175,15 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
         %{
           type: type,
           count: length(entries),
-          accounts: Enum.map(entries, fn r ->
-            %{
-              id: r.identity.id,
-              handle: r.identity.handle,
-              display_name: r.identity.display_name,
-              avatar_url: r.identity.avatar_url
-            }
-          end)
+          accounts:
+            Enum.map(entries, fn r ->
+              %{
+                id: r.identity.id,
+                handle: r.identity.handle,
+                display_name: r.identity.display_name,
+                avatar_url: r.identity.avatar_url
+              }
+            end)
         }
       end)
       |> Enum.sort_by(& &1.count, :desc)
@@ -200,7 +204,11 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
       # Verify custom emoji exists
       if is_custom_emoji do
         shortcode = String.trim(type, ":")
-        case Hybridsocial.Repo.get_by(Hybridsocial.Content.CustomEmoji, shortcode: shortcode, enabled: true) do
+
+        case Hybridsocial.Repo.get_by(Hybridsocial.Content.CustomEmoji,
+               shortcode: shortcode,
+               enabled: true
+             ) do
           nil ->
             conn
             |> put_status(:unprocessable_entity)
@@ -341,26 +349,24 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
       |> put_status(:unprocessable_entity)
       |> json(%{error: "limits.max_pinned_posts", max: max_pins})
     else
+      case Posts.pin_post(id, identity.id) do
+        {:ok, post} ->
+          post = Hybridsocial.Repo.preload(post, [:identity, :quote])
 
-    case Posts.pin_post(id, identity.id) do
-      {:ok, post} ->
-        post = Hybridsocial.Repo.preload(post, [:identity, :quote])
+          conn
+          |> put_status(:ok)
+          |> json(serialize_post(conn, post))
 
-        conn
-        |> put_status(:ok)
-        |> json(serialize_post(conn, post))
+        {:error, :not_found} ->
+          conn
+          |> put_status(:not_found)
+          |> json(%{error: "status.not_found"})
 
-      {:error, :not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "status.not_found"})
-
-      {:error, :forbidden} ->
-        conn
-        |> put_status(:forbidden)
-        |> json(%{error: "status.forbidden"})
-    end
-
+        {:error, :forbidden} ->
+          conn
+          |> put_status(:forbidden)
+          |> json(%{error: "status.forbidden"})
+      end
     end
   end
 
@@ -447,7 +453,8 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
       parent = post[:parent_id]
 
       acc =
-        if parent && !MapSet.member?(known_ids, parent) && !Enum.any?(acc, fn p -> p[:id] == parent end) do
+        if parent && !MapSet.member?(known_ids, parent) &&
+             !Enum.any?(acc, fn p -> p[:id] == parent end) do
           [PostSerializer.serialize_tombstone(parent) | acc]
         else
           acc
@@ -497,6 +504,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
         # Bot-specific limit
         identity.is_bot ->
           bot = Hybridsocial.Repo.get(Hybridsocial.Accounts.Bot, identity.id)
+
           cond do
             bot && bot.posts_per_hour -> bot.posts_per_hour
             true -> Hybridsocial.Config.get("bot_posts_per_hour", 30)
@@ -512,9 +520,13 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
       :ok
     else
       one_hour_ago = DateTime.add(DateTime.utc_now(), -3600, :second)
+
       count =
         Hybridsocial.Social.Post
-        |> where([p], p.identity_id == ^identity.id and p.inserted_at > ^one_hour_ago and is_nil(p.deleted_at))
+        |> where(
+          [p],
+          p.identity_id == ^identity.id and p.inserted_at > ^one_hour_ago and is_nil(p.deleted_at)
+        )
         |> Hybridsocial.Repo.aggregate(:count)
 
       if count >= limit do

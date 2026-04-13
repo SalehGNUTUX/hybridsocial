@@ -87,9 +87,16 @@ defmodule Hybridsocial.Pages do
          true <- org.owner_id == owner_id do
       case identity |> Identity.soft_delete_changeset() |> Repo.update() do
         {:ok, deleted} ->
-          Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "identities", {:identity_deleted, deleted.id})
+          Phoenix.PubSub.broadcast(
+            Hybridsocial.PubSub,
+            "identities",
+            {:identity_deleted, deleted.id}
+          )
+
           {:ok, deleted}
-        error -> error
+
+        error ->
+          error
       end
     else
       false -> {:error, :forbidden}
@@ -125,7 +132,10 @@ defmodule Hybridsocial.Pages do
   @doc "Lists all pages owned by the given identity."
   def pages_for_owner(owner_id) do
     Identity
-    |> where([i], i.parent_identity_id == ^owner_id and i.type == "organization" and is_nil(i.deleted_at))
+    |> where(
+      [i],
+      i.parent_identity_id == ^owner_id and i.type == "organization" and is_nil(i.deleted_at)
+    )
     |> order_by([i], asc: i.inserted_at)
     |> Repo.all()
     |> Repo.preload(:organization)

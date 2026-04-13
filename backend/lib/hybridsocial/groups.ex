@@ -78,7 +78,8 @@ defmodule Hybridsocial.Groups do
     end
   end
 
-  defp generate_group_handle(nil), do: "group_#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
+  defp generate_group_handle(nil),
+    do: "group_#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
 
   defp generate_group_handle(name) do
     handle =
@@ -103,7 +104,9 @@ defmodule Hybridsocial.Groups do
         {:ok, updated} ->
           Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "groups", {:group_updated, updated})
           {:ok, updated}
-        error -> error
+
+        error ->
+          error
       end
     end
   end
@@ -126,10 +129,19 @@ defmodule Hybridsocial.Groups do
       |> Repo.transaction()
       |> case do
         {:ok, %{group: deleted_group}} ->
-          Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "groups", {:group_deleted, deleted_group.id})
+          Phoenix.PubSub.broadcast(
+            Hybridsocial.PubSub,
+            "groups",
+            {:group_deleted, deleted_group.id}
+          )
+
           {:ok, deleted_group}
-        {:error, :group, changeset, _} -> {:error, changeset}
-        {:error, _, reason, _} -> {:error, reason}
+
+        {:error, :group, changeset, _} ->
+          {:error, changeset}
+
+        {:error, _, reason, _} ->
+          {:error, reason}
       end
     end
   end

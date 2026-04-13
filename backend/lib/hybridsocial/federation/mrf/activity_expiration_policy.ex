@@ -30,6 +30,7 @@ defmodule Hybridsocial.Federation.MRF.ActivityExpirationPolicy do
 
   @impl true
   def describe do
-    {:ok, %{name: "activity_expiration", description: "Adds expiration timestamps to activities."}}
+    {:ok,
+     %{name: "activity_expiration", description: "Adds expiration timestamps to activities."}}
   end
 end

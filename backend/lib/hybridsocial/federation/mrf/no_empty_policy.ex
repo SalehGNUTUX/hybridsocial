@@ -11,8 +11,10 @@ defmodule Hybridsocial.Federation.MRF.NoEmptyPolicy do
 
     has_content = String.trim(content) != ""
     has_attachments = is_list(attachments) and length(attachments) > 0
-    has_poll = is_map(object["oneOf"]) or is_list(object["oneOf"]) or
-               is_map(object["anyOf"]) or is_list(object["anyOf"])
+
+    has_poll =
+      is_map(object["oneOf"]) or is_list(object["oneOf"]) or
+        is_map(object["anyOf"]) or is_list(object["anyOf"])
 
     if has_content or has_attachments or has_poll do
       {:ok, activity}

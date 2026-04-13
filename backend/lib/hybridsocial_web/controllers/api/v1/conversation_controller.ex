@@ -338,7 +338,9 @@ defmodule HybridsocialWeb.Api.V1.ConversationController do
     identity = conn.assigns.current_identity
 
     case Messaging.decline_conversation(id, identity.id) do
-      {:ok, _} -> json(conn, %{status: "ok"})
+      {:ok, _} ->
+        json(conn, %{status: "ok"})
+
       {:error, :not_found} ->
         conn |> put_status(:not_found) |> json(%{error: "conversation.not_found"})
     end
@@ -353,7 +355,9 @@ defmodule HybridsocialWeb.Api.V1.ConversationController do
         json(conn, %{id: reaction.id, emoji: reaction.emoji, message_id: reaction.message_id})
 
       {:error, changeset} ->
-        conn |> put_status(:unprocessable_entity) |> json(%{error: "reaction.failed", details: format_errors(changeset)})
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "reaction.failed", details: format_errors(changeset)})
     end
   end
 
@@ -362,7 +366,9 @@ defmodule HybridsocialWeb.Api.V1.ConversationController do
     identity = conn.assigns.current_identity
 
     case Messaging.unreact_to_message(message_id, identity.id, emoji) do
-      :ok -> json(conn, %{status: "ok"})
+      :ok ->
+        json(conn, %{status: "ok"})
+
       {:error, :not_found} ->
         conn |> put_status(:not_found) |> json(%{error: "reaction.not_found"})
     end

@@ -50,7 +50,9 @@ defmodule Hybridsocial.Federation.ContainmentTest do
 
     test "rejects activity id and actor on different hosts (spoofing attempt)" do
       activity = %{"actor" => "https://attacker.example/u/alice"}
-      assert :error = Containment.contain_origin("https://victim.example/objects/note-1", activity)
+
+      assert :error =
+               Containment.contain_origin("https://victim.example/objects/note-1", activity)
     end
 
     test "rejects a nil actor" do

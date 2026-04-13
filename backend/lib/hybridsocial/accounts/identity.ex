@@ -101,7 +101,24 @@ defmodule Hybridsocial.Accounts.Identity do
 
   def admin_update_changeset(identity, attrs) do
     identity
-    |> cast(attrs, @update_fields ++ [:verification_tier, :trust_level, :is_bot, :force_bot, :is_suggested, :is_name_revoked, :is_suspended, :is_silenced, :is_shadow_banned, :force_sensitive, :metadata, :is_admin])
+    |> cast(
+      attrs,
+      @update_fields ++
+        [
+          :verification_tier,
+          :trust_level,
+          :is_bot,
+          :force_bot,
+          :is_suggested,
+          :is_name_revoked,
+          :is_suspended,
+          :is_silenced,
+          :is_shadow_banned,
+          :force_sensitive,
+          :metadata,
+          :is_admin
+        ]
+    )
     |> validate_length(:display_name, max: 50)
     |> validate_length(:bio, max: 500)
     |> validate_length(:avatar_url, max: 2048)

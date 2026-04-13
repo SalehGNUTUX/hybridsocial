@@ -24,21 +24,28 @@ defmodule Hybridsocial.Content.Translation do
     url = Hybridsocial.Config.get("translation_api_url", "https://libretranslate.com")
     api_key = Hybridsocial.Config.get("translation_api_key", "")
 
-    body = Jason.encode!(%{
-      q: text,
-      source: source,
-      target: target,
-      api_key: api_key
-    })
+    body =
+      Jason.encode!(%{
+        q: text,
+        source: source,
+        target: target,
+        api_key: api_key
+      })
 
-    case HTTPoison.post("#{url}/translate", body, [{"Content-Type", "application/json"}], recv_timeout: 10_000) do
+    case HTTPoison.post("#{url}/translate", body, [{"Content-Type", "application/json"}],
+           recv_timeout: 10_000
+         ) do
       {:ok, %{status_code: 200, body: resp}} ->
         case Jason.decode(resp) do
           {:ok, %{"translatedText" => translated}} -> {:ok, translated}
           _ -> {:error, :parse_error}
         end
-      {:ok, %{status_code: status}} -> {:error, {:http_error, status}}
-      {:error, reason} -> {:error, reason}
+
+      {:ok, %{status_code: status}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -46,20 +53,27 @@ defmodule Hybridsocial.Content.Translation do
     api_key = Hybridsocial.Config.get("translation_api_key", "")
     url = "https://api-free.deepl.com/v2/translate"
 
-    body = URI.encode_query(%{
-      "text" => text,
-      "target_lang" => String.upcase(target),
-      "auth_key" => api_key
-    })
+    body =
+      URI.encode_query(%{
+        "text" => text,
+        "target_lang" => String.upcase(target),
+        "auth_key" => api_key
+      })
 
-    case HTTPoison.post(url, body, [{"Content-Type", "application/x-www-form-urlencoded"}], recv_timeout: 10_000) do
+    case HTTPoison.post(url, body, [{"Content-Type", "application/x-www-form-urlencoded"}],
+           recv_timeout: 10_000
+         ) do
       {:ok, %{status_code: 200, body: resp}} ->
         case Jason.decode(resp) do
           {:ok, %{"translations" => [%{"text" => translated} | _]}} -> {:ok, translated}
           _ -> {:error, :parse_error}
         end
-      {:ok, %{status_code: status}} -> {:error, {:http_error, status}}
-      {:error, reason} -> {:error, reason}
+
+      {:ok, %{status_code: status}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

@@ -146,6 +146,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
           %Hybridsocial.Social.Post{} = q ->
             q = Repo.preload(q, :identity)
             serialize(q, opts)
+
           _ ->
             nil
         end
@@ -185,7 +186,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
         current_user_reaction: Map.get(reactions_map, post.id),
         created_at: post.inserted_at,
         edited_at: post.edited_at,
-      edit_expires_at: Map.get(post, :edit_expires_at),
+        edit_expires_at: Map.get(post, :edit_expires_at),
         account: account,
         parent_id: post.parent_id,
         root_id: post.root_id,
@@ -250,7 +251,10 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
   defp user_state_for(post_id, identity_id) do
     is_boosted =
       Boost
-      |> where([b], b.post_id == ^post_id and b.identity_id == ^identity_id and is_nil(b.deleted_at))
+      |> where(
+        [b],
+        b.post_id == ^post_id and b.identity_id == ^identity_id and is_nil(b.deleted_at)
+      )
       |> Repo.exists?()
 
     is_bookmarked =
@@ -275,7 +279,10 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
   defp batch_user_state(post_ids, identity_id) when post_ids != [] do
     boosts =
       Boost
-      |> where([b], b.post_id in ^post_ids and b.identity_id == ^identity_id and is_nil(b.deleted_at))
+      |> where(
+        [b],
+        b.post_id in ^post_ids and b.identity_id == ^identity_id and is_nil(b.deleted_at)
+      )
       |> select([b], b.post_id)
       |> Repo.all()
       |> MapSet.new()
@@ -318,7 +325,10 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
       me =
         if current_identity_id do
           Reaction
-          |> where([r], r.post_id == ^post_id and r.type == ^type and r.identity_id == ^current_identity_id)
+          |> where(
+            [r],
+            r.post_id == ^post_id and r.type == ^type and r.identity_id == ^current_identity_id
+          )
           |> Repo.exists?()
         else
           false
@@ -382,6 +392,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
   defp extract_mentions(html) when is_binary(html) do
     # Extract @mentions from content — look for links with class="mention" or @handle patterns
     mention_regex = ~r/@([a-zA-Z0-9_]+(?:@[a-zA-Z0-9.\-]+)?)/
+
     Regex.scan(mention_regex, html)
     |> Enum.map(fn [_, acct] -> %{acct: acct} end)
     |> Enum.uniq_by(& &1.acct)

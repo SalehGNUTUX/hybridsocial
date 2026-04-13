@@ -28,9 +28,7 @@ defmodule Hybridsocial.Social.Story do
     story
     |> cast(attrs, [:identity_id, :media_id, :caption, :duration_hours])
     |> validate_required([:identity_id, :media_id, :duration_hours])
-    |> validate_inclusion(:duration_hours, @valid_durations,
-      message: "must be 8, 16, or 24"
-    )
+    |> validate_inclusion(:duration_hours, @valid_durations, message: "must be 8, 16, or 24")
     |> validate_length(:caption, max: 200)
     |> put_timestamps()
     |> foreign_key_constraint(:identity_id)

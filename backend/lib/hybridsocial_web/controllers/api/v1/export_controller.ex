@@ -60,12 +60,16 @@ defmodule HybridsocialWeb.Api.V1.ExportController do
           conn =
             conn
             |> put_resp_content_type("application/gzip")
-            |> put_resp_header("content-disposition", "attachment; filename=\"hybridsocial-export.tar.gz\"")
+            |> put_resp_header(
+              "content-disposition",
+              "attachment; filename=\"hybridsocial-export.tar.gz\""
+            )
             |> send_file(200, path)
 
           # Clean up: delete file and mark export as downloaded
           Task.start(fn ->
             File.rm(path)
+
             export
             |> Ecto.Changeset.change(file_path: nil)
             |> Hybridsocial.Repo.update()
@@ -77,7 +81,9 @@ defmodule HybridsocialWeb.Api.V1.ExportController do
         end
 
       %{status: status} ->
-        conn |> put_status(:unprocessable_entity) |> json(%{error: "export.not_ready", status: status})
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "export.not_ready", status: status})
     end
   end
 

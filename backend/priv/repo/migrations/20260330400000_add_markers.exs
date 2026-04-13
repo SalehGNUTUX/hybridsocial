@@ -4,8 +4,10 @@ defmodule Hybridsocial.Repo.Migrations.AddMarkers do
   def change do
     create table(:markers, primary_key: false) do
       add :id, :binary_id, primary_key: true
+
       add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all),
         null: false
+
       add :timeline, :string, null: false
       add :last_read_id, :string, null: false
 

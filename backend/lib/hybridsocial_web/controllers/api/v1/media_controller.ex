@@ -17,42 +17,45 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
     file_size = File.stat!(upload.path).size
     content_type = upload.content_type || ""
     is_video = String.starts_with?(content_type, "video/")
-    max_bytes = if is_video, do: (limits[:video_size_mb] || 40) * 1_048_576, else: (limits[:image_size_mb] || 10) * 1_048_576
+
+    max_bytes =
+      if is_video,
+        do: (limits[:video_size_mb] || 40) * 1_048_576,
+        else: (limits[:image_size_mb] || 10) * 1_048_576
 
     if file_size > max_bytes do
       max_mb = if is_video, do: limits[:video_size_mb] || 40, else: limits[:image_size_mb] || 10
+
       conn
       |> put_status(:request_entity_too_large)
       |> json(%{error: "media.file_too_large", max_mb: max_mb})
     else
+      case Media.upload(identity_id, upload, alt_text) do
+        {:ok, media} ->
+          conn
+          |> put_status(:created)
+          |> json(render_media(media))
 
-    case Media.upload(identity_id, upload, alt_text) do
-      {:ok, media} ->
-        conn
-        |> put_status(:created)
-        |> json(render_media(media))
+        {:error, :invalid_content_type} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "media.invalid_content_type"})
 
-      {:error, :invalid_content_type} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "media.invalid_content_type"})
+        {:error, :file_too_large} ->
+          conn
+          |> put_status(:request_entity_too_large)
+          |> json(%{error: "media.file_too_large"})
 
-      {:error, :file_too_large} ->
-        conn
-        |> put_status(:request_entity_too_large)
-        |> json(%{error: "media.file_too_large"})
+        {:error, changeset} when is_struct(changeset, Ecto.Changeset) ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "media.upload_failed", details: format_errors(changeset)})
 
-      {:error, changeset} when is_struct(changeset, Ecto.Changeset) ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "media.upload_failed", details: format_errors(changeset)})
-
-      {:error, _reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "media.upload_failed"})
-    end
-
+        {:error, _reason} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "media.upload_failed"})
+      end
     end
   end
 

@@ -257,7 +257,11 @@ defmodule HybridsocialWeb.Api.V1.BotController do
              identity_id: identity_id,
              application_id: application_id,
              token_hash: token_hash,
-             refresh_token_hash: Token.hash_token(:crypto.strong_rand_bytes(64) |> Base.url_encode64(padding: false)),
+             refresh_token_hash:
+               Token.hash_token(
+                 :crypto.strong_rand_bytes(64)
+                 |> Base.url_encode64(padding: false)
+               ),
              scopes: ["read", "write", "follow", "push"],
              expires_at: expires_at
            })

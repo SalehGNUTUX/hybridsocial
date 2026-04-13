@@ -50,10 +50,11 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
     # Original posts from followed accounts + own posts + followed tags
     posts_query =
       Post
-      |> where([p],
+      |> where(
+        [p],
         p.identity_id in subquery(followed_ids) or
-        p.identity_id == ^identity_id or
-        p.id in subquery(tagged_post_ids)
+          p.identity_id == ^identity_id or
+          p.id in subquery(tagged_post_ids)
       )
       |> where([p], is_nil(p.deleted_at))
       |> where([p], is_nil(p.parent_id))

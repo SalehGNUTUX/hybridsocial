@@ -5,7 +5,6 @@ defmodule Hybridsocial.Social.Excerpt do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-
   schema "excerpts" do
     belongs_to :identity, Hybridsocial.Accounts.Identity
     field :name, :string
@@ -20,7 +19,15 @@ defmodule Hybridsocial.Social.Excerpt do
 
   def changeset(excerpt, attrs) do
     excerpt
-    |> cast(attrs, [:identity_id, :name, :keywords, :exclude_keywords, :sources, :with_media_only, :notify])
+    |> cast(attrs, [
+      :identity_id,
+      :name,
+      :keywords,
+      :exclude_keywords,
+      :sources,
+      :with_media_only,
+      :notify
+    ])
     |> validate_required([:identity_id, :name, :keywords])
     |> validate_length(:name, min: 1, max: 100)
     |> validate_length(:keywords, min: 1, max: 20)

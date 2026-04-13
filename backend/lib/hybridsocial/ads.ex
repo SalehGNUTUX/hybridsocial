@@ -87,10 +87,12 @@ defmodule Hybridsocial.Ads do
   @doc "Expire ads past their expiry."
   def expire_ads do
     now = DateTime.utc_now()
+
     {count, _} =
       Ad
       |> where([a], a.is_active == true and not is_nil(a.expires_at) and a.expires_at <= ^now)
       |> Repo.update_all(set: [is_active: false])
+
     {:ok, count}
   end
 end

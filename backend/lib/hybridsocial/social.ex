@@ -7,7 +7,19 @@ defmodule Hybridsocial.Social do
 
   alias Hybridsocial.Repo
   alias Hybridsocial.Accounts
-  alias Hybridsocial.Social.{Follow, Block, Mute, PostMute, UserDomainBlock, AccountNote, FollowedTag, Hashtag, UserContentFilter}
+
+  alias Hybridsocial.Social.{
+    Follow,
+    Block,
+    Mute,
+    PostMute,
+    UserDomainBlock,
+    AccountNote,
+    FollowedTag,
+    Hashtag,
+    UserContentFilter
+  }
+
   alias Hybridsocial.Federation.{ActivityBuilder, Publisher}
 
   # --- Follows ---
@@ -44,7 +56,9 @@ defmodule Hybridsocial.Social do
               Publisher.publish(activity, follower)
             end)
           else
-            Logger.debug("Skipping federation: follower=#{inspect(!!follower)} remote=#{inspect(remote?(target))} ap_url=#{inspect(target.ap_actor_url)}")
+            Logger.debug(
+              "Skipping federation: follower=#{inspect(!!follower)} remote=#{inspect(remote?(target))} ap_url=#{inspect(target.ap_actor_url)}"
+            )
           end
 
         _ ->
@@ -155,7 +169,9 @@ defmodule Hybridsocial.Social do
     Follow
     |> where([f], f.follower_id in subquery(viewer_following))
     |> where([f], f.followee_id == ^target_id and f.status == :accepted)
-    |> join(:inner, [f], i in Hybridsocial.Accounts.Identity, on: i.id == f.follower_id and is_nil(i.deleted_at))
+    |> join(:inner, [f], i in Hybridsocial.Accounts.Identity,
+      on: i.id == f.follower_id and is_nil(i.deleted_at)
+    )
     |> select([f, i], i)
     |> limit(5)
     |> Repo.all()
@@ -412,6 +428,7 @@ defmodule Hybridsocial.Social do
     UserDomainBlock
     |> where([d], d.identity_id == ^identity_id and d.domain == ^String.downcase(domain))
     |> Repo.delete_all()
+
     :ok
   end
 
@@ -442,6 +459,7 @@ defmodule Hybridsocial.Social do
     AccountNote
     |> where([n], n.author_id == ^author_id and n.target_id == ^target_id)
     |> Repo.delete_all()
+
     :ok
   end
 
@@ -475,11 +493,14 @@ defmodule Hybridsocial.Social do
     tag_name = String.downcase(tag_name) |> String.trim_leading("#")
 
     case Repo.get_by(Hashtag, name: tag_name) do
-      nil -> :ok
+      nil ->
+        :ok
+
       hashtag ->
         FollowedTag
         |> where([ft], ft.identity_id == ^identity_id and ft.hashtag_id == ^hashtag.id)
         |> Repo.delete_all()
+
         :ok
     end
   end
@@ -520,7 +541,9 @@ defmodule Hybridsocial.Social do
 
   def update_user_filter(filter_id, identity_id, attrs) do
     case Repo.get_by(UserContentFilter, id: filter_id, identity_id: identity_id) do
-      nil -> {:error, :not_found}
+      nil ->
+        {:error, :not_found}
+
       filter ->
         filter
         |> UserContentFilter.changeset(attrs)
@@ -546,10 +569,20 @@ defmodule Hybridsocial.Social do
   # --- Boost Muting (mute someone's boosts without muting them) ---
 
   def mute_boosts(muter_id, target_id) do
-    Repo.insert_all("boost_mutes",
-      [%{id: Ecto.UUID.generate(), muter_id: Ecto.UUID.dump!(muter_id), target_id: Ecto.UUID.dump!(target_id), inserted_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}],
+    Repo.insert_all(
+      "boost_mutes",
+      [
+        %{
+          id: Ecto.UUID.generate(),
+          muter_id: Ecto.UUID.dump!(muter_id),
+          target_id: Ecto.UUID.dump!(target_id),
+          inserted_at: DateTime.utc_now(),
+          updated_at: DateTime.utc_now()
+        }
+      ],
       on_conflict: :nothing
     )
+
     :ok
   end
 
@@ -561,6 +594,7 @@ defmodule Hybridsocial.Social do
       where: bm.muter_id == ^muter_uuid and bm.target_id == ^target_uuid
     )
     |> Repo.delete_all()
+
     :ok
   end
 

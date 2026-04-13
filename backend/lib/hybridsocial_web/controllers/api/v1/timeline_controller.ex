@@ -29,7 +29,10 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
   defp deny_access(conn) do
     conn
     |> put_status(:unauthorized)
-    |> json(%{error: "timeline.login_required", message: "You need to create an account to view this timeline."})
+    |> json(%{
+      error: "timeline.login_required",
+      message: "You need to create an account to view this timeline."
+    })
     |> halt()
   end
 
@@ -66,58 +69,58 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
   @doc "GET /api/v1/timelines/public - Public timeline (optional auth)"
   def public(conn, params) do
     case check_timeline_access(conn, :local) do
-      :denied -> deny_access(conn)
+      :denied ->
+        deny_access(conn)
+
       :ok ->
+        viewer_id =
+          case conn.assigns[:current_identity] do
+            nil -> nil
+            identity -> identity.id
+          end
 
-    viewer_id =
-      case conn.assigns[:current_identity] do
-        nil -> nil
-        identity -> identity.id
-      end
+        opts =
+          parse_pagination_params(params)
+          |> Keyword.merge(
+            include_replies: params["include_replies"] == "true",
+            local_only: Map.get(params, "local", "true") == "true",
+            viewer_id: viewer_id
+          )
 
-    opts =
-      parse_pagination_params(params)
-      |> Keyword.merge(
-        include_replies: params["include_replies"] == "true",
-        local_only: Map.get(params, "local", "true") == "true",
-        viewer_id: viewer_id
-      )
+        posts = Feeds.public_timeline(opts)
+        serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
 
-    posts = Feeds.public_timeline(opts)
-    serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
-
-    conn
-    |> put_link_headers(serialized, "/api/v1/timelines/public")
-    |> put_status(:ok)
-    |> json(serialized)
-
+        conn
+        |> put_link_headers(serialized, "/api/v1/timelines/public")
+        |> put_status(:ok)
+        |> json(serialized)
     end
   end
 
   @doc "GET /api/v1/timelines/tag/:hashtag - Hashtag timeline (optional auth)"
   def hashtag(conn, %{"hashtag" => hashtag} = params) do
     case check_timeline_access(conn, :local) do
-      :denied -> deny_access(conn)
+      :denied ->
+        deny_access(conn)
+
       :ok ->
+        viewer_id =
+          case conn.assigns[:current_identity] do
+            nil -> nil
+            identity -> identity.id
+          end
 
-    viewer_id =
-      case conn.assigns[:current_identity] do
-        nil -> nil
-        identity -> identity.id
-      end
+        opts =
+          parse_pagination_params(params)
+          |> Keyword.put(:viewer_id, viewer_id)
 
-    opts =
-      parse_pagination_params(params)
-      |> Keyword.put(:viewer_id, viewer_id)
+        posts = Feeds.hashtag_timeline(hashtag, opts)
+        serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
 
-    posts = Feeds.hashtag_timeline(hashtag, opts)
-    serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
-
-    conn
-    |> put_link_headers(serialized, "/api/v1/timelines/tag/#{hashtag}")
-    |> put_status(:ok)
-    |> json(serialized)
-
+        conn
+        |> put_link_headers(serialized, "/api/v1/timelines/tag/#{hashtag}")
+        |> put_status(:ok)
+        |> json(serialized)
     end
   end
 
@@ -171,30 +174,30 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
   @doc "GET /api/v1/timelines/global - Global timeline (optional auth)"
   def global(conn, params) do
     case check_timeline_access(conn, :global) do
-      :denied -> deny_access(conn)
+      :denied ->
+        deny_access(conn)
+
       :ok ->
+        viewer_id =
+          case conn.assigns[:current_identity] do
+            nil -> nil
+            identity -> identity.id
+          end
 
-    viewer_id =
-      case conn.assigns[:current_identity] do
-        nil -> nil
-        identity -> identity.id
-      end
+        opts =
+          parse_pagination_params(params)
+          |> Keyword.merge(
+            include_replies: params["include_replies"] == "true",
+            viewer_id: viewer_id
+          )
 
-    opts =
-      parse_pagination_params(params)
-      |> Keyword.merge(
-        include_replies: params["include_replies"] == "true",
-        viewer_id: viewer_id
-      )
+        posts = Feeds.global_timeline(opts)
+        serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
 
-    posts = Feeds.global_timeline(opts)
-    serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
-
-    conn
-    |> put_link_headers(serialized, "/api/v1/timelines/global")
-    |> put_status(:ok)
-    |> json(serialized)
-
+        conn
+        |> put_link_headers(serialized, "/api/v1/timelines/global")
+        |> put_status(:ok)
+        |> json(serialized)
     end
   end
 
@@ -285,5 +288,4 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         }
     end)
   end
-
 end

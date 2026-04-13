@@ -29,6 +29,7 @@ defmodule HybridsocialWeb.Api.V1.SubscriptionController do
       TierLimits.tiers()
       |> Enum.map(fn tier ->
         limits = all_tiers[tier]
+
         %{
           id: tier,
           name: tier_names[tier] || tier,
@@ -125,8 +126,12 @@ defmodule HybridsocialWeb.Api.V1.SubscriptionController do
         conn |> put_status(:ok) |> json(%{status: "none"})
 
       verification ->
-        vouch_count = if verification.type == "peer_vouch", do: Premium.vouch_count(verification.id), else: 0
-        conn |> put_status(:ok) |> json(Map.put(serialize_verification(verification), :vouch_count, vouch_count))
+        vouch_count =
+          if verification.type == "peer_vouch", do: Premium.vouch_count(verification.id), else: 0
+
+        conn
+        |> put_status(:ok)
+        |> json(Map.put(serialize_verification(verification), :vouch_count, vouch_count))
     end
   end
 
@@ -148,10 +153,14 @@ defmodule HybridsocialWeb.Api.V1.SubscriptionController do
             conn |> put_status(:conflict) |> json(%{error: "verification.already_vouched"})
 
           {:error, :cannot_vouch_self} ->
-            conn |> put_status(:unprocessable_entity) |> json(%{error: "verification.cannot_vouch_self"})
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "verification.cannot_vouch_self"})
 
           {:error, _} ->
-            conn |> put_status(:unprocessable_entity) |> json(%{error: "verification.vouch_failed"})
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "verification.vouch_failed"})
         end
     end
   end
@@ -168,18 +177,19 @@ defmodule HybridsocialWeb.Api.V1.SubscriptionController do
         json(conn, %{
           count: length(vouches),
           required: 3,
-          vouches: Enum.map(vouches, fn v ->
-            %{
-              id: v.id,
-              voucher: %{
-                id: v.voucher.id,
-                handle: v.voucher.handle,
-                display_name: v.voucher.display_name,
-                avatar_url: v.voucher.avatar_url
-              },
-              created_at: v.inserted_at
-            }
-          end)
+          vouches:
+            Enum.map(vouches, fn v ->
+              %{
+                id: v.id,
+                voucher: %{
+                  id: v.voucher.id,
+                  handle: v.voucher.handle,
+                  display_name: v.voucher.display_name,
+                  avatar_url: v.voucher.avatar_url
+                },
+                created_at: v.inserted_at
+              }
+            end)
         })
     end
   end

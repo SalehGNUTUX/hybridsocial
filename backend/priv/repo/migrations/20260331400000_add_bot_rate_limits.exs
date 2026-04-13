@@ -3,7 +3,8 @@ defmodule Hybridsocial.Repo.Migrations.AddBotRateLimits do
 
   def change do
     alter table(:bots) do
-      add :posts_per_hour, :integer  # nil = use global default
+      # nil = use global default
+      add :posts_per_hour, :integer
     end
   end
 end

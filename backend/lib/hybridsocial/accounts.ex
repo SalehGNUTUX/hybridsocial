@@ -316,7 +316,9 @@ defmodule Hybridsocial.Accounts do
       {:ok, updated} ->
         Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "identities", {:identity_updated, updated})
         {:ok, updated}
-      error -> error
+
+      error ->
+        error
     end
   end
 
@@ -325,7 +327,9 @@ defmodule Hybridsocial.Accounts do
       {:ok, updated} ->
         Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "identities", {:identity_updated, updated})
         {:ok, updated}
-      error -> error
+
+      error ->
+        error
     end
   end
 
@@ -533,7 +537,10 @@ defmodule Hybridsocial.Accounts do
   @doc "Counts subaccounts of a given type for a parent identity."
   def count_subaccounts(parent_identity_id, type) do
     Identity
-    |> where([i], i.parent_identity_id == ^parent_identity_id and i.type == ^type and is_nil(i.deleted_at))
+    |> where(
+      [i],
+      i.parent_identity_id == ^parent_identity_id and i.type == ^type and is_nil(i.deleted_at)
+    )
     |> Repo.aggregate(:count)
   end
 
@@ -550,14 +557,21 @@ defmodule Hybridsocial.Accounts do
   end
 
   defp subaccount_limit("bot"), do: Hybridsocial.Config.get("max_bots_per_user", 4)
-  defp subaccount_limit("organization"), do: Hybridsocial.Config.get("max_organizations_per_user", 2)
+
+  defp subaccount_limit("organization"),
+    do: Hybridsocial.Config.get("max_organizations_per_user", 2)
+
   defp subaccount_limit("group"), do: Hybridsocial.Config.get("max_groups_per_user", 4)
   defp subaccount_limit(_), do: 0
 
   @doc "Gets a subaccount identity, verifying it belongs to the parent."
   def get_subaccount(parent_identity_id, child_identity_id) do
     Identity
-    |> where([i], i.id == ^child_identity_id and i.parent_identity_id == ^parent_identity_id and is_nil(i.deleted_at))
+    |> where(
+      [i],
+      i.id == ^child_identity_id and i.parent_identity_id == ^parent_identity_id and
+        is_nil(i.deleted_at)
+    )
     |> Repo.one()
   end
 
@@ -572,10 +586,19 @@ defmodule Hybridsocial.Accounts do
     |> Repo.transaction()
     |> case do
       {:ok, %{identity: deleted}} ->
-        Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "identities", {:identity_deleted, deleted.id})
+        Phoenix.PubSub.broadcast(
+          Hybridsocial.PubSub,
+          "identities",
+          {:identity_deleted, deleted.id}
+        )
+
         {:ok, deleted}
-      {:error, :identity, changeset, _} -> {:error, changeset}
-      {:error, _, reason, _} -> {:error, reason}
+
+      {:error, :identity, changeset, _} ->
+        {:error, changeset}
+
+      {:error, _, reason, _} ->
+        {:error, reason}
     end
   end
 
@@ -605,8 +628,12 @@ defmodule Hybridsocial.Accounts do
   defp filter_by_type(query, type), do: where(query, [i], i.type == ^type)
 
   defp filter_by_local(query, nil), do: query
-  defp filter_by_local(query, true), do: where(query, [i], is_nil(i.ap_actor_url) or i.ap_actor_url == "")
-  defp filter_by_local(query, false), do: where(query, [i], not is_nil(i.ap_actor_url) and i.ap_actor_url != "")
+
+  defp filter_by_local(query, true),
+    do: where(query, [i], is_nil(i.ap_actor_url) or i.ap_actor_url == "")
+
+  defp filter_by_local(query, false),
+    do: where(query, [i], not is_nil(i.ap_actor_url) and i.ap_actor_url != "")
 
   # --- Password Reset ---
 
@@ -801,10 +828,14 @@ defmodule Hybridsocial.Accounts do
 
   def approve_account(identity_id) do
     case Repo.get_by(User, identity_id: identity_id) do
-      nil -> {:error, :not_found}
+      nil ->
+        {:error, :not_found}
+
       user ->
         user
-        |> Ecto.Changeset.change(approved_at: DateTime.utc_now() |> DateTime.truncate(:microsecond))
+        |> Ecto.Changeset.change(
+          approved_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+        )
         |> Repo.update()
     end
   end
@@ -906,6 +937,7 @@ defmodule Hybridsocial.Accounts do
 
   def add_alias(identity, alias_uri) do
     current = identity.also_known_as || []
+
     if alias_uri in current do
       {:ok, identity}
     else
@@ -917,6 +949,7 @@ defmodule Hybridsocial.Accounts do
 
   def remove_alias(identity, alias_uri) do
     current = identity.also_known_as || []
+
     identity
     |> Ecto.Changeset.change(also_known_as: Enum.reject(current, &(&1 == alias_uri)))
     |> Repo.update()

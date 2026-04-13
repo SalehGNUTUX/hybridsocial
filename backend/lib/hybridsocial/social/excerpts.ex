@@ -26,7 +26,9 @@ defmodule Hybridsocial.Social.Excerpts do
 
   def update_excerpt(id, identity_id, attrs) do
     case get_excerpt(id, identity_id) do
-      nil -> {:error, :not_found}
+      nil ->
+        {:error, :not_found}
+
       excerpt ->
         excerpt
         |> Excerpt.changeset(attrs)
@@ -64,13 +66,15 @@ defmodule Hybridsocial.Social.Excerpts do
       {:ok, []}
     else
       # Build a bool query: should (any keyword), must_not (exclude keywords)
-      should_clauses = Enum.map(keywords, fn kw ->
-        %{match: %{content: %{query: kw, operator: "and"}}}
-      end)
+      should_clauses =
+        Enum.map(keywords, fn kw ->
+          %{match: %{content: %{query: kw, operator: "and"}}}
+        end)
 
-      must_not_clauses = Enum.map(exclude, fn kw ->
-        %{match: %{content: %{query: kw, operator: "and"}}}
-      end)
+      must_not_clauses =
+        Enum.map(exclude, fn kw ->
+          %{match: %{content: %{query: kw, operator: "and"}}}
+        end)
 
       filter_clauses = [
         %{term: %{visibility: "public"}}
@@ -146,9 +150,11 @@ defmodule Hybridsocial.Social.Excerpts do
 
     base =
       if keyword_patterns != [] do
-        conditions = Enum.reduce(keyword_patterns, dynamic(false), fn pattern, acc ->
-          dynamic([p], ^acc or ilike(p.content, ^pattern))
-        end)
+        conditions =
+          Enum.reduce(keyword_patterns, dynamic(false), fn pattern, acc ->
+            dynamic([p], ^acc or ilike(p.content, ^pattern))
+          end)
+
         where(base, ^conditions)
       else
         base

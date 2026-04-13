@@ -41,7 +41,11 @@ defmodule HybridsocialWeb.Api.V1.OAuthController do
         user = Hybridsocial.Repo.get_by(Hybridsocial.Accounts.User, identity_id: identity.id)
         user_with_identity = Hybridsocial.Repo.preload(user, :identity)
 
-        case Hybridsocial.Auth.issue_tokens(user_with_identity, %{ip_address: ip, user_agent: ua, device_name: app.name}) do
+        case Hybridsocial.Auth.issue_tokens(user_with_identity, %{
+               ip_address: ip,
+               user_agent: ua,
+               device_name: app.name
+             }) do
           {:ok, tokens} ->
             conn
             |> put_status(:created)
@@ -51,7 +55,7 @@ defmodule HybridsocialWeb.Api.V1.OAuthController do
                 name: app.name,
                 client_id: app.client_id,
                 client_secret: client_secret,
-                scopes: app.scopes,
+                scopes: app.scopes
               },
               access_token: tokens.access_token,
               token_type: "Bearer",
@@ -68,10 +72,11 @@ defmodule HybridsocialWeb.Api.V1.OAuthController do
                 name: app.name,
                 client_id: app.client_id,
                 client_secret: client_secret,
-                scopes: app.scopes,
+                scopes: app.scopes
               },
               access_token: nil,
-              error: "Token generation failed — use the client credentials to request a token manually."
+              error:
+                "Token generation failed — use the client credentials to request a token manually."
             })
         end
 

@@ -362,7 +362,8 @@ defmodule Hybridsocial.Social.Posts do
       |> select([r], r.post_id)
       |> limit(20)
 
-    reaction_query = if max_id, do: where(reaction_query, [r], r.id < ^max_id), else: reaction_query
+    reaction_query =
+      if max_id, do: where(reaction_query, [r], r.id < ^max_id), else: reaction_query
 
     post_ids = Repo.all(reaction_query)
 

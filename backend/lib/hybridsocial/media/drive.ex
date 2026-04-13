@@ -11,7 +11,9 @@ defmodule Hybridsocial.Media.Drive do
     DriveFolder
     |> where([f], f.identity_id == ^identity_id)
     |> then(fn q ->
-      if parent_id, do: where(q, [f], f.parent_id == ^parent_id), else: where(q, [f], is_nil(f.parent_id))
+      if parent_id,
+        do: where(q, [f], f.parent_id == ^parent_id),
+        else: where(q, [f], is_nil(f.parent_id))
     end)
     |> order_by([f], asc: f.name)
     |> Repo.all()
@@ -32,7 +34,9 @@ defmodule Hybridsocial.Media.Drive do
 
   def delete_folder(id, identity_id) do
     case Repo.get_by(DriveFolder, id: id, identity_id: identity_id) do
-      nil -> {:error, :not_found}
+      nil ->
+        {:error, :not_found}
+
       folder ->
         # Move children to parent folder
         DriveFolder

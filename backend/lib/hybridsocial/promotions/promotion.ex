@@ -50,7 +50,8 @@ defmodule Hybridsocial.Promotions.Promotion do
 
     expires =
       if promotion.duration_days == 0 do
-        nil  # unlimited
+        # unlimited
+        nil
       else
         DateTime.add(now, promotion.duration_days * 86400, :second)
       end

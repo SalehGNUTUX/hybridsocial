@@ -5,7 +5,10 @@ defmodule Hybridsocial.Repo.Migrations.AddDriveAndAds do
     # Drive folders for media organization
     create table(:drive_folders, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :name, :string, null: false
       add :parent_id, references(:drive_folders, type: :binary_id, on_delete: :nilify_all)
 
@@ -17,7 +20,9 @@ defmodule Hybridsocial.Repo.Migrations.AddDriveAndAds do
 
     # Add folder_id and content_hash to media
     alter table(:media) do
-      add_if_not_exists :folder_id, references(:drive_folders, type: :binary_id, on_delete: :nilify_all)
+      add_if_not_exists :folder_id,
+                        references(:drive_folders, type: :binary_id, on_delete: :nilify_all)
+
       add_if_not_exists :content_hash, :string
     end
 
@@ -31,7 +36,8 @@ defmodule Hybridsocial.Repo.Migrations.AddDriveAndAds do
       add :description, :text
       add :image_url, :string
       add :link_url, :string, null: false
-      add :placement, :string, default: "sidebar"  # sidebar, feed, banner
+      # sidebar, feed, banner
+      add :placement, :string, default: "sidebar"
       add :priority, :integer, default: 0
       add :starts_at, :utc_datetime_usec
       add :expires_at, :utc_datetime_usec

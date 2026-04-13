@@ -5,7 +5,16 @@ defmodule Hybridsocial.Messaging do
   import Ecto.Query
 
   alias Hybridsocial.Repo
-  alias Hybridsocial.Messaging.{Conversation, Participant, Message, DeliveryStatus, DmPreference, MessageReaction}
+
+  alias Hybridsocial.Messaging.{
+    Conversation,
+    Participant,
+    Message,
+    DeliveryStatus,
+    DmPreference,
+    MessageReaction
+  }
+
   alias Hybridsocial.Social
 
   # ---------------------------------------------------------------------------
@@ -562,6 +571,7 @@ defmodule Hybridsocial.Messaging do
           identity_id: identity_id,
           emoji: emoji
         })
+
         {:ok, reaction}
 
       error ->
@@ -571,7 +581,11 @@ defmodule Hybridsocial.Messaging do
 
   @doc "Remove an emoji reaction from a message."
   def unreact_to_message(message_id, identity_id, emoji) do
-    case Repo.get_by(MessageReaction, message_id: message_id, identity_id: identity_id, emoji: emoji) do
+    case Repo.get_by(MessageReaction,
+           message_id: message_id,
+           identity_id: identity_id,
+           emoji: emoji
+         ) do
       nil ->
         {:error, :not_found}
 
@@ -583,6 +597,7 @@ defmodule Hybridsocial.Messaging do
               identity_id: identity_id,
               emoji: emoji
             })
+
             :ok
 
           error ->
@@ -602,9 +617,10 @@ defmodule Hybridsocial.Messaging do
       %{
         emoji: emoji,
         count: length(reactions),
-        accounts: Enum.map(reactions, fn r ->
-          %{id: r.identity.id, handle: r.identity.handle, display_name: r.identity.display_name}
-        end)
+        accounts:
+          Enum.map(reactions, fn r ->
+            %{id: r.identity.id, handle: r.identity.handle, display_name: r.identity.display_name}
+          end)
       }
     end)
   end
@@ -627,7 +643,9 @@ defmodule Hybridsocial.Messaging do
   defp broadcast_message_event(message_id, event, payload) do
     # Get conversation_id from message
     case Repo.get(Message, message_id) do
-      nil -> :ok
+      nil ->
+        :ok
+
       message ->
         broadcast_conversation_event(message.conversation_id, event, payload)
     end

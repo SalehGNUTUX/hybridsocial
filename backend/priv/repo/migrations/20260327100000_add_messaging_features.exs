@@ -5,8 +5,13 @@ defmodule Hybridsocial.Repo.Migrations.AddMessagingFeatures do
     # Message reactions
     create table(:message_reactions, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :message_id, references(:messages, type: :binary_id, on_delete: :delete_all), null: false
-      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :message_id, references(:messages, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :emoji, :string, null: false
 
       timestamps(type: :utc_datetime_usec)

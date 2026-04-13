@@ -254,6 +254,7 @@ defmodule Hybridsocial.Federation.Publisher do
       nil ->
         # Fetch actor from remote server to get inbox
         Logger.debug("No cached remote actor for #{actor_url}, attempting fetch")
+
         case fetch_actor_inbox_from_remote(actor_url) do
           nil -> nil
           inbox -> inbox

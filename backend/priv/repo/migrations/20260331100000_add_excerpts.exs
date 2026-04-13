@@ -4,7 +4,10 @@ defmodule Hybridsocial.Repo.Migrations.AddExcerpts do
   def change do
     create table(:excerpts, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :name, :string, null: false
       add :keywords, {:array, :string}, default: []
       add :exclude_keywords, {:array, :string}, default: []

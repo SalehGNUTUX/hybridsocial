@@ -11,10 +11,14 @@ defmodule HybridsocialWeb.Api.V1.GifController do
       "" ->
         conn
         |> put_status(:service_unavailable)
-        |> json(%{error: "gif_service_unavailable", error_description: "GIF service is not configured"})
+        |> json(%{
+          error: "gif_service_unavailable",
+          error_description: "GIF service is not configured"
+        })
 
       key ->
-        url = "#{@giphy_trending_url}?api_key=#{URI.encode_www_form(key)}&limit=#{@default_limit}&rating=pg-13"
+        url =
+          "#{@giphy_trending_url}?api_key=#{URI.encode_www_form(key)}&limit=#{@default_limit}&rating=pg-13"
 
         case HTTPoison.get(url, [], recv_timeout: 10_000, timeout: 10_000) do
           {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
@@ -45,7 +49,10 @@ defmodule HybridsocialWeb.Api.V1.GifController do
         "" ->
           conn
           |> put_status(:service_unavailable)
-          |> json(%{error: "gif_service_unavailable", error_description: "GIF service is not configured"})
+          |> json(%{
+            error: "gif_service_unavailable",
+            error_description: "GIF service is not configured"
+          })
 
         key ->
           url =
@@ -59,7 +66,10 @@ defmodule HybridsocialWeb.Api.V1.GifController do
             {:ok, %HTTPoison.Response{status_code: status}} ->
               conn
               |> put_status(:bad_gateway)
-              |> json(%{error: "giphy_error", error_description: "GIPHY returned status #{status}"})
+              |> json(%{
+                error: "giphy_error",
+                error_description: "GIPHY returned status #{status}"
+              })
 
             {:error, _reason} ->
               conn

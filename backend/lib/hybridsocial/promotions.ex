@@ -210,7 +210,8 @@ defmodule Hybridsocial.Promotions do
 
   @doc "Admin: manually promote a user (free, optionally unlimited)."
   def admin_promote(identity_id, opts \\ []) do
-    duration_days = Keyword.get(opts, :duration_days, 0)  # 0 = unlimited
+    # 0 = unlimited
+    duration_days = Keyword.get(opts, :duration_days, 0)
 
     %Promotion{}
     |> Promotion.changeset(%{
@@ -231,7 +232,9 @@ defmodule Hybridsocial.Promotions do
   @doc "Admin: cancel a promotion."
   def admin_cancel_promotion(promotion_id) do
     case get_promotion(promotion_id) do
-      nil -> {:error, :not_found}
+      nil ->
+        {:error, :not_found}
+
       promo ->
         promo
         |> Ecto.Changeset.change(status: "cancelled")

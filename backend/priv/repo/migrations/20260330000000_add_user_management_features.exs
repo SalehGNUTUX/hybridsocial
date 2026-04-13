@@ -5,7 +5,10 @@ defmodule Hybridsocial.Repo.Migrations.AddUserManagementFeatures do
     # User-level domain blocks
     create table(:user_domain_blocks, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :domain, :string, null: false
 
       timestamps(type: :utc_datetime_usec)
@@ -17,8 +20,13 @@ defmodule Hybridsocial.Repo.Migrations.AddUserManagementFeatures do
     # Personal account notes (user-to-user, not moderation)
     create table(:account_notes, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :author_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
-      add :target_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :author_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :target_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :content, :text, null: false
 
       timestamps(type: :utc_datetime_usec)

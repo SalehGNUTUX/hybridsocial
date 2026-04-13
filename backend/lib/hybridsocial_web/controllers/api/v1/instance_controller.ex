@@ -18,6 +18,7 @@ defmodule HybridsocialWeb.Api.V1.InstanceController do
     import Ecto.Query
 
     cutoff = DateTime.add(DateTime.utc_now(), -300, :second)
+
     count =
       from(u in "users", where: u.last_login_at > ^cutoff, select: count(u.identity_id))
       |> Hybridsocial.Repo.one() || 0

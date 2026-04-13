@@ -16,9 +16,12 @@ defmodule Hybridsocial.Federation.Containment do
 
       [first | _] when is_map(first) ->
         case Enum.find(actor, fn
-          %{"type" => type} -> type in ["Person", "Service", "Application", "Organization", "Group"]
-          _ -> false
-        end) do
+               %{"type" => type} ->
+                 type in ["Person", "Service", "Application", "Organization", "Group"]
+
+               _ ->
+                 false
+             end) do
           %{"id" => id} -> id
           _ -> nil
         end

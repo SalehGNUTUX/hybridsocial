@@ -67,10 +67,11 @@ defmodule HybridsocialWeb.Endpoint do
   plug :cors_plug
 
   defp cors_plug(conn, _opts) do
-    origins = Application.get_env(:hybridsocial, :cors_origins, [
-      "http://localhost:5173",
-      "http://localhost:4000"
-    ])
+    origins =
+      Application.get_env(:hybridsocial, :cors_origins, [
+        "http://localhost:5173",
+        "http://localhost:4000"
+      ])
 
     opts = CORSPlug.init(origin: origins, expose: ["link"], credentials: true)
     CORSPlug.call(conn, opts)

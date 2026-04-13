@@ -403,11 +403,19 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def update_email_config(conn, params) do
     with :ok <- require_permission(conn, "settings.manage") do
       if params["provider"], do: Hybridsocial.Config.set("email_provider", params["provider"])
-      if params["from_address"], do: Hybridsocial.Config.set("email_from_address", params["from_address"])
+
+      if params["from_address"],
+        do: Hybridsocial.Config.set("email_from_address", params["from_address"])
+
       if params["smtp_host"], do: Hybridsocial.Config.set("email_smtp_host", params["smtp_host"])
       if params["smtp_port"], do: Hybridsocial.Config.set("email_smtp_port", params["smtp_port"])
-      if params["smtp_username"], do: Hybridsocial.Config.set("email_smtp_username", params["smtp_username"])
-      if Map.has_key?(params, "smtp_ssl"), do: Hybridsocial.Config.set("email_smtp_ssl", params["smtp_ssl"])
+
+      if params["smtp_username"],
+        do: Hybridsocial.Config.set("email_smtp_username", params["smtp_username"])
+
+      if Map.has_key?(params, "smtp_ssl"),
+        do: Hybridsocial.Config.set("email_smtp_ssl", params["smtp_ssl"])
+
       if params["resend_api_key"] && !String.contains?(params["resend_api_key"] || "", "****"),
         do: Hybridsocial.Config.set("email_resend_api_key", params["resend_api_key"])
 
@@ -420,19 +428,28 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def send_test_email(conn, %{"to" => to}) do
     with :ok <- require_permission(conn, "settings.manage") do
       case Hybridsocial.Mailer.send_test(to) do
-        {:ok, _} -> json(conn, %{status: "sent"})
-        {:error, reason} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "email.send_failed", details: inspect(reason)})
+        {:ok, _} ->
+          json(conn, %{status: "sent"})
+
+        {:error, reason} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "email.send_failed", details: inspect(reason)})
       end
     else
       {:error, perm} -> deny(conn, perm)
     end
   end
 
-  def send_test_email(conn, _), do: conn |> put_status(:bad_request) |> json(%{error: "email.to_required"})
+  def send_test_email(conn, _),
+    do: conn |> put_status(:bad_request) |> json(%{error: "email.to_required"})
 
   defp mask_secret(nil), do: ""
   defp mask_secret(""), do: ""
-  defp mask_secret(s) when is_binary(s) and byte_size(s) > 8, do: String.slice(s, 0, 4) <> "****" <> String.slice(s, -4, 4)
+
+  defp mask_secret(s) when is_binary(s) and byte_size(s) > 8,
+    do: String.slice(s, 0, 4) <> "****" <> String.slice(s, -4, 4)
+
   defp mask_secret(_), do: "****"
 
   # ── Theme ────────────────────────────────────────────────────────────
@@ -467,8 +484,11 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       end
 
       # instance_name and instance_description are top-level settings
-      if params["instance_name"], do: Hybridsocial.Config.set("instance_name", params["instance_name"])
-      if params["instance_description"], do: Hybridsocial.Config.set("instance_description", params["instance_description"])
+      if params["instance_name"],
+        do: Hybridsocial.Config.set("instance_name", params["instance_name"])
+
+      if params["instance_description"],
+        do: Hybridsocial.Config.set("instance_description", params["instance_description"])
 
       get_theme(conn, %{})
     else
@@ -485,14 +505,17 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           json(conn, %{url: url})
 
         {:error, reason} ->
-          conn |> put_status(:unprocessable_entity) |> json(%{error: "upload.failed", details: inspect(reason)})
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "upload.failed", details: inspect(reason)})
       end
     else
       {:error, perm} -> deny(conn, perm)
     end
   end
 
-  def upload_logo(conn, _), do: conn |> put_status(:bad_request) |> json(%{error: "file_required"})
+  def upload_logo(conn, _),
+    do: conn |> put_status(:bad_request) |> json(%{error: "file_required"})
 
   def upload_favicon(conn, %{"file" => %Plug.Upload{} = upload}) do
     with :ok <- require_permission(conn, "theme.manage") do
@@ -503,14 +526,17 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           json(conn, %{url: url})
 
         {:error, reason} ->
-          conn |> put_status(:unprocessable_entity) |> json(%{error: "upload.failed", details: inspect(reason)})
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "upload.failed", details: inspect(reason)})
       end
     else
       {:error, perm} -> deny(conn, perm)
     end
   end
 
-  def upload_favicon(conn, _), do: conn |> put_status(:bad_request) |> json(%{error: "file_required"})
+  def upload_favicon(conn, _),
+    do: conn |> put_status(:bad_request) |> json(%{error: "file_required"})
 
   # ── Instance Settings ────────────────────────────────────────────────
 
@@ -670,8 +696,13 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       attrs = Map.put(params, "created_by", conn.assigns.current_identity.id)
 
       case Announcement.create(attrs) do
-        {:ok, ann} -> conn |> put_status(:created) |> json(serialize_announcement(ann))
-        {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "validation.failed", details: format_errors(changeset)})
+        {:ok, ann} ->
+          conn |> put_status(:created) |> json(serialize_announcement(ann))
+
+        {:error, changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "validation.failed", details: format_errors(changeset)})
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -681,9 +712,16 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def update_announcement(conn, %{"id" => id} = params) do
     with :ok <- require_permission(conn, "settings.manage") do
       case Announcement.update(id, params) do
-        {:ok, ann} -> json(conn, serialize_announcement(ann))
-        {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "announcement.not_found"})
-        {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "validation.failed", details: format_errors(changeset)})
+        {:ok, ann} ->
+          json(conn, serialize_announcement(ann))
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "announcement.not_found"})
+
+        {:error, changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "validation.failed", details: format_errors(changeset)})
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -693,8 +731,11 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def delete_announcement(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "settings.manage") do
       case Announcement.delete(id) do
-        {:ok, _} -> json(conn, %{status: "ok"})
-        {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "announcement.not_found"})
+        {:ok, _} ->
+          json(conn, %{status: "ok"})
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "announcement.not_found"})
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -811,11 +852,12 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
   def list_accounts(conn, params) do
     with :ok <- require_permission(conn, "users.view") do
-      opts = case params["local"] do
-        "true" -> [local: true]
-        "false" -> [local: false]
-        _ -> []
-      end
+      opts =
+        case params["local"] do
+          "true" -> [local: true]
+          "false" -> [local: false]
+          _ -> []
+        end
 
       accounts = Accounts.list_identities(opts)
 
@@ -1203,7 +1245,8 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
         |> Enum.reject(fn i -> i.domain == local_host end)
         |> Enum.map(fn i ->
           # Check if there's a policy for this domain
-          policy = Hybridsocial.Repo.get_by(Hybridsocial.Federation.InstancePolicy, domain: i.domain)
+          policy =
+            Hybridsocial.Repo.get_by(Hybridsocial.Federation.InstancePolicy, domain: i.domain)
 
           %{
             domain: i.domain,
@@ -2211,7 +2254,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     is_local = is_nil(domain)
 
     # For remote users, extract the real handle from the AP URL
-    display_handle = if is_local, do: identity.handle, else: (remote_handle || identity.handle)
+    display_handle = if is_local, do: identity.handle, else: remote_handle || identity.handle
 
     acct =
       if is_local do
@@ -2438,6 +2481,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def set_trust_level(conn, %{"id" => id} = params) do
     level = params["trust_level"] || params["level"]
     _ = level
+
     with :ok <- require_permission(conn, "users.manage") do
       admin_id = conn.assigns.current_identity.id
 
@@ -2480,16 +2524,35 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     end
   end
 
-  def suspend_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "suspend"))
-  def unsuspend_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "unsuspend"))
-  def warn_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "warn"))
-  def silence_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "silence"))
-  def unsilence_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "unsilence"))
-  def shadow_ban_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "shadow_ban"))
-  def unshadow_ban_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "unshadow_ban"))
-  def force_sensitive_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "force_sensitive"))
-  def unforce_sensitive_account(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "unforce_sensitive"))
-  def revoke_sessions(conn, %{"id" => _id} = p), do: account_action(conn, Map.put(p, "action", "revoke_all_sessions"))
+  def suspend_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "suspend"))
+
+  def unsuspend_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "unsuspend"))
+
+  def warn_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "warn"))
+
+  def silence_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "silence"))
+
+  def unsilence_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "unsilence"))
+
+  def shadow_ban_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "shadow_ban"))
+
+  def unshadow_ban_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "unshadow_ban"))
+
+  def force_sensitive_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "force_sensitive"))
+
+  def unforce_sensitive_account(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "unforce_sensitive"))
+
+  def revoke_sessions(conn, %{"id" => _id} = p),
+    do: account_action(conn, Map.put(p, "action", "revoke_all_sessions"))
 
   def list_notes(conn, params), do: list_moderation_notes(conn, params)
   def create_note(conn, params), do: create_moderation_note(conn, params)
@@ -2512,6 +2575,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           admin_id = conn.assigns.current_identity.id
           Moderation.log(admin_id, "account.approved", "identity", id, %{})
           json(conn, %{status: "ok"})
+
         {:error, _} ->
           conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
       end
@@ -2527,6 +2591,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           admin_id = conn.assigns.current_identity.id
           Moderation.log(admin_id, "account.rejected", "identity", id, %{})
           json(conn, %{status: "ok"})
+
         {:error, _} ->
           conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
       end
@@ -2540,7 +2605,9 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def suggest_user(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "users.edit") do
       case Accounts.get_identity(id) do
-        nil -> conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+        nil ->
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
         identity ->
           {:ok, _} = Accounts.admin_update_identity(identity, %{"is_suggested" => true})
           json(conn, %{status: "ok"})
@@ -2553,7 +2620,9 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def unsuggest_user(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "users.edit") do
       case Accounts.get_identity(id) do
-        nil -> conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+        nil ->
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
         identity ->
           {:ok, _} = Accounts.admin_update_identity(identity, %{"is_suggested" => false})
           json(conn, %{status: "ok"})
@@ -2568,12 +2637,16 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def revoke_name(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "users.moderate") do
       case Accounts.get_identity(id) do
-        nil -> conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+        nil ->
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
         identity ->
-          {:ok, updated} = Accounts.admin_update_identity(identity, %{
-            "is_name_revoked" => true,
-            "display_name" => nil
-          })
+          {:ok, updated} =
+            Accounts.admin_update_identity(identity, %{
+              "is_name_revoked" => true,
+              "display_name" => nil
+            })
+
           admin_id = conn.assigns.current_identity.id
           Moderation.log(admin_id, "account.name_revoked", "identity", id, %{})
           json(conn, %{status: "ok", data: serialize_account(updated)})
@@ -2592,6 +2665,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
         limit: parse_int(params["limit"], 50),
         offset: parse_int(params["offset"], 0)
       ]
+
       promos = Hybridsocial.Promotions.list_all_promotions(opts)
       json(conn, %{data: Enum.map(promos, &serialize_promotion/1)})
     else
@@ -2604,9 +2678,13 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def force_bot(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "users.moderate") do
       case Accounts.get_identity(id) do
-        nil -> conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+        nil ->
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
         identity ->
-          {:ok, updated} = Accounts.admin_update_identity(identity, %{"is_bot" => true, "force_bot" => true})
+          {:ok, updated} =
+            Accounts.admin_update_identity(identity, %{"is_bot" => true, "force_bot" => true})
+
           admin_id = conn.assigns.current_identity.id
           Moderation.log(admin_id, "account.force_bot", "identity", id, %{})
           json(conn, %{id: updated.id, is_bot: updated.is_bot, force_bot: updated.force_bot})
@@ -2619,7 +2697,9 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def unforce_bot(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "users.moderate") do
       case Accounts.get_identity(id) do
-        nil -> conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+        nil ->
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
         identity ->
           {:ok, updated} = Accounts.admin_update_identity(identity, %{"force_bot" => false})
           admin_id = conn.assigns.current_identity.id
@@ -2635,12 +2715,13 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
   def set_bot_rate_limit(conn, %{"id" => id} = params) do
     with :ok <- require_permission(conn, "users.moderate") do
-      limit = case params["posts_per_hour"] do
-        nil -> nil
-        "null" -> nil
-        val when is_binary(val) -> String.to_integer(val)
-        val when is_integer(val) -> val
-      end
+      limit =
+        case params["posts_per_hour"] do
+          nil -> nil
+          "null" -> nil
+          val when is_binary(val) -> String.to_integer(val)
+          val when is_integer(val) -> val
+        end
 
       identity = Accounts.get_identity(id)
 
@@ -2653,16 +2734,30 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           case Hybridsocial.Repo.get(Hybridsocial.Accounts.Bot, id) do
             nil ->
               conn |> put_status(:not_found) |> json(%{error: "bot.not_found"})
+
             bot ->
-              {:ok, updated} = bot |> Ecto.Changeset.change(posts_per_hour: limit) |> Hybridsocial.Repo.update()
-              json(conn, %{identity_id: id, posts_per_hour: updated.posts_per_hour, type: "bot", global_default: Hybridsocial.Config.get("bot_posts_per_hour", 30)})
+              {:ok, updated} =
+                bot |> Ecto.Changeset.change(posts_per_hour: limit) |> Hybridsocial.Repo.update()
+
+              json(conn, %{
+                identity_id: id,
+                posts_per_hour: updated.posts_per_hour,
+                type: "bot",
+                global_default: Hybridsocial.Config.get("bot_posts_per_hour", 30)
+              })
           end
 
         true ->
           # Set on identity metadata for regular users
           metadata = (identity.metadata || %{}) |> Map.put("posts_per_hour", limit)
           {:ok, _} = Accounts.admin_update_identity(identity, %{"metadata" => metadata})
-          json(conn, %{identity_id: id, posts_per_hour: limit, type: "user", global_default: Hybridsocial.Config.get("user_posts_per_hour", 0)})
+
+          json(conn, %{
+            identity_id: id,
+            posts_per_hour: limit,
+            type: "user",
+            global_default: Hybridsocial.Config.get("user_posts_per_hour", 0)
+          })
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -2672,10 +2767,12 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def admin_create_promotion(conn, %{"identity_id" => identity_id} = params) do
     with :ok <- require_permission(conn, "settings.manage") do
       duration = parse_int(params["duration_days"], 0)
+
       case Hybridsocial.Promotions.admin_promote(identity_id, duration_days: duration) do
         {:ok, promo} ->
           promo = Hybridsocial.Repo.preload(promo, :identity)
           conn |> put_status(:created) |> json(serialize_promotion(promo))
+
         {:error, reason} ->
           conn |> put_status(:unprocessable_entity) |> json(%{error: inspect(reason)})
       end
@@ -2687,8 +2784,11 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def cancel_promotion(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "settings.manage") do
       case Hybridsocial.Promotions.admin_cancel_promotion(id) do
-        {:ok, _} -> json(conn, %{status: "ok"})
-        {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "promotion.not_found"})
+        {:ok, _} ->
+          json(conn, %{status: "ok"})
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "promotion.not_found"})
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -2707,10 +2807,14 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       expires_at: promo.expires_at,
       payment_provider: promo.payment_provider,
       created_at: promo.inserted_at,
-      account: case promo.identity do
-        %Hybridsocial.Accounts.Identity{} = i -> %{id: i.id, handle: i.handle, display_name: i.display_name, avatar_url: i.avatar_url}
-        _ -> nil
-      end
+      account:
+        case promo.identity do
+          %Hybridsocial.Accounts.Identity{} = i ->
+            %{id: i.id, handle: i.handle, display_name: i.display_name, avatar_url: i.avatar_url}
+
+          _ ->
+            nil
+        end
     }
   end
 
@@ -2784,9 +2888,27 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def list_ads(conn, params) do
     with :ok <- require_permission(conn, "settings.view") do
       ads = Hybridsocial.Ads.list_ads(placement: params["placement"])
-      json(conn, %{data: Enum.map(ads, fn a ->
-        %{id: a.id, title: a.title, description: a.description, image_url: a.image_url, link_url: a.link_url, placement: a.placement, priority: a.priority, starts_at: a.starts_at, expires_at: a.expires_at, is_active: a.is_active, impressions: a.impressions, clicks: a.clicks, created_at: a.inserted_at}
-      end)})
+
+      json(conn, %{
+        data:
+          Enum.map(ads, fn a ->
+            %{
+              id: a.id,
+              title: a.title,
+              description: a.description,
+              image_url: a.image_url,
+              link_url: a.link_url,
+              placement: a.placement,
+              priority: a.priority,
+              starts_at: a.starts_at,
+              expires_at: a.expires_at,
+              is_active: a.is_active,
+              impressions: a.impressions,
+              clicks: a.clicks,
+              created_at: a.inserted_at
+            }
+          end)
+      })
     else
       {:error, perm} -> deny(conn, perm)
     end
@@ -2795,9 +2917,15 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def create_ad(conn, params) do
     with :ok <- require_permission(conn, "settings.manage") do
       attrs = Map.put(params, "created_by_id", conn.assigns.current_identity.id)
+
       case Hybridsocial.Ads.create_ad(attrs) do
-        {:ok, ad} -> conn |> put_status(:created) |> json(%{id: ad.id, title: ad.title})
-        {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "ad.failed", details: format_errors(changeset)})
+        {:ok, ad} ->
+          conn |> put_status(:created) |> json(%{id: ad.id, title: ad.title})
+
+        {:error, changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "ad.failed", details: format_errors(changeset)})
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -2807,9 +2935,16 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def update_ad(conn, %{"id" => id} = params) do
     with :ok <- require_permission(conn, "settings.manage") do
       case Hybridsocial.Ads.update_ad(id, params) do
-        {:ok, _} -> json(conn, %{status: "ok"})
-        {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "ad.not_found"})
-        {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "ad.failed", details: format_errors(changeset)})
+        {:ok, _} ->
+          json(conn, %{status: "ok"})
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "ad.not_found"})
+
+        {:error, changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "ad.failed", details: format_errors(changeset)})
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -2862,7 +2997,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
             {:error, changeset} ->
               conn
               |> put_status(:unprocessable_entity)
-              |> json(%{error: "account.profile_update_failed", details: changeset_errors(changeset)})
+              |> json(%{
+                error: "account.profile_update_failed",
+                details: changeset_errors(changeset)
+              })
           end
       end
     else
@@ -2877,7 +3015,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
 
         _identity ->
-          new_password = :crypto.strong_rand_bytes(15) |> Base.url_encode64(padding: false) |> binary_part(0, 20)
+          new_password =
+            :crypto.strong_rand_bytes(15)
+            |> Base.url_encode64(padding: false)
+            |> binary_part(0, 20)
 
           case Accounts.admin_force_password(id, new_password) do
             {:ok, _user} ->
@@ -2891,7 +3032,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
             {:error, changeset} ->
               conn
               |> put_status(:unprocessable_entity)
-              |> json(%{error: "account.password_reset_failed", details: changeset_errors(changeset)})
+              |> json(%{
+                error: "account.password_reset_failed",
+                details: changeset_errors(changeset)
+              })
           end
       end
     else
@@ -2936,7 +3080,11 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
             case Accounts.admin_change_email(id, new_email) do
               {:ok, _user} ->
                 admin_id = conn.assigns.current_identity.id
-                Moderation.log(admin_id, "account.email_changed", "identity", id, %{new_email: new_email})
+
+                Moderation.log(admin_id, "account.email_changed", "identity", id, %{
+                  new_email: new_email
+                })
+
                 json(conn, %{status: "ok", email: new_email})
 
               {:error, :not_found} ->
@@ -2945,7 +3093,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
               {:error, changeset} ->
                 conn
                 |> put_status(:unprocessable_entity)
-                |> json(%{error: "account.email_change_failed", details: changeset_errors(changeset)})
+                |> json(%{
+                  error: "account.email_change_failed",
+                  details: changeset_errors(changeset)
+                })
             end
         end
       end
@@ -3016,6 +3167,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
                 Moderation.log(current_identity.id, "account.admin_changed", "identity", id, %{
                   is_admin: is_admin
                 })
+
                 json(conn, %{data: serialize_account(updated)})
 
               {:error, _} ->
@@ -3044,7 +3196,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
             case RBAC.assign_role(id, role_name, admin_id) do
               {:ok, _} ->
-                Moderation.log(admin_id, "account.role_assigned", "identity", id, %{role: role_name})
+                Moderation.log(admin_id, "account.role_assigned", "identity", id, %{
+                  role: role_name
+                })
+
                 json(conn, %{status: "ok", role: role_name})
 
               {:error, :not_found} ->
@@ -3078,7 +3233,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
             case RBAC.revoke_role(id, role_name, admin_id) do
               {:ok, _} ->
-                Moderation.log(admin_id, "account.role_removed", "identity", id, %{role: role_name})
+                Moderation.log(admin_id, "account.role_removed", "identity", id, %{
+                  role: role_name
+                })
+
                 json(conn, %{status: "ok", role: role_name})
 
               {:error, :not_found} ->
@@ -3103,5 +3261,4 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       end)
     end)
   end
-
 end

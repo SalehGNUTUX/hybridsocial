@@ -9,6 +9,8 @@ defmodule Hybridsocial.Federation.Validators.UpdateValidator do
     end
   end
 
-  def validate(%{"type" => "Update"}), do: {:error, "Update activity must have an embedded object"}
+  def validate(%{"type" => "Update"}),
+    do: {:error, "Update activity must have an embedded object"}
+
   def validate(_), do: {:error, "Not an Update activity"}
 end

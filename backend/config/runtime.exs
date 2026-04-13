@@ -29,18 +29,22 @@ end
 # Generate with: mix run -e "Hybridsocial.Federation.InstanceActor.generate_keys_to_stdout()"
 # Or let docker compose generate them on first startup.
 if instance_public_key = System.get_env("INSTANCE_PUBLIC_KEY") do
-  decoded = case Base.decode64(instance_public_key) do
-    {:ok, pem} -> pem
-    _ -> instance_public_key
-  end
+  decoded =
+    case Base.decode64(instance_public_key) do
+      {:ok, pem} -> pem
+      _ -> instance_public_key
+    end
+
   config :hybridsocial, :instance_public_key, decoded
 end
 
 if instance_private_key = System.get_env("INSTANCE_PRIVATE_KEY") do
-  decoded = case Base.decode64(instance_private_key) do
-    {:ok, pem} -> pem
-    _ -> instance_private_key
-  end
+  decoded =
+    case Base.decode64(instance_private_key) do
+      {:ok, pem} -> pem
+      _ -> instance_private_key
+    end
+
   config :hybridsocial, :instance_private_key, decoded
 end
 
@@ -72,7 +76,8 @@ if nats_url = System.get_env("NATS_URL") do
   config :hybridsocial,
     nats_url: nats_url,
     nats_host: System.get_env("NATS_HOST", URI.parse(nats_url).host || "localhost"),
-    nats_port: String.to_integer(System.get_env("NATS_PORT", to_string(URI.parse(nats_url).port || 4222))),
+    nats_port:
+      String.to_integer(System.get_env("NATS_PORT", to_string(URI.parse(nats_url).port || 4222))),
     nats_monitoring_port: String.to_integer(System.get_env("NATS_MONITORING_PORT", "8222"))
 end
 

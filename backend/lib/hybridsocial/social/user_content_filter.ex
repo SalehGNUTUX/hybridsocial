@@ -31,7 +31,9 @@ defmodule Hybridsocial.Social.UserContentFilter do
 
   defp validate_contexts(changeset) do
     case get_field(changeset, :context) do
-      nil -> changeset
+      nil ->
+        changeset
+
       contexts ->
         if Enum.all?(contexts, &(&1 in @valid_contexts)) do
           changeset

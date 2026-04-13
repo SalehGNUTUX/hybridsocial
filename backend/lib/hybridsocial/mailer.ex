@@ -12,7 +12,9 @@ defmodule Hybridsocial.Mailer do
       |> to(to)
       |> from({instance_name, from_address})
       |> subject("Test email from #{instance_name}")
-      |> text_body("This is a test email from #{instance_name}. If you received this, your email configuration is working correctly.")
+      |> text_body(
+        "This is a test email from #{instance_name}. If you received this, your email configuration is working correctly."
+      )
 
     deliver(email)
   end

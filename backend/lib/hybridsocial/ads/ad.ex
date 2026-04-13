@@ -27,7 +27,18 @@ defmodule Hybridsocial.Ads.Ad do
 
   def changeset(ad, attrs) do
     ad
-    |> cast(attrs, [:title, :description, :image_url, :link_url, :placement, :priority, :starts_at, :expires_at, :is_active, :created_by_id])
+    |> cast(attrs, [
+      :title,
+      :description,
+      :image_url,
+      :link_url,
+      :placement,
+      :priority,
+      :starts_at,
+      :expires_at,
+      :is_active,
+      :created_by_id
+    ])
     |> validate_required([:title, :link_url])
     |> validate_inclusion(:placement, @valid_placements)
     |> validate_length(:title, max: 200)

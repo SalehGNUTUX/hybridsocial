@@ -41,11 +41,12 @@ defmodule HybridsocialWeb.Api.V1.MarkerController do
 
   defp render_markers(markers) do
     Map.new(markers, fn {timeline, marker} ->
-      {timeline, %{
-        last_read_id: marker.last_read_id,
-        version: 0,
-        updated_at: marker.updated_at
-      }}
+      {timeline,
+       %{
+         last_read_id: marker.last_read_id,
+         version: 0,
+         updated_at: marker.updated_at
+       }}
     end)
   end
 end

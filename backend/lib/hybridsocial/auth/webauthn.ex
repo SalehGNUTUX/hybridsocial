@@ -18,7 +18,8 @@ defmodule Hybridsocial.Auth.Webauthn do
   alias Hybridsocial.Repo
   alias Hybridsocial.Auth.WebauthnCredential
 
-  @challenge_ttl 300  # 5 minutes
+  # 5 minutes
+  @challenge_ttl 300
 
   @doc "Generate a registration challenge for a user."
   def registration_challenge(identity_id) do
@@ -38,8 +39,10 @@ defmodule Hybridsocial.Auth.Webauthn do
         displayName: identity_id
       },
       pubKeyCredParams: [
-        %{type: "public-key", alg: -7},    # ES256
-        %{type: "public-key", alg: -257}   # RS256
+        # ES256
+        %{type: "public-key", alg: -7},
+        # RS256
+        %{type: "public-key", alg: -257}
       ],
       timeout: @challenge_ttl * 1000,
       attestation: "none",
@@ -65,7 +68,8 @@ defmodule Hybridsocial.Auth.Webauthn do
         # Try full attestation verification via wax_ if attestation data is provided
         public_key =
           case params["response"] do
-            %{"attestationObject" => att_b64, "clientDataJSON" => cd_b64} when is_binary(att_b64) ->
+            %{"attestationObject" => att_b64, "clientDataJSON" => cd_b64}
+            when is_binary(att_b64) ->
               try do
                 attestation_object = Base.decode64!(att_b64)
                 client_data_json = Base.decode64!(cd_b64)
@@ -73,15 +77,13 @@ defmodule Hybridsocial.Auth.Webauthn do
 
                 rp_id = URI.parse(HybridsocialWeb.Endpoint.url()).host
 
-                case Wax.register(attestation_object, client_data_json,
-                       %Wax.Challenge{
-                         bytes: challenge_bytes,
-                         rp_id: rp_id,
-                         origin: HybridsocialWeb.Endpoint.url(),
-                         type: :attestation,
-                         issued_at: DateTime.utc_now()
-                       }
-                     ) do
+                case Wax.register(attestation_object, client_data_json, %Wax.Challenge{
+                       bytes: challenge_bytes,
+                       rp_id: rp_id,
+                       origin: HybridsocialWeb.Endpoint.url(),
+                       type: :attestation,
+                       issued_at: DateTime.utc_now()
+                     }) do
                   {:ok, {_auth_data, result}} ->
                     Base.url_encode64(:erlang.term_to_binary(result), padding: false)
 
@@ -122,9 +124,10 @@ defmodule Hybridsocial.Auth.Webauthn do
       rpId: rp_id,
       timeout: @challenge_ttl * 1000,
       userVerification: "preferred",
-      allowCredentials: Enum.map(credentials, fn c ->
-        %{type: "public-key", id: c.credential_id}
-      end)
+      allowCredentials:
+        Enum.map(credentials, fn c ->
+          %{type: "public-key", id: c.credential_id}
+        end)
     }
   end
 
@@ -139,13 +142,16 @@ defmodule Hybridsocial.Auth.Webauthn do
       _challenge ->
         clear_challenge(identity_id)
 
-        case Repo.get_by(WebauthnCredential, credential_id: credential_id, identity_id: identity_id) do
+        case Repo.get_by(WebauthnCredential,
+               credential_id: credential_id,
+               identity_id: identity_id
+             ) do
           nil ->
             {:error, :credential_not_found}
 
           cred ->
             # Update sign count and last used
-            new_count = (params["sign_count"] || cred.sign_count + 1)
+            new_count = params["sign_count"] || cred.sign_count + 1
 
             cred
             |> Ecto.Changeset.change(
@@ -204,7 +210,9 @@ defmodule Hybridsocial.Auth.Webauthn do
           :ets.delete(challenge_table(), identity_id)
           nil
         end
-      _ -> nil
+
+      _ ->
+        nil
     end
   end
 

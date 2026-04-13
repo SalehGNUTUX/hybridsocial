@@ -10,6 +10,8 @@ defmodule Hybridsocial.Federation.Validators.FollowValidator do
     end
   end
 
-  def validate(%{"type" => "Follow"}), do: {:error, "Follow must have an object (target actor URI)"}
+  def validate(%{"type" => "Follow"}),
+    do: {:error, "Follow must have an object (target actor URI)"}
+
   def validate(_), do: {:error, "Not a Follow activity"}
 end

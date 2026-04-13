@@ -474,13 +474,25 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
 
   def webauthn_register_verify(conn, params) do
     identity = conn.assigns.current_identity
+
     case Webauthn.verify_registration(identity.id, params) do
       {:ok, cred} ->
-        conn |> put_status(:created) |> json(%{id: cred.id, name: cred.name, credential_id: cred.credential_id, created_at: cred.inserted_at})
+        conn
+        |> put_status(:created)
+        |> json(%{
+          id: cred.id,
+          name: cred.name,
+          credential_id: cred.credential_id,
+          created_at: cred.inserted_at
+        })
+
       {:error, :challenge_expired} ->
         conn |> put_status(:unprocessable_entity) |> json(%{error: "webauthn.challenge_expired"})
+
       {:error, changeset} ->
-        conn |> put_status(:unprocessable_entity) |> json(%{error: "webauthn.registration_failed", details: format_errors(changeset)})
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "webauthn.registration_failed", details: format_errors(changeset)})
     end
   end
 
@@ -492,10 +504,14 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
 
   def webauthn_auth_verify(conn, params) do
     identity = conn.assigns.current_identity
+
     case Webauthn.verify_authentication(identity.id, params) do
-      {:ok, _cred} -> json(conn, %{status: "ok", verified: true})
+      {:ok, _cred} ->
+        json(conn, %{status: "ok", verified: true})
+
       {:error, :challenge_expired} ->
         conn |> put_status(:unprocessable_entity) |> json(%{error: "webauthn.challenge_expired"})
+
       {:error, :credential_not_found} ->
         conn |> put_status(:not_found) |> json(%{error: "webauthn.credential_not_found"})
     end
@@ -504,16 +520,31 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
   def webauthn_list(conn, _params) do
     identity = conn.assigns.current_identity
     creds = Webauthn.list_credentials(identity.id)
-    json(conn, Enum.map(creds, fn c ->
-      %{id: c.id, name: c.name, credential_id: c.credential_id, sign_count: c.sign_count, last_used_at: c.last_used_at, created_at: c.inserted_at}
-    end))
+
+    json(
+      conn,
+      Enum.map(creds, fn c ->
+        %{
+          id: c.id,
+          name: c.name,
+          credential_id: c.credential_id,
+          sign_count: c.sign_count,
+          last_used_at: c.last_used_at,
+          created_at: c.inserted_at
+        }
+      end)
+    )
   end
 
   def webauthn_delete(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
+
     case Webauthn.delete_credential(id, identity.id) do
-      {:ok, _} -> json(conn, %{status: "ok"})
-      {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "webauthn.not_found"})
+      {:ok, _} ->
+        json(conn, %{status: "ok"})
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "webauthn.not_found"})
     end
   end
 
@@ -525,7 +556,14 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
         # Always return a valid-looking challenge — don't reveal if email exists
         fake_challenge = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
         rp_id = URI.parse(HybridsocialWeb.Endpoint.url()).host
-        json(conn, %{challenge: fake_challenge, rpId: rp_id, timeout: 300_000, userVerification: "preferred", allowCredentials: []})
+
+        json(conn, %{
+          challenge: fake_challenge,
+          rpId: rp_id,
+          timeout: 300_000,
+          userVerification: "preferred",
+          allowCredentials: []
+        })
 
       user ->
         identity_id = user.identity_id
@@ -537,7 +575,14 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
           # No keys registered — return same shape as no-user to avoid leaking info
           fake_challenge = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
           rp_id = URI.parse(HybridsocialWeb.Endpoint.url()).host
-          json(conn, %{challenge: fake_challenge, rpId: rp_id, timeout: 300_000, userVerification: "preferred", allowCredentials: []})
+
+          json(conn, %{
+            challenge: fake_challenge,
+            rpId: rp_id,
+            timeout: 300_000,
+            userVerification: "preferred",
+            allowCredentials: []
+          })
         end
     end
   end
@@ -556,9 +601,9 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
         credential_id = params["credential_id"] || params["id"]
 
         case Webauthn.verify_authentication(identity_id, %{
-          "credential_id" => credential_id,
-          "sign_count" => params["sign_count"]
-        }) do
+               "credential_id" => credential_id,
+               "sign_count" => params["sign_count"]
+             }) do
           {:ok, _cred} ->
             # Issue tokens — same as normal login
             ip = to_string(:inet_parse.ntoa(conn.remote_ip))
@@ -572,7 +617,9 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
               {:ok, tokens} ->
                 # Update last login
                 user
-                |> Ecto.Changeset.change(last_login_at: DateTime.utc_now() |> DateTime.truncate(:microsecond))
+                |> Ecto.Changeset.change(
+                  last_login_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+                )
                 |> Hybridsocial.Repo.update()
 
                 conn

@@ -4,7 +4,10 @@ defmodule Hybridsocial.Repo.Migrations.AddWebauthnCredentials do
   def change do
     create table(:webauthn_credentials, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :credential_id, :text, null: false
       add :public_key, :text, null: false
       add :sign_count, :integer, default: 0

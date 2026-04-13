@@ -42,7 +42,14 @@ defmodule HybridsocialWeb.Plugs.FederationRateLimiter do
   defp ensure_table do
     case :ets.info(@table) do
       :undefined ->
-        :ets.new(@table, [:public, :set, :named_table, read_concurrency: true, write_concurrency: true])
+        :ets.new(@table, [
+          :public,
+          :set,
+          :named_table,
+          read_concurrency: true,
+          write_concurrency: true
+        ])
+
       _ ->
         :ok
     end
@@ -93,6 +100,7 @@ defmodule HybridsocialWeb.Plugs.FederationRateLimiter do
         if bucket < current - 1 do
           :ets.delete(@table, key)
         end
+
         acc
       end,
       :ok,

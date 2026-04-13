@@ -32,8 +32,7 @@ defmodule Hybridsocial.Federation.MRFIntegrationTest do
       "actor" => "https://remote.example/u/alice",
       "to" => ["https://www.w3.org/ns/activitystreams#Public"],
       "object" => %{
-        "id" =>
-          "https://remote.example/objects/note-#{:erlang.unique_integer([:positive])}",
+        "id" => "https://remote.example/objects/note-#{:erlang.unique_integer([:positive])}",
         "type" => "Note",
         "content" => "Hello world",
         "attributedTo" => "https://remote.example/u/alice",
@@ -133,7 +132,9 @@ defmodule Hybridsocial.Federation.MRFIntegrationTest do
     test "rewrites content when a replace pattern is configured" do
       configure_policies(["keyword"])
       :ok = Config.set("mrf_keyword_reject", [])
-      :ok = Config.set("mrf_keyword_replace", [%{"pattern" => "shout", "replacement" => "whisper"}])
+
+      :ok =
+        Config.set("mrf_keyword_replace", [%{"pattern" => "shout", "replacement" => "whisper"}])
 
       activity = create_activity(%{"object" => %{"content" => "shout louder"}})
 

@@ -6,5 +6,6 @@ defmodule Hybridsocial.Federation.MRF.NoOpPolicy do
   def filter(activity), do: {:ok, activity}
 
   @impl true
-  def describe, do: {:ok, %{name: "no_op", description: "Passes all activities through unchanged."}}
+  def describe,
+    do: {:ok, %{name: "no_op", description: "Passes all activities through unchanged."}}
 end

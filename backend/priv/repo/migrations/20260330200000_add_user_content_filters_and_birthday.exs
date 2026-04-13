@@ -5,10 +5,14 @@ defmodule Hybridsocial.Repo.Migrations.AddUserContentFiltersAndBirthday do
     # User-level content filters
     create table(:user_content_filters, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :identity_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :phrase, :string, null: false
       add :context, {:array, :string}, default: ["home", "public", "notifications", "thread"]
-      add :action, :string, default: "warn"  # warn | hide
+      # warn | hide
+      add :action, :string, default: "warn"
       add :whole_word, :boolean, default: false
       add :expires_at, :utc_datetime_usec
 

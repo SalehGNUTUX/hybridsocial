@@ -14,7 +14,9 @@ defmodule Hybridsocial.Federation.Validators.CreateValidator do
     end
   end
 
-  def validate(%{"type" => "Create"}), do: {:error, "Create activity must have an embedded object"}
+  def validate(%{"type" => "Create"}),
+    do: {:error, "Create activity must have an embedded object"}
+
   def validate(_), do: {:error, "Not a Create activity"}
 
   defp validate_object_content(object) do

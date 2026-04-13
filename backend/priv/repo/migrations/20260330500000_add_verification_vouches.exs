@@ -4,8 +4,12 @@ defmodule Hybridsocial.Repo.Migrations.AddVerificationVouches do
   def change do
     create table(:verification_vouches, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :verification_id, references(:verifications, type: :binary_id, on_delete: :delete_all), null: false
-      add :voucher_id, references(:identities, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :verification_id, references(:verifications, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :voucher_id, references(:identities, type: :binary_id, on_delete: :delete_all),
+        null: false
 
       timestamps(type: :utc_datetime_usec)
     end

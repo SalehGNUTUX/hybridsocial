@@ -111,7 +111,10 @@ defmodule Hybridsocial.Premium do
       else
         {:ok, vouch} =
           %VerificationVouch{}
-          |> VerificationVouch.changeset(%{verification_id: verification_id, voucher_id: voucher_id})
+          |> VerificationVouch.changeset(%{
+            verification_id: verification_id,
+            voucher_id: voucher_id
+          })
           |> Repo.insert()
 
         # Check if threshold is met
@@ -158,7 +161,10 @@ defmodule Hybridsocial.Premium do
   @doc "Find a pending peer_vouch verification for an identity (for vouch links)."
   def get_peer_verification(identity_id) do
     Verification
-    |> where([v], v.identity_id == ^identity_id and v.type == "peer_vouch" and v.status == "pending")
+    |> where(
+      [v],
+      v.identity_id == ^identity_id and v.type == "peer_vouch" and v.status == "pending"
+    )
     |> order_by([v], desc: v.inserted_at)
     |> limit(1)
     |> Repo.one()
@@ -238,6 +244,7 @@ defmodule Hybridsocial.Premium do
     CryptoAddress
     |> where([c], c.identity_id == ^identity_id and c.coin == ^coin)
     |> Repo.delete_all()
+
     :ok
   end
 

@@ -39,11 +39,13 @@ defmodule HybridsocialWeb.Api.V1.DirectoryController do
   end
 
   defp parse_int(nil, default), do: default
+
   defp parse_int(val, default) when is_binary(val) do
     case Integer.parse(val) do
       {n, _} -> n
       :error -> default
     end
   end
+
   defp parse_int(val, _) when is_integer(val), do: val
 end

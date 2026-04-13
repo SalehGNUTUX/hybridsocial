@@ -26,13 +26,19 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     user_updates =
       %{}
       |> then(fn m -> if params["locale"], do: Map.put(m, :locale, params["locale"]), else: m end)
-      |> then(fn m -> if params["default_visibility"], do: Map.put(m, :default_visibility, params["default_visibility"]), else: m end)
+      |> then(fn m ->
+        if params["default_visibility"],
+          do: Map.put(m, :default_visibility, params["default_visibility"]),
+          else: m
+      end)
 
     # Merge preferences map if provided
     user_updates =
       if is_map(params["preferences"]) do
         case Hybridsocial.Repo.get_by(Hybridsocial.Accounts.User, identity_id: identity.id) do
-          nil -> user_updates
+          nil ->
+            user_updates
+
           user ->
             merged = Map.merge(user.preferences || %{}, params["preferences"])
             Map.put(user_updates, :preferences, merged)
@@ -43,7 +49,9 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
     if map_size(user_updates) > 0 do
       case Hybridsocial.Repo.get_by(Hybridsocial.Accounts.User, identity_id: identity.id) do
-        nil -> :ok
+        nil ->
+          :ok
+
         user ->
           user
           |> Ecto.Changeset.change(user_updates)
@@ -54,7 +62,9 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     # Mark onboarding complete (one-shot, sticky). Accepts truthy "onboarded".
     if params["onboarded"] in [true, "true", 1, "1"] and is_nil(identity.onboarded_at) do
       identity
-      |> Ecto.Changeset.change(onboarded_at: DateTime.utc_now() |> DateTime.truncate(:microsecond))
+      |> Ecto.Changeset.change(
+        onboarded_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      )
       |> Hybridsocial.Repo.update()
     end
 
@@ -129,10 +139,11 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
 
       _identity ->
-        viewer_id = case conn.assigns[:current_identity] do
-          %{id: vid} -> vid
-          _ -> nil
-        end
+        viewer_id =
+          case conn.assigns[:current_identity] do
+            %{id: vid} -> vid
+            _ -> nil
+          end
 
         opts = [
           limit: clamp_limit(params["limit"]),
@@ -146,7 +157,10 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
           Hybridsocial.Social.Posts.posts_by_identity(id, opts)
           |> then(fn p -> if is_list(p), do: p, else: [] end)
 
-        serialized = HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
+        serialized =
+          HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
+            current_identity_id: viewer_id
+          )
 
         conn
         |> put_status(:ok)
@@ -164,6 +178,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     # Enforce follows limit (0 = unlimited)
     if follows_limit > 0 do
       current_count = Hybridsocial.Social.following_count(identity.id)
+
       if current_count >= follows_limit do
         conn
         |> put_status(:unprocessable_entity)
@@ -398,10 +413,14 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def follow_requests(conn, _params) do
     identity = conn.assigns.current_identity
     requests = Social.pending_follow_requests(identity.id)
-    conn |> json(Enum.map(requests, fn f ->
-      requester = Hybridsocial.Repo.preload(f, :follower).follower
-      %{id: f.id, account: serialize_identity(requester), created_at: f.inserted_at}
-    end))
+
+    conn
+    |> json(
+      Enum.map(requests, fn f ->
+        requester = Hybridsocial.Repo.preload(f, :follower).follower
+        %{id: f.id, account: serialize_identity(requester), created_at: f.inserted_at}
+      end)
+    )
   end
 
   def authorize_follow(conn, %{"id" => follow_id}) do
@@ -428,9 +447,15 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def block_domain(conn, %{"domain" => domain}) do
     identity = conn.assigns.current_identity
+
     case Social.block_domain(identity.id, domain) do
-      {:ok, block} -> conn |> put_status(:created) |> json(%{id: block.id, domain: block.domain})
-      {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "domain_block.failed", details: format_errors(changeset)})
+      {:ok, block} ->
+        conn |> put_status(:created) |> json(%{id: block.id, domain: block.domain})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "domain_block.failed", details: format_errors(changeset)})
     end
   end
 
@@ -445,19 +470,32 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def drive_folders(conn, params) do
     identity = conn.assigns.current_identity
     folders = Hybridsocial.Media.Drive.list_folders(identity.id, params["parent_id"])
-    json(conn, Enum.map(folders, fn f -> %{id: f.id, name: f.name, parent_id: f.parent_id, created_at: f.inserted_at} end))
+
+    json(
+      conn,
+      Enum.map(folders, fn f ->
+        %{id: f.id, name: f.name, parent_id: f.parent_id, created_at: f.inserted_at}
+      end)
+    )
   end
 
   def create_drive_folder(conn, params) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Media.Drive.create_folder(identity.id, params) do
-      {:ok, f} -> conn |> put_status(:created) |> json(%{id: f.id, name: f.name, parent_id: f.parent_id})
-      {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "folder.failed", details: format_errors(changeset)})
+      {:ok, f} ->
+        conn |> put_status(:created) |> json(%{id: f.id, name: f.name, parent_id: f.parent_id})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "folder.failed", details: format_errors(changeset)})
     end
   end
 
   def rename_drive_folder(conn, %{"id" => id, "name" => name}) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Media.Drive.rename_folder(id, identity.id, name) do
       {:ok, f} -> json(conn, %{id: f.id, name: f.name})
       {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "folder.not_found"})
@@ -466,6 +504,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def delete_drive_folder(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Media.Drive.delete_folder(id, identity.id) do
       {:ok, _} -> json(conn, %{status: "ok"})
       {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "folder.not_found"})
@@ -474,10 +513,28 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def drive_files(conn, params) do
     identity = conn.assigns.current_identity
-    files = Hybridsocial.Media.Drive.list_files(identity.id, folder_id: params["folder_id"], max_id: params["max_id"])
-    json(conn, Enum.map(files, fn f ->
-      %{id: f.id, content_type: f.content_type, file_size: f.file_size, storage_path: f.storage_path, folder_id: f.folder_id, content_hash: f.content_hash, alt_text: f.alt_text, created_at: f.inserted_at}
-    end))
+
+    files =
+      Hybridsocial.Media.Drive.list_files(identity.id,
+        folder_id: params["folder_id"],
+        max_id: params["max_id"]
+      )
+
+    json(
+      conn,
+      Enum.map(files, fn f ->
+        %{
+          id: f.id,
+          content_type: f.content_type,
+          file_size: f.file_size,
+          storage_path: f.storage_path,
+          folder_id: f.folder_id,
+          content_hash: f.content_hash,
+          alt_text: f.alt_text,
+          created_at: f.inserted_at
+        }
+      end)
+    )
   end
 
   def move_drive_files(conn, %{"file_ids" => file_ids, "folder_id" => folder_id}) do
@@ -495,7 +552,13 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def find_by_hash(conn, %{"hash" => hash}) do
     identity = conn.assigns.current_identity
     files = Hybridsocial.Media.Drive.find_by_hash(identity.id, hash)
-    json(conn, Enum.map(files, fn f -> %{id: f.id, storage_path: f.storage_path, content_type: f.content_type} end))
+
+    json(
+      conn,
+      Enum.map(files, fn f ->
+        %{id: f.id, storage_path: f.storage_path, content_type: f.content_type}
+      end)
+    )
   end
 
   def drive_usage(conn, _params) do
@@ -514,14 +577,21 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def create_excerpt(conn, params) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Social.Excerpts.create_excerpt(identity.id, params) do
-      {:ok, e} -> conn |> put_status(:created) |> json(serialize_excerpt(e))
-      {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "excerpt.failed", details: format_errors(changeset)})
+      {:ok, e} ->
+        conn |> put_status(:created) |> json(serialize_excerpt(e))
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "excerpt.failed", details: format_errors(changeset)})
     end
   end
 
   def show_excerpt(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Social.Excerpts.get_excerpt(id, identity.id) do
       nil -> conn |> put_status(:not_found) |> json(%{error: "excerpt.not_found"})
       e -> json(conn, serialize_excerpt(e))
@@ -530,34 +600,63 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def excerpt_feed(conn, %{"id" => id} = params) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Social.Excerpts.get_excerpt(id, identity.id) do
-      nil -> conn |> put_status(:not_found) |> json(%{error: "excerpt.not_found"})
+      nil ->
+        conn |> put_status(:not_found) |> json(%{error: "excerpt.not_found"})
+
       excerpt ->
         posts = Hybridsocial.Social.Excerpts.excerpt_feed(excerpt, max_id: params["max_id"])
-        serialized = HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts, current_identity_id: identity.id)
+
+        serialized =
+          HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
+            current_identity_id: identity.id
+          )
+
         json(conn, serialized)
     end
   end
 
   def update_excerpt(conn, %{"id" => id} = params) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Social.Excerpts.update_excerpt(id, identity.id, params) do
-      {:ok, e} -> json(conn, serialize_excerpt(e))
-      {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "excerpt.not_found"})
-      {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "excerpt.failed", details: format_errors(changeset)})
+      {:ok, e} ->
+        json(conn, serialize_excerpt(e))
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "excerpt.not_found"})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "excerpt.failed", details: format_errors(changeset)})
     end
   end
 
   def delete_excerpt(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Social.Excerpts.delete_excerpt(id, identity.id) do
-      {:ok, _} -> json(conn, %{status: "ok"})
-      {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "excerpt.not_found"})
+      {:ok, _} ->
+        json(conn, %{status: "ok"})
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "excerpt.not_found"})
     end
   end
 
   defp serialize_excerpt(e) do
-    %{id: e.id, name: e.name, keywords: e.keywords, exclude_keywords: e.exclude_keywords, sources: e.sources, with_media_only: e.with_media_only, notify: e.notify, created_at: e.inserted_at}
+    %{
+      id: e.id,
+      name: e.name,
+      keywords: e.keywords,
+      exclude_keywords: e.exclude_keywords,
+      sources: e.sources,
+      with_media_only: e.with_media_only,
+      notify: e.notify,
+      created_at: e.inserted_at
+    }
   end
 
   # --- Boost Muting ---
@@ -584,9 +683,15 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def set_crypto_address(conn, params) do
     identity = conn.assigns.current_identity
+
     case Hybridsocial.Premium.set_crypto_address(identity.id, params) do
-      {:ok, addr} -> conn |> put_status(:created) |> json(serialize_crypto(addr))
-      {:error, changeset} -> conn |> put_status(:unprocessable_entity) |> json(%{error: "crypto.failed", details: format_errors(changeset)})
+      {:ok, addr} ->
+        conn |> put_status(:created) |> json(serialize_crypto(addr))
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "crypto.failed", details: format_errors(changeset)})
     end
   end
 
@@ -602,7 +707,14 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   end
 
   defp serialize_crypto(addr) do
-    %{id: addr.id, coin: addr.coin, coin_name: Hybridsocial.Premium.CryptoAddress.coin_name(addr.coin), address: addr.address, label: addr.label, is_public: addr.is_public}
+    %{
+      id: addr.id,
+      coin: addr.coin,
+      coin_name: Hybridsocial.Premium.CryptoAddress.coin_name(addr.coin),
+      address: addr.address,
+      label: addr.label,
+      is_public: addr.is_public
+    }
   end
 
   # --- Familiar Followers ---
@@ -612,6 +724,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
       %{id: viewer_id} ->
         accounts = Social.familiar_followers(viewer_id, target_id)
         json(conn, Enum.map(accounts, &serialize_identity/1))
+
       _ ->
         json(conn, [])
     end
@@ -624,7 +737,12 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     max_id = params["max_id"]
 
     posts = Hybridsocial.Social.Posts.reacted_posts(identity.id, max_id: max_id)
-    serialized = HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts, current_identity_id: identity.id)
+
+    serialized =
+      HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
+        current_identity_id: identity.id
+      )
+
     json(conn, serialized)
   end
 
@@ -632,10 +750,16 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def change_email(conn, %{"email" => new_email, "password" => password}) do
     identity = conn.assigns.current_identity
+
     case Accounts.change_email(identity.id, new_email, password) do
-      {:ok, _} -> json(conn, %{status: "ok", message: "Confirmation email sent to #{new_email}"})
-      {:error, :invalid_password} -> conn |> put_status(:forbidden) |> json(%{error: "auth.invalid_password"})
-      {:error, reason} -> conn |> put_status(:unprocessable_entity) |> json(%{error: inspect(reason)})
+      {:ok, _} ->
+        json(conn, %{status: "ok", message: "Confirmation email sent to #{new_email}"})
+
+      {:error, :invalid_password} ->
+        conn |> put_status(:forbidden) |> json(%{error: "auth.invalid_password"})
+
+      {:error, reason} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: inspect(reason)})
     end
   end
 
@@ -666,35 +790,72 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def list_filters(conn, _params) do
     identity = conn.assigns.current_identity
     filters = Social.list_user_filters(identity.id)
-    json(conn, Enum.map(filters, fn f ->
-      %{id: f.id, phrase: f.phrase, context: f.context, action: f.action, whole_word: f.whole_word, expires_at: f.expires_at}
-    end))
+
+    json(
+      conn,
+      Enum.map(filters, fn f ->
+        %{
+          id: f.id,
+          phrase: f.phrase,
+          context: f.context,
+          action: f.action,
+          whole_word: f.whole_word,
+          expires_at: f.expires_at
+        }
+      end)
+    )
   end
 
   def create_filter(conn, params) do
     identity = conn.assigns.current_identity
+
     case Social.create_user_filter(identity.id, params) do
       {:ok, f} ->
-        conn |> put_status(:created) |> json(%{id: f.id, phrase: f.phrase, context: f.context, action: f.action, whole_word: f.whole_word, expires_at: f.expires_at})
+        conn
+        |> put_status(:created)
+        |> json(%{
+          id: f.id,
+          phrase: f.phrase,
+          context: f.context,
+          action: f.action,
+          whole_word: f.whole_word,
+          expires_at: f.expires_at
+        })
+
       {:error, changeset} ->
-        conn |> put_status(:unprocessable_entity) |> json(%{error: "filter.create_failed", details: format_errors(changeset)})
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "filter.create_failed", details: format_errors(changeset)})
     end
   end
 
   def update_filter(conn, %{"id" => id} = params) do
     identity = conn.assigns.current_identity
+
     case Social.update_user_filter(id, identity.id, params) do
       {:ok, f} ->
-        json(conn, %{id: f.id, phrase: f.phrase, context: f.context, action: f.action, whole_word: f.whole_word, expires_at: f.expires_at})
+        json(conn, %{
+          id: f.id,
+          phrase: f.phrase,
+          context: f.context,
+          action: f.action,
+          whole_word: f.whole_word,
+          expires_at: f.expires_at
+        })
+
       {:error, :not_found} ->
         conn |> put_status(:not_found) |> json(%{error: "filter.not_found"})
+
       {:error, changeset} ->
-        conn |> put_status(:unprocessable_entity) |> json(%{error: "filter.update_failed", details: format_errors(changeset)})
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "filter.update_failed", details: format_errors(changeset)})
     end
   end
 
   def delete_filter(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
+
     case Social.delete_user_filter(id, identity.id) do
       {:ok, _} -> json(conn, %{status: "ok"})
       {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "filter.not_found"})
@@ -725,13 +886,18 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   def remove_alias(conn, %{"alias" => alias_uri}) do
     identity = conn.assigns.current_identity
+
     case Accounts.remove_alias(identity, alias_uri) do
-      {:ok, updated} -> json(conn, %{also_known_as: updated.also_known_as})
-      {:error, reason} -> conn |> put_status(:unprocessable_entity) |> json(%{error: inspect(reason)})
+      {:ok, updated} ->
+        json(conn, %{also_known_as: updated.also_known_as})
+
+      {:error, reason} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: inspect(reason)})
     end
   end
 
-  def remove_alias(conn, _), do: conn |> put_status(:bad_request) |> json(%{error: "missing_params"})
+  def remove_alias(conn, _),
+    do: conn |> put_status(:bad_request) |> json(%{error: "missing_params"})
 
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

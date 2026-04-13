@@ -25,7 +25,9 @@ defmodule Hybridsocial.Admin.QueueStats do
 
   defp get_task_stats do
     case Process.whereis(Hybridsocial.TaskSupervisor) do
-      nil -> %{active: 0}
+      nil ->
+        %{active: 0}
+
       pid ->
         %{active: Task.Supervisor.children(pid) |> length()}
     end
@@ -48,6 +50,7 @@ defmodule Hybridsocial.Admin.QueueStats do
 
   defp system_stats do
     memory = :erlang.memory()
+
     %{
       uptime_seconds: div(:erlang.statistics(:wall_clock) |> elem(0), 1000),
       memory_total_mb: div(memory[:total], 1_048_576),

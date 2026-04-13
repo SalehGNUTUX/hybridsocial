@@ -38,7 +38,8 @@ defmodule HybridsocialWeb.Api.V1.SearchController do
         results.accounts
       end
 
-    serialized_posts = PostSerializer.serialize_many(results.posts, current_identity_id: viewer_id)
+    serialized_posts =
+      PostSerializer.serialize_many(results.posts, current_identity_id: viewer_id)
 
     conn
     |> put_status(:ok)

@@ -51,14 +51,18 @@ defmodule Hybridsocial.Federation.ActivityExpirationWorker do
     case Hybridsocial.Promotions.expire_promotions() do
       {:ok, promo_count} when promo_count > 0 ->
         Logger.info("ActivityExpirationWorker: expired #{promo_count} promotions")
-      _ -> :ok
+
+      _ ->
+        :ok
     end
 
     # Also expire ads
     case Hybridsocial.Ads.expire_ads() do
       {:ok, ad_count} when ad_count > 0 ->
         Logger.info("ActivityExpirationWorker: expired #{ad_count} ads")
-      _ -> :ok
+
+      _ ->
+        :ok
     end
   end
 end
