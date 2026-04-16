@@ -78,7 +78,10 @@ defmodule Hybridsocial.MixProject do
       # CORS
       {:cors_plug, "~> 3.0"},
       # NATS JetStream
-      {:gnat, "~> 1.8"}
+      {:gnat, "~> 1.8"},
+      # Markdown (CommonMark + GFM) and HTML sanitization
+      {:earmark, "~> 1.4"},
+      {:html_sanitize_ex, "~> 1.4"}
     ]
   end
 

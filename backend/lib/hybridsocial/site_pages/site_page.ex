@@ -38,85 +38,16 @@ defmodule Hybridsocial.SitePages.SitePage do
         changeset
 
       markdown ->
-        html = markdown_to_html(markdown)
+        # Site pages are admin-authored and trusted — render with the full
+        # GFM surface (tables, task lists, images, strikethrough, code
+        # fences, ordered lists, etc.) via Earmark + the widest sanitizer
+        # allowlist. Links still get rel/target applied by Sanitizer.
+        html =
+          markdown
+          |> Hybridsocial.Content.MarkdownRenderer.render_trusted()
+          |> Hybridsocial.Content.Sanitizer.sanitize_links()
+
         put_change(changeset, :body_html, html)
     end
-  end
-
-  defp markdown_to_html(""), do: ""
-
-  defp markdown_to_html(markdown) do
-    markdown
-    |> String.trim()
-    |> simple_markdown_to_html()
-  end
-
-  # Simple markdown-to-HTML converter that handles common formatting
-  defp simple_markdown_to_html(text) do
-    text
-    |> String.split("\n\n", trim: true)
-    |> Enum.map(&process_block/1)
-    |> Enum.join("\n")
-  end
-
-  defp process_block(block) do
-    block = String.trim(block)
-
-    cond do
-      String.starts_with?(block, "### ") ->
-        content = String.trim_leading(block, "### ") |> escape_html() |> inline_formatting()
-        "<h3>#{content}</h3>"
-
-      String.starts_with?(block, "## ") ->
-        content = String.trim_leading(block, "## ") |> escape_html() |> inline_formatting()
-        "<h2>#{content}</h2>"
-
-      String.starts_with?(block, "# ") ->
-        content = String.trim_leading(block, "# ") |> escape_html() |> inline_formatting()
-        "<h1>#{content}</h1>"
-
-      String.starts_with?(block, "- ") or String.starts_with?(block, "* ") ->
-        items =
-          block
-          |> String.split("\n")
-          |> Enum.map(fn line ->
-            content =
-              String.replace(line, ~r/^[\-\*]\s+/, "") |> escape_html() |> inline_formatting()
-
-            "<li>#{content}</li>"
-          end)
-          |> Enum.join("\n")
-
-        "<ul>\n#{items}\n</ul>"
-
-      true ->
-        content =
-          block
-          |> String.split("\n")
-          |> Enum.map(&escape_html/1)
-          |> Enum.join("<br>")
-          |> inline_formatting()
-
-        "<p>#{content}</p>"
-    end
-  end
-
-  defp inline_formatting(text) do
-    text
-    |> String.replace(~r/\*\*(.+?)\*\*/, "<strong>\\1</strong>")
-    |> String.replace(~r/\*(.+?)\*/, "<em>\\1</em>")
-    |> String.replace(~r/`(.+?)`/, "<code>\\1</code>")
-    |> String.replace(
-      ~r/\[(.+?)\]\((.+?)\)/,
-      "<a href=\"\\2\" rel=\"noopener noreferrer\">\\1</a>"
-    )
-  end
-
-  defp escape_html(text) do
-    text
-    |> String.replace("&", "&amp;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
-    |> String.replace("\"", "&quot;")
   end
 end

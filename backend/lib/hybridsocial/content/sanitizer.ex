@@ -1,7 +1,16 @@
 defmodule Hybridsocial.Content.Sanitizer do
-  @moduledoc "Content sanitization: markdown to HTML, HTML allowlisting, link safety."
+  @moduledoc """
+  Content sanitization for posts and DMs. Delegates markdown parsing to
+  `Hybridsocial.Content.MarkdownRenderer` (Earmark + HtmlSanitizeEx), then
+  applies link attributes (rel, target) for safety on external URLs.
 
-  @safe_tags ~w(p br a strong em b i code pre blockquote ul ol li span)
+  Level accepts `:none | :basic | :full | :full_embeds` or the string
+  equivalents used by `Hybridsocial.Premium.TierLimits`. Default is
+  `:basic` so callers that don't pass a level get safe behavior.
+  """
+
+  alias Hybridsocial.Content.MarkdownRenderer
+
   @link_attrs %{
     "rel" => "nofollow noopener noreferrer",
     "target" => "_blank"
@@ -9,40 +18,27 @@ defmodule Hybridsocial.Content.Sanitizer do
 
   @allowed_schemes ["http://", "https://"]
 
-  def sanitize_post_content(nil), do: nil
-  def sanitize_post_content(""), do: ""
+  def sanitize_post_content(content, level \\ :basic)
+  def sanitize_post_content(nil, _level), do: nil
+  def sanitize_post_content("", _level), do: ""
 
-  def sanitize_post_content(content) do
+  def sanitize_post_content(content, level) when is_binary(content) do
     content
-    |> markdown_to_html()
-    |> sanitize_html()
+    |> MarkdownRenderer.render(level)
     |> sanitize_links()
   end
 
-  def markdown_to_html(text) do
-    text
-    |> String.trim()
-    |> escape_html()
-    |> convert_bold()
-    |> convert_italic()
-    |> convert_code()
-    |> convert_links()
-    |> convert_mentions()
-    |> convert_hashtags()
-    |> convert_paragraphs()
+  @doc "Markdown to HTML at the given level. Defaults to :basic."
+  def markdown_to_html(text, level \\ :basic) do
+    MarkdownRenderer.render(text, level)
   end
 
-  def sanitize_html(html) do
-    # Strip any tags not in the allowlist
-    Regex.replace(~r/<\/?([a-zA-Z][a-zA-Z0-9]*)[^>]*>/u, html, fn full, tag ->
-      if String.downcase(tag) in @safe_tags do
-        full
-      else
-        ""
-      end
-    end)
-  end
-
+  @doc """
+  Applies safe link attributes. External `http(s)` links get
+  `rel="nofollow noopener noreferrer"` and `target="_blank"`; internal
+  links (`/foo`) are left alone. Anything else becomes `href="#"`.
+  Exposed for callers that already have HTML and just want link safety.
+  """
   def sanitize_links(html) do
     Regex.replace(~r/<a\s[^>]*>/u, html, fn tag ->
       href =
@@ -51,96 +47,40 @@ defmodule Hybridsocial.Content.Sanitizer do
           _ -> "#"
         end
 
+      existing_attrs = preserve_attrs(tag, ["class", "title"])
+
       cond do
         String.starts_with?(href, @allowed_schemes) ->
           safe_href = escape_attr(href)
           attrs = Enum.map_join(@link_attrs, " ", fn {k, v} -> ~s(#{k}="#{v}") end)
-          ~s(<a href="#{safe_href}" #{attrs}>)
+          ~s(<a href="#{safe_href}" #{attrs}#{existing_attrs}>)
 
         String.starts_with?(href, "/") ->
-          # Internal links (hashtags, mentions) — no rel/target needed
           safe_href = escape_attr(href)
-          ~s(<a href="#{safe_href}">)
+          ~s(<a href="#{safe_href}"#{existing_attrs}>)
 
         true ->
-          ~s(<a href="#">)
+          ~s(<a href="#"#{existing_attrs}>)
       end
     end)
   end
 
-  # Escape HTML special characters in text content
-  defp escape_html(text) do
-    text
-    |> String.replace("&", "&amp;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
+  defp preserve_attrs(tag, attrs) do
+    attrs
+    |> Enum.map(fn attr ->
+      case Regex.run(~r/#{attr}="([^"]*)"/, tag) do
+        [_, value] -> ~s( #{attr}="#{escape_attr(value)}")
+        _ -> ""
+      end
+    end)
+    |> Enum.join()
   end
 
-  # Escape for use inside HTML attribute values (double-quoted)
   defp escape_attr(value) do
     value
     |> String.replace("&", "&amp;")
     |> String.replace("\"", "&quot;")
     |> String.replace("'", "&#39;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
-  end
-
-  defp convert_bold(text), do: Regex.replace(~r/\*\*(.+?)\*\*/u, text, "<strong>\\1</strong>")
-  defp convert_italic(text), do: Regex.replace(~r/\*(.+?)\*/u, text, "<em>\\1</em>")
-  defp convert_code(text), do: Regex.replace(~r/`(.+?)`/u, text, "<code>\\1</code>")
-
-  defp convert_links(text) do
-    Regex.replace(~r/\[([^\]]+)\]\(([^)]+)\)/u, text, fn _, label, url ->
-      # Only allow http/https URLs — block javascript:, data:, etc.
-      safe_url =
-        if String.starts_with?(url, @allowed_schemes) do
-          escape_attr(url)
-        else
-          "#"
-        end
-
-      safe_label = escape_html_content(label)
-      attrs = Enum.map_join(@link_attrs, " ", fn {k, v} -> ~s(#{k}="#{v}") end)
-      ~s(<a href="#{safe_url}" #{attrs}>#{safe_label}</a>)
-    end)
-  end
-
-  defp convert_mentions(text) do
-    Regex.replace(~r/@([a-zA-Z0-9_]+)(@[a-zA-Z0-9._-]+)?/u, text, fn full, user, domain ->
-      safe_user = escape_attr(user)
-
-      if domain != "" do
-        # Remote mention: @user@domain.tld → link to /@user@domain.tld, display @user
-        safe_full = escape_attr(String.trim_leading(full, "@"))
-        ~s(<a href="/@#{safe_full}" class="mention" title="#{full}">@#{safe_user}</a>)
-      else
-        # Local mention: @user → link to /@user
-        ~s(<a href="/@#{safe_user}" class="mention">@#{safe_user}</a>)
-      end
-    end)
-  end
-
-  defp convert_hashtags(text) do
-    Regex.replace(~r/#([a-zA-Z0-9_]+)/u, text, fn full, tag ->
-      safe_tag = String.downcase(tag) |> URI.encode()
-      ~s(<a href="/tags/#{safe_tag}" class="hashtag">#{full}</a>)
-    end)
-  end
-
-  defp convert_paragraphs(text) do
-    text
-    |> String.split(~r/\n\n+/)
-    |> Enum.map_join(fn para ->
-      inner = String.replace(para, "\n", "<br>")
-      "<p>#{inner}</p>"
-    end)
-  end
-
-  # For content that was already HTML-escaped but needs extra safety in specific contexts
-  defp escape_html_content(text) do
-    text
-    |> String.replace("&", "&amp;")
     |> String.replace("<", "&lt;")
     |> String.replace(">", "&gt;")
   end

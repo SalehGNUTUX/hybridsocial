@@ -18,13 +18,16 @@ defmodule Hybridsocial.Content.SanitizerTest do
 
     test "converts paragraphs" do
       result = Sanitizer.markdown_to_html("para1\n\npara2")
-      assert result =~ "<p>para1</p>"
-      assert result =~ "<p>para2</p>"
+      assert result =~ "para1"
+      assert result =~ "para2"
+      assert result =~ "<p>"
     end
 
-    test "converts line breaks" do
+    test "line breaks become <br>" do
       result = Sanitizer.markdown_to_html("line1\nline2")
-      assert result =~ "line1<br>line2"
+      # Earmark emits self-closing <br /> when breaks: true is set.
+      assert result =~ ~r/line1\s*<br/
+      assert result =~ "line2"
     end
 
     test "converts hashtags to links" do
@@ -33,23 +36,8 @@ defmodule Hybridsocial.Content.SanitizerTest do
       assert result =~ "/tags/elixir"
     end
 
-    test "escapes HTML" do
+    test "strips HTML in markdown input" do
       result = Sanitizer.markdown_to_html("<script>alert('xss')</script>")
-      refute result =~ "<script>"
-      assert result =~ "&lt;script&gt;"
-    end
-  end
-
-  describe "sanitize_html/1" do
-    test "allows safe tags" do
-      html = "<p>hello <strong>world</strong></p>"
-      assert Sanitizer.sanitize_html(html) == html
-    end
-
-    test "strips dangerous tags" do
-      html = "<p>hello</p><script>evil</script>"
-      result = Sanitizer.sanitize_html(html)
-      assert result =~ "<p>hello</p>"
       refute result =~ "<script>"
     end
   end

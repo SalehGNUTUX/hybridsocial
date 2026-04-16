@@ -34,11 +34,14 @@ defmodule Hybridsocial.Social.Posts do
         |> DateTime.truncate(:microsecond)
       end
 
-    # Generate HTML from markdown content
+    # Generate HTML from markdown content using the author's tier-gated
+    # markdown level. Free tier → plaintext; verified_pro → full GFM.
+    markdown_level = limits[:markdown] || "basic"
+
     content_html =
       case attrs["content"] do
         nil -> nil
-        content -> Hybridsocial.Content.Sanitizer.sanitize_post_content(content)
+        content -> Hybridsocial.Content.Sanitizer.sanitize_post_content(content, markdown_level)
       end
 
     post_attrs =
