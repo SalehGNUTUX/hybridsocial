@@ -50,6 +50,31 @@ defmodule Hybridsocial.GroupsTest do
       assert {:error, changeset} = Groups.create_group(alice.id, %{})
       assert %{name: _} = errors_on(changeset)
     end
+
+    test "defaults federation_mode to :local_only", %{alice: alice} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Safe by default"})
+      assert group.federation_mode == :local_only
+    end
+
+    test "accepts federation_mode at creation", %{alice: alice} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{
+          "name" => "Public federated",
+          "federation_mode" => "public_federated"
+        })
+
+      assert group.federation_mode == :public_federated
+    end
+
+    test "rejects an unknown federation_mode", %{alice: alice} do
+      assert {:error, changeset} =
+               Groups.create_group(alice.id, %{
+                 "name" => "Bad mode",
+                 "federation_mode" => "hybrid-cosmic"
+               })
+
+      assert %{federation_mode: _} = errors_on(changeset)
+    end
   end
 
   describe "update_group/3" do
@@ -73,6 +98,23 @@ defmodule Hybridsocial.GroupsTest do
     test "returns not_found for missing group", %{alice: alice} do
       fake_id = Ecto.UUID.generate()
       assert {:error, :not_found} = Groups.update_group(fake_id, alice.id, %{"name" => "X"})
+    end
+
+    test "silently ignores federation_mode changes (it's locked at create)", %{alice: alice} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{
+          "name" => "Locked",
+          "federation_mode" => "local_only"
+        })
+
+      assert {:ok, updated} =
+               Groups.update_group(group.id, alice.id, %{
+                 "name" => "Still locked",
+                 "federation_mode" => "public_federated"
+               })
+
+      assert updated.name == "Still locked"
+      assert updated.federation_mode == :local_only
     end
   end
 

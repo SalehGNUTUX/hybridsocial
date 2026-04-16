@@ -221,6 +221,8 @@ export interface Group {
   avatar_url: string | null;
   header_url: string | null;
   visibility: 'public' | 'private' | 'secret';
+  // federation_mode is locked at creation — see backend Group schema.
+  federation_mode: 'local_only' | 'public_federated';
   member_count: number;
   is_member: boolean;
   role: 'owner' | 'admin' | 'moderator' | 'member' | null;

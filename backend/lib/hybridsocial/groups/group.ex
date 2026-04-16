@@ -10,6 +10,15 @@ defmodule Hybridsocial.Groups.Group do
     field :description, :string
     field :visibility, Ecto.Enum, values: [:public, :private, :local_only], default: :public
 
+    # Federation mode is chosen at create time and LOCKED. See
+    # `update_changeset/2` — changing it later would either leak previously
+    # private posts to existing remote followers (local_only -> public_federated)
+    # or abandon remote followers mid-subscription (public_federated ->
+    # local_only). Neither is safe.
+    field :federation_mode, Ecto.Enum,
+      values: [:local_only, :public_federated],
+      default: :local_only
+
     field :join_policy, Ecto.Enum,
       values: [:open, :screening, :approval, :invite_only],
       default: :open
@@ -42,6 +51,7 @@ defmodule Hybridsocial.Groups.Group do
       :name,
       :description,
       :visibility,
+      :federation_mode,
       :join_policy,
       :avatar_url,
       :header_url,
@@ -58,6 +68,7 @@ defmodule Hybridsocial.Groups.Group do
     |> unique_constraint(:identity_id)
   end
 
+  # federation_mode is deliberately NOT cast here — it's locked at creation.
   def update_changeset(group, attrs) do
     group
     |> cast(attrs, [:name, :description, :visibility, :join_policy, :avatar_url, :header_url])

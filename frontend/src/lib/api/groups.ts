@@ -45,7 +45,15 @@ export function getGroup(id: string): Promise<GroupDetail> {
   return api.get(`/api/v1/groups/${id}`);
 }
 
-export function createGroup(data: { name: string; description?: string; visibility?: string; join_policy?: string }): Promise<GroupDetail> {
+export type FederationMode = 'local_only' | 'public_federated';
+
+export function createGroup(data: {
+  name: string;
+  description?: string;
+  visibility?: string;
+  join_policy?: string;
+  federation_mode?: FederationMode;
+}): Promise<GroupDetail> {
   return api.post('/api/v1/groups', data);
 }
 

@@ -351,6 +351,7 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
       name: group.name,
       description: group.description,
       visibility: group.visibility,
+      federation_mode: group.federation_mode,
       join_policy: group.join_policy,
       avatar_url: group.avatar_url,
       header_url: group.header_url,

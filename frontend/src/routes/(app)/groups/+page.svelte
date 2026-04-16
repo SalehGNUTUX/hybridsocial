@@ -91,6 +91,7 @@
 <div class="groups-page">
   <div class="page-header">
     <h1 class="page-title">Groups</h1>
+    <a href="/groups/new" class="btn btn-primary new-group-btn">New group</a>
   </div>
 
   <Tabs {tabs} bind:active={activeTab}>
