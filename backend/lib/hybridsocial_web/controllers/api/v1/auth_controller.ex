@@ -402,6 +402,65 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
     end
   end
 
+  # --- Account recovery ---
+
+  @doc """
+  POST /api/v1/auth/recover
+  Body: {handle, recovery_code, new_password, new_password_confirmation}
+
+  Verifies the recovery code against the stored hash, resets the password,
+  revokes all sessions, auto-rotates the code, and returns the new code
+  for the user to save.
+  """
+  def recover(conn, %{
+        "handle" => handle,
+        "recovery_code" => code,
+        "new_password" => password,
+        "new_password_confirmation" => confirmation
+      }) do
+    case Accounts.recover_account(handle, code, password, confirmation) do
+      {:ok, new_code, identity} ->
+        Moderation.log(
+          identity.id,
+          "auth.recovered",
+          "identity",
+          identity.id,
+          %{},
+          get_client_ip(conn)
+        )
+
+        json(conn, %{
+          status: "ok",
+          message: "auth.recovered",
+          new_recovery_code: new_code
+        })
+
+      {:error, :invalid_credentials} ->
+        conn
+        |> put_status(:unauthorized)
+        |> json(%{error: "auth.invalid_recovery"})
+
+      {:error, :invalid_password, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "validation.failed", details: format_errors(changeset)})
+
+      {:error, reason} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "auth.recovery_failed", reason: inspect(reason)})
+    end
+  end
+
+  def recover(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{
+      error: "validation.failed",
+      required: ~w(handle recovery_code new_password new_password_confirmation)
+    })
+  end
+
   # --- PoW Challenge ---
 
   def pow_challenge(conn, _params) do

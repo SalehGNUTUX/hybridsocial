@@ -9,6 +9,86 @@
   import QRCode from 'qrcode';
 
   import { api } from '$lib/api/client.js';
+  import {
+    getRecoveryCodeStatus,
+    generateRecoveryCode,
+    deleteRecoveryCode,
+  } from '$lib/api/recovery.js';
+
+  // --- Recovery code ---
+  let recoveryStatus = $state<{
+    enabled: boolean;
+    generated_at: string | null;
+    last_used_at: string | null;
+  } | null>(null);
+  let recoveryPassword = $state('');
+  let recoveryGenerating = $state(false);
+  let recoveryClearing = $state(false);
+  let recoveryNewCode = $state<string | null>(null);
+  let recoveryError = $state('');
+
+  async function loadRecoveryStatus() {
+    try {
+      recoveryStatus = await getRecoveryCodeStatus();
+    } catch {
+      recoveryStatus = { enabled: false, generated_at: null, last_used_at: null };
+    }
+  }
+
+  async function handleGenerateRecovery() {
+    if (!recoveryPassword) {
+      recoveryError = 'Enter your current password to continue.';
+      return;
+    }
+    recoveryGenerating = true;
+    recoveryError = '';
+    try {
+      const result = await generateRecoveryCode(recoveryPassword);
+      recoveryNewCode = result.recovery_code;
+      recoveryPassword = '';
+      await loadRecoveryStatus();
+    } catch (e: unknown) {
+      const err = e as { body?: { error?: string } };
+      recoveryError =
+        err?.body?.error === 'auth.invalid_password'
+          ? 'That password didn\u2019t match.'
+          : 'Failed to generate a code.';
+    } finally {
+      recoveryGenerating = false;
+    }
+  }
+
+  async function handleClearRecovery() {
+    if (!recoveryPassword) {
+      recoveryError = 'Enter your current password to clear the code.';
+      return;
+    }
+    recoveryClearing = true;
+    recoveryError = '';
+    try {
+      await deleteRecoveryCode(recoveryPassword);
+      recoveryPassword = '';
+      recoveryNewCode = null;
+      await loadRecoveryStatus();
+    } catch (e: unknown) {
+      const err = e as { body?: { error?: string } };
+      recoveryError =
+        err?.body?.error === 'auth.invalid_password'
+          ? 'That password didn\u2019t match.'
+          : 'Failed to clear the code.';
+    } finally {
+      recoveryClearing = false;
+    }
+  }
+
+  function copyRecoveryCode() {
+    if (recoveryNewCode) navigator.clipboard?.writeText(recoveryNewCode).catch(() => {});
+    addToast('Copied', 'success');
+  }
+
+  function dismissNewCode() {
+    recoveryNewCode = null;
+  }
 
   // WebAuthn / Security Keys
   interface WebauthnCred { id: string; name: string; credential_id: string; sign_count: number; last_used_at: string | null; created_at: string; }
@@ -99,6 +179,7 @@
     const state = get(authStore);
     twoFactorEnabled = !!(state.user as any)?.two_factor_enabled;
     loadKeys();
+    loadRecoveryStatus();
   });
 
   let twoFactorSetup: TwoFactorSetup | null = $state(null);
@@ -455,9 +536,198 @@
     </div>
   </section>
 
+  <!-- Account recovery code -->
+  <section class="stitch-section">
+    <div class="stitch-section-heading">
+      <span class="stitch-section-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+        </svg>
+      </span>
+      <div>
+        <h2 class="stitch-section-title">Account recovery code</h2>
+        <p class="stitch-section-desc">
+          A backup you can use to reset your password if you ever lose access to
+          your email. Keep it somewhere safe — we can't retrieve it for you.
+        </p>
+      </div>
+    </div>
+
+    <div class="stitch-section-body">
+      {#if recoveryNewCode}
+        <div class="recovery-reveal">
+          <div class="recovery-reveal-title">Save your new recovery code</div>
+          <p class="recovery-reveal-sub">
+            This is the only time we'll show it. If you lose this and your email,
+            your account can't be recovered.
+          </p>
+          <div class="recovery-code-display">
+            <code>{recoveryNewCode}</code>
+          </div>
+          <div class="recovery-actions">
+            <button type="button" class="btn btn-outline" onclick={copyRecoveryCode}>Copy</button>
+            <button type="button" class="btn btn-outline" onclick={() => window.print()}>Print</button>
+            <button type="button" class="btn btn-primary" onclick={dismissNewCode}>I saved it</button>
+          </div>
+        </div>
+      {:else}
+        <div class="recovery-status">
+          {#if recoveryStatus?.enabled}
+            <div class="recovery-state on">
+              <strong>Recovery code is set.</strong>
+              {#if recoveryStatus.generated_at}
+                <span class="recovery-state-meta">
+                  Last regenerated {new Date(recoveryStatus.generated_at).toLocaleDateString()}
+                </span>
+              {/if}
+              {#if recoveryStatus.last_used_at}
+                <span class="recovery-state-meta">
+                  Last used {new Date(recoveryStatus.last_used_at).toLocaleDateString()}
+                </span>
+              {/if}
+            </div>
+          {:else}
+            <div class="recovery-state off">
+              <strong>No recovery code set.</strong>
+              <span class="recovery-state-meta">
+                Optional. If you lose email access and your password, you'll
+                have no way back into the account without one.
+              </span>
+            </div>
+          {/if}
+
+          <div class="recovery-form">
+            <label for="rc-password">Current password</label>
+            <input
+              id="rc-password"
+              type="password"
+              bind:value={recoveryPassword}
+              autocomplete="current-password"
+              placeholder="Enter to confirm"
+            />
+
+            {#if recoveryError}
+              <div class="recovery-error" role="alert">{recoveryError}</div>
+            {/if}
+
+            <div class="recovery-actions">
+              <button
+                type="button"
+                class="btn btn-primary"
+                disabled={recoveryGenerating || !recoveryPassword}
+                onclick={handleGenerateRecovery}
+              >
+                {recoveryGenerating
+                  ? 'Generating\u2026'
+                  : recoveryStatus?.enabled
+                    ? 'Generate new code'
+                    : 'Generate recovery code'}
+              </button>
+
+              {#if recoveryStatus?.enabled}
+                <button
+                  type="button"
+                  class="btn btn-ghost-danger"
+                  disabled={recoveryClearing || !recoveryPassword}
+                  onclick={handleClearRecovery}
+                >
+                  {recoveryClearing ? 'Clearing\u2026' : 'Remove code'}
+                </button>
+              {/if}
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+  </section>
+
 </div>
 
 <style>
+  /* ---- Recovery code ---- */
+  .recovery-reveal {
+    background: var(--color-warning-surface, rgba(217, 119, 6, 0.08));
+    border: 1px solid var(--color-warning, #d97706);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+  }
+
+  .recovery-reveal-title {
+    font-weight: 700;
+    color: var(--color-text);
+    margin-block-end: var(--space-2);
+  }
+
+  .recovery-reveal-sub {
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    line-height: 1.5;
+    margin: 0 0 var(--space-3) 0;
+  }
+
+  .recovery-code-display {
+    background: var(--color-surface-raised, #fff);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    text-align: center;
+    margin-block-end: var(--space-3);
+  }
+
+  .recovery-code-display code {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--color-text);
+    word-break: break-all;
+  }
+
+  .recovery-state {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-block-end: var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--color-text);
+  }
+
+  .recovery-state-meta {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+
+  .recovery-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .recovery-form label {
+    font-weight: 600;
+    font-size: var(--text-sm);
+  }
+
+  .recovery-form input {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  .recovery-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .recovery-error {
+    color: var(--color-danger, #b00);
+    font-size: var(--text-sm);
+  }
+
   /* ---- Page layout ---- */
   .stitch-settings {
     max-width: 720px;

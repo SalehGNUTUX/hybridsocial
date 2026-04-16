@@ -276,6 +276,8 @@
         </div>
         <div class="auth-field-footer">
           <a href="/reset-password" class="auth-link">Forgot password?</a>
+          <span class="auth-sep"> · </span>
+          <a href="/recover" class="auth-link">Lost email access?</a>
         </div>
       </div>
     {:else}

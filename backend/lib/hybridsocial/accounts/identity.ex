@@ -55,6 +55,13 @@ defmodule Hybridsocial.Accounts.Identity do
     # Default true — opt-out.
     field :allow_unfurl, :boolean, default: true
 
+    # Optional account recovery code. Hashed. See Accounts.RecoveryCode
+    # and Accounts.generate_recovery_code/2 / recover_account/4.
+    field :recovery_code_hash, :string
+    field :recovery_code_generated_at, :utc_datetime_usec
+    field :recovery_code_last_used_at, :utc_datetime_usec
+    field :recovered_at, :utc_datetime_usec
+
     # Subaccount hierarchy: bots, groups, and organizations belong to a parent user
     belongs_to :parent, __MODULE__, foreign_key: :parent_identity_id
     has_many :children, __MODULE__, foreign_key: :parent_identity_id

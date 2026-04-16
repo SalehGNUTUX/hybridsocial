@@ -954,4 +954,159 @@ defmodule Hybridsocial.Accounts do
     |> Ecto.Changeset.change(also_known_as: Enum.reject(current, &(&1 == alias_uri)))
     |> Repo.update()
   end
+
+  # ---------------------------------------------------------------------------
+  # Account recovery codes
+  # ---------------------------------------------------------------------------
+
+  alias Hybridsocial.Accounts.RecoveryCode
+
+  @recovery_cooldown_seconds 24 * 3600
+
+  @doc """
+  Generate a new recovery code for the given identity. Requires the
+  current password so an attacker with only a stolen session token
+  can't lock out the real user. Returns `{:ok, plaintext_code, identity}`
+  on success — the plaintext is shown to the user once and never
+  persisted. Any previous code is invalidated.
+  """
+  def generate_recovery_code(identity_id, password)
+      when is_binary(identity_id) and is_binary(password) do
+    with user when not is_nil(user) <- Repo.get_by(User, identity_id: identity_id),
+         true <- Bcrypt.verify_pass(password, user.password_hash),
+         identity when not is_nil(identity) <- get_identity(identity_id) do
+      code = RecoveryCode.generate()
+      hash = RecoveryCode.hash(code)
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+      case identity
+           |> Ecto.Changeset.change(%{
+             recovery_code_hash: hash,
+             recovery_code_generated_at: now,
+             recovery_code_last_used_at: nil
+           })
+           |> Repo.update() do
+        {:ok, updated} -> {:ok, code, updated}
+        other -> other
+      end
+    else
+      nil -> {:error, :not_found}
+      false -> {:error, :invalid_password}
+    end
+  end
+
+  @doc """
+  Clear the recovery code without replacing it. Requires current password.
+  """
+  def clear_recovery_code(identity_id, password) when is_binary(password) do
+    with user when not is_nil(user) <- Repo.get_by(User, identity_id: identity_id),
+         true <- Bcrypt.verify_pass(password, user.password_hash),
+         identity when not is_nil(identity) <- get_identity(identity_id) do
+      identity
+      |> Ecto.Changeset.change(%{
+        recovery_code_hash: nil,
+        recovery_code_generated_at: nil,
+        recovery_code_last_used_at: nil
+      })
+      |> Repo.update()
+    else
+      nil -> {:error, :not_found}
+      false -> {:error, :invalid_password}
+    end
+  end
+
+  @doc """
+  Recover an account: handle + recovery code + new password.
+
+  On success: resets the password, revokes all sessions, stamps
+  `recovered_at` (gates sensitive actions for 24h), auto-rotates the
+  recovery code, and returns `{:ok, new_code, identity}` — the caller
+  shows the new code to the user once.
+
+  Returns `{:error, :invalid_credentials}` for any mismatch (wrong
+  handle, missing code, wrong code). Never leaks which one was wrong.
+  """
+  def recover_account(handle, code, new_password, password_confirmation)
+      when is_binary(handle) and is_binary(code) and is_binary(new_password) do
+    # Normalise input so verify_pass times consistently regardless of
+    # whether the identity exists.
+    identity = get_identity_by_handle(handle)
+    user = identity && Repo.get_by(User, identity_id: identity.id)
+
+    valid? =
+      case identity do
+        %Identity{recovery_code_hash: hash} when is_binary(hash) ->
+          RecoveryCode.verify(code, hash)
+
+        _ ->
+          # Still run the bcrypt dance to equalise timing.
+          RecoveryCode.verify(code, nil)
+          false
+      end
+
+    cond do
+      not valid? ->
+        {:error, :invalid_credentials}
+
+      is_nil(user) ->
+        {:error, :invalid_credentials}
+
+      true ->
+        do_recover_account(identity, user, new_password, password_confirmation)
+    end
+  end
+
+  defp do_recover_account(identity, user, new_password, password_confirmation) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    new_code = RecoveryCode.generate()
+    new_hash = RecoveryCode.hash(new_code)
+
+    Repo.transaction(fn ->
+      # 1. Reset password.
+      case user
+           |> User.password_changeset(%{
+             "password" => new_password,
+             "password_confirmation" => password_confirmation
+           })
+           |> Ecto.Changeset.put_change(:reset_token, nil)
+           |> Ecto.Changeset.put_change(:reset_token_at, nil)
+           |> Repo.update() do
+        {:ok, _user} -> :ok
+        {:error, cs} -> Repo.rollback({:invalid_password, cs})
+      end
+
+      # 2. Rotate recovery code + stamp recovered_at.
+      identity
+      |> Ecto.Changeset.change(%{
+        recovery_code_hash: new_hash,
+        recovery_code_generated_at: now,
+        recovery_code_last_used_at: now,
+        recovered_at: now
+      })
+      |> Repo.update!()
+
+      # 3. Revoke every existing session.
+      revoke_all_tokens(identity.id)
+
+      new_code
+    end)
+    |> case do
+      {:ok, code} -> {:ok, code, Repo.get!(Identity, identity.id)}
+      {:error, {:invalid_password, cs}} -> {:error, :invalid_password, cs}
+      error -> error
+    end
+  end
+
+  @doc """
+  True when the identity is within the 24h post-recovery cooldown.
+  Controllers gating sensitive actions (email change, profile changes,
+  posts, DMs in strict mode) should call this and refuse if true.
+  """
+  def in_recovery_cooldown?(%Identity{recovered_at: nil}), do: false
+
+  def in_recovery_cooldown?(%Identity{recovered_at: recovered_at}) do
+    DateTime.diff(DateTime.utc_now(), recovered_at, :second) < @recovery_cooldown_seconds
+  end
+
+  def in_recovery_cooldown?(_), do: false
 end

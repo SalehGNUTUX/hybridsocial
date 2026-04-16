@@ -748,6 +748,86 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     json(conn, serialized)
   end
 
+  # --- Recovery Code ---
+
+  @doc """
+  POST /api/v1/accounts/recovery_code
+  Body: {password}
+
+  Generates (or rotates) the caller's recovery code. Returns the
+  plaintext ONCE; the server stores only a hash. Users who lose this
+  value and their email have no recovery path — the response warns them.
+  """
+  def generate_recovery_code(conn, %{"password" => password}) do
+    identity = conn.assigns.current_identity
+
+    case Accounts.generate_recovery_code(identity.id, password) do
+      {:ok, code, updated} ->
+        json(conn, %{
+          recovery_code: code,
+          generated_at: updated.recovery_code_generated_at,
+          warning:
+            "Save this code somewhere safe. It will not be shown again. " <>
+              "If you lose both your password and this code, your account " <>
+              "cannot be recovered."
+        })
+
+      {:error, :invalid_password} ->
+        conn |> put_status(:forbidden) |> json(%{error: "auth.invalid_password"})
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
+      {:error, reason} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: inspect(reason)})
+    end
+  end
+
+  def generate_recovery_code(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "validation.failed", required: ["password"]})
+  end
+
+  @doc """
+  DELETE /api/v1/accounts/recovery_code
+  Body: {password}
+
+  Clears the caller's recovery code. They can generate a new one at any
+  time. Requires current password so session theft can't drop the code.
+  """
+  def delete_recovery_code(conn, %{"password" => password}) do
+    identity = conn.assigns.current_identity
+
+    case Accounts.clear_recovery_code(identity.id, password) do
+      {:ok, _} ->
+        json(conn, %{status: "ok", message: "recovery_code.cleared"})
+
+      {:error, :invalid_password} ->
+        conn |> put_status(:forbidden) |> json(%{error: "auth.invalid_password"})
+
+      {:error, reason} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: inspect(reason)})
+    end
+  end
+
+  def delete_recovery_code(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "validation.failed", required: ["password"]})
+  end
+
+  @doc "GET /api/v1/accounts/recovery_code — has-a-code status (no plaintext)."
+  def recovery_code_status(conn, _params) do
+    identity = conn.assigns.current_identity
+
+    json(conn, %{
+      enabled: not is_nil(identity.recovery_code_hash),
+      generated_at: identity.recovery_code_generated_at,
+      last_used_at: identity.recovery_code_last_used_at
+    })
+  end
+
   # --- Change Email ---
 
   def change_email(conn, %{"email" => new_email, "password" => password}) do
