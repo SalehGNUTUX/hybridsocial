@@ -556,7 +556,8 @@ export interface AdminSetting {
 }
 
 export interface ServiceHealth {
-  status: 'up' | 'down' | 'degraded';
+  status: 'up' | 'down' | 'degraded' | 'not_configured';
+  backend?: string;
   version?: string;
   error?: string;
   uptime_seconds?: number;

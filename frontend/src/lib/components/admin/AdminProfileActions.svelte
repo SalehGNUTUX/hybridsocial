@@ -104,7 +104,7 @@
     actionLoading = true;
     clearMessages();
     try {
-      if (adminUser?.silenced) {
+      if (adminUser?.is_silenced) {
         adminUser = await unsilenceUser(account.id);
         showSuccess('User unsilenced.');
       } else {
@@ -132,7 +132,7 @@
     actionLoading = true;
     clearMessages();
     try {
-      if (adminUser?.shadow_banned) {
+      if (adminUser?.is_shadow_banned) {
         adminUser = await unshadowBanUser(account.id);
         showSuccess('Shadow ban removed.');
       } else {
@@ -177,7 +177,7 @@
     actionLoading = true;
     clearMessages();
     try {
-      if (adminUser?.status === 'suspended') {
+      if (adminUser?.is_suspended) {
         await unsuspendUser(account.id);
         showSuccess('User unsuspended.');
       } else {
@@ -302,13 +302,13 @@
       {:else if adminUser}
         <!-- Status badges -->
         <div class="admin-status-badges">
-          <span class="admin-badge admin-badge-status" class:admin-badge-active={adminUser.status === 'active'} class:admin-badge-danger={adminUser.status === 'suspended'}>
-            {adminUser.status}
+          <span class="admin-badge admin-badge-status" class:admin-badge-active={!adminUser.is_suspended} class:admin-badge-danger={adminUser.is_suspended}>
+            {adminUser.is_suspended ? 'suspended' : 'active'}
           </span>
-          {#if adminUser.silenced}
+          {#if adminUser.is_silenced}
             <span class="admin-badge admin-badge-warn">Silenced</span>
           {/if}
-          {#if adminUser.shadow_banned}
+          {#if adminUser.is_shadow_banned}
             <span class="admin-badge admin-badge-danger">Shadow Banned</span>
           {/if}
           {#if adminUser.force_sensitive}
@@ -330,21 +330,21 @@
           <button
             type="button"
             class="admin-action-button"
-            class:admin-action-active={adminUser.silenced}
-            onclick={adminUser.silenced ? confirmSilence : openSilenceDialog}
+            class:admin-action-active={adminUser.is_silenced}
+            onclick={adminUser.is_silenced ? confirmSilence : openSilenceDialog}
             disabled={actionLoading}
           >
-            {adminUser.silenced ? 'Unsilence' : 'Silence'}
+            {adminUser.is_silenced ? 'Unsilence' : 'Silence'}
           </button>
 
           <button
             type="button"
             class="admin-action-button"
-            class:admin-action-active={adminUser.shadow_banned}
+            class:admin-action-active={adminUser.is_shadow_banned}
             onclick={openShadowBanConfirm}
             disabled={actionLoading}
           >
-            {adminUser.shadow_banned ? 'Remove Shadow Ban' : 'Shadow Ban'}
+            {adminUser.is_shadow_banned ? 'Remove Shadow Ban' : 'Shadow Ban'}
           </button>
 
           <button
@@ -360,11 +360,11 @@
           <button
             type="button"
             class="admin-action-button admin-action-danger"
-            class:admin-action-active={adminUser.status === 'suspended'}
+            class:admin-action-active={adminUser.is_suspended}
             onclick={openSuspendDialog}
             disabled={actionLoading}
           >
-            {adminUser.status === 'suspended' ? 'Unsuspend' : 'Suspend'}
+            {adminUser.is_suspended ? 'Unsuspend' : 'Suspend'}
           </button>
 
           <button
@@ -491,9 +491,9 @@
 {#if showShadowBanConfirm}
   <div class="admin-overlay" onclick={() => { showShadowBanConfirm = false; }} role="dialog" aria-modal="true" aria-label="Shadow ban user">
     <div class="admin-dialog" onclick={(e) => e.stopPropagation()}>
-      <h3 class="admin-dialog-title">{adminUser?.shadow_banned ? 'Remove Shadow Ban' : 'Shadow Ban'} @{account.handle}</h3>
+      <h3 class="admin-dialog-title">{adminUser?.is_shadow_banned ? 'Remove Shadow Ban' : 'Shadow Ban'} @{account.handle}</h3>
       <p class="admin-dialog-message">
-        {#if adminUser?.shadow_banned}
+        {#if adminUser?.is_shadow_banned}
           This will remove the shadow ban. The user's content will be visible again.
         {:else}
           Shadow banned users can post normally but their content is hidden from everyone else.
@@ -503,7 +503,7 @@
       <div class="admin-dialog-actions">
         <button type="button" class="admin-dialog-cancel" onclick={() => { showShadowBanConfirm = false; }}>Cancel</button>
         <button type="button" class="admin-dialog-confirm-warn" onclick={confirmShadowBan} disabled={actionLoading}>
-          {actionLoading ? 'Processing...' : (adminUser?.shadow_banned ? 'Remove Shadow Ban' : 'Shadow Ban')}
+          {actionLoading ? 'Processing...' : (adminUser?.is_shadow_banned ? 'Remove Shadow Ban' : 'Shadow Ban')}
         </button>
       </div>
     </div>
@@ -514,16 +514,16 @@
 {#if showSuspendDialog}
   <div class="admin-overlay" onclick={() => { showSuspendDialog = false; }} role="dialog" aria-modal="true" aria-label="Suspend user">
     <div class="admin-dialog" onclick={(e) => e.stopPropagation()}>
-      <h3 class="admin-dialog-title">{adminUser?.status === 'suspended' ? 'Unsuspend' : 'Suspend'} @{account.handle}</h3>
+      <h3 class="admin-dialog-title">{adminUser?.is_suspended ? 'Unsuspend' : 'Suspend'} @{account.handle}</h3>
       <p class="admin-dialog-message">
-        {#if adminUser?.status === 'suspended'}
+        {#if adminUser?.is_suspended}
           This will reactivate the user's account.
         {:else}
           Suspended users cannot log in or interact. This is a severe action.
         {/if}
       </p>
 
-      {#if adminUser?.status !== 'suspended'}
+      {#if !adminUser?.is_suspended}
         <div class="admin-dialog-form">
           <label class="admin-dialog-label" for="suspend-reason">Reason (optional)</label>
           <textarea
@@ -539,7 +539,7 @@
       <div class="admin-dialog-actions">
         <button type="button" class="admin-dialog-cancel" onclick={() => { showSuspendDialog = false; }}>Cancel</button>
         <button type="button" class="admin-dialog-confirm-danger" onclick={confirmSuspend} disabled={actionLoading}>
-          {actionLoading ? 'Processing...' : (adminUser?.status === 'suspended' ? 'Unsuspend' : 'Suspend User')}
+          {actionLoading ? 'Processing...' : (adminUser?.is_suspended ? 'Unsuspend' : 'Suspend User')}
         </button>
       </div>
     </div>

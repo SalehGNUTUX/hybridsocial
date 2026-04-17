@@ -463,8 +463,9 @@
       <td>{row['email'] || ''}</td>
       <td>{formatDate(row['created_at'] as string)}</td>
       <td>
-        {@const status = row['is_suspended'] ? 'suspended' : 'active'}
-        <span class="status-badge {statusClass(status)}">{status}</span>
+        <span class="status-badge {statusClass(row['is_suspended'] ? 'suspended' : 'active')}">
+          {row['is_suspended'] ? 'suspended' : 'active'}
+        </span>
       </td>
       <td>
         <div class="flag-badges">
