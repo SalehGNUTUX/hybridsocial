@@ -198,7 +198,7 @@
         </div>
 
         <!-- OpenSearch (own card) -->
-        <div class="service-card" class:service-up={os.status === 'up'} class:service-down={os.status === 'down'} class:service-degraded={os.status === 'degraded'}>
+        <div class="service-card" class:service-up={os.status === 'up'} class:service-down={os.status === 'down'} class:service-degraded={os.status === 'degraded'} class:service-inactive={os.status === 'not_configured'}>
           <div class="service-header">
             <div class="service-name-row">
               <span class="material-symbols-outlined service-icon-mat">search</span>
@@ -208,14 +208,22 @@
           </div>
 
           <div class="service-status-text">
-            {#if os.status === 'up'}Operational{:else if os.status === 'degraded'}Degraded{:else}Offline{/if}
+            {#if os.status === 'up'}Operational
+            {:else if os.status === 'degraded'}Degraded
+            {:else if os.status === 'not_configured'}Not configured
+            {:else}Offline{/if}
           </div>
 
-          {#if os.version}
+          {#if os.status === 'not_configured'}
+            <div class="service-detail">
+              Search is running on PostgreSQL. Switch to OpenSearch in
+              <a href="/admin/settings">Settings</a> if you want a dedicated search cluster.
+            </div>
+          {:else if os.version}
             <div class="service-detail">v{os.version}</div>
           {/if}
 
-          {#if os.status !== 'down'}
+          {#if os.status === 'up' || os.status === 'degraded'}
             <div class="service-details-grid">
               <div class="detail-item">
                 <span class="detail-label">Cluster</span>
@@ -236,7 +244,7 @@
             </div>
           {/if}
 
-          {#if os.error}
+          {#if os.error && os.status === 'down'}
             <div class="service-error">{os.error}</div>
           {/if}
         </div>
@@ -729,6 +737,15 @@
 
   .service-degraded .service-status-text {
     color: var(--color-warning);
+  }
+
+  .service-inactive .service-status-dot {
+    background: var(--color-text-tertiary);
+    box-shadow: none;
+  }
+
+  .service-inactive .service-status-text {
+    color: var(--color-text-tertiary);
   }
 
   .service-detail {

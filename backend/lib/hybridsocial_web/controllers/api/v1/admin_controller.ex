@@ -147,6 +147,17 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   end
 
   defp check_opensearch do
+    # Search backend is operator-configurable — instances on the
+    # built-in PostgreSQL search don't run an OpenSearch node at all,
+    # and a "down" badge for an intentionally absent service is just
+    # noise that makes the dashboard look broken.
+    case Hybridsocial.Config.get("search_backend", "postgresql") do
+      "opensearch" -> probe_opensearch()
+      _ -> %{status: "not_configured", backend: "postgresql"}
+    end
+  end
+
+  defp probe_opensearch do
     url = Application.get_env(:hybridsocial, :opensearch_url, "http://localhost:9200")
 
     try do
