@@ -236,9 +236,13 @@
           <td>{(row['user_count'] as number).toLocaleString()}</td>
           <td>{formatDate(row['last_activity_at'] as string | null)}</td>
           <td>
-            <span class="instance-status instance-{row['status']}">
-              {row['status']}
-            </span>
+            {#if row['status'] === 'none' || !row['status']}
+              <span class="text-tertiary" title="No moderation policy applied">—</span>
+            {:else}
+              <span class="instance-status instance-{row['status']}">
+                {(row['status'] as string).replace(/_/g, ' ')}
+              </span>
+            {/if}
           </td>
         {/snippet}
       </DataTable>
