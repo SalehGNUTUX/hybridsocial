@@ -27,8 +27,13 @@
       relays = [...relays, relay];
       newInboxUrl = '';
       addToast('Relay added', 'success');
-    } catch {
-      addToast('Failed to add relay', 'error');
+    } catch (e: any) {
+      if (e?.body?.error === 'relay.already_subscribed') {
+        addToast(e.body.message || 'This relay is already in your list.', 'warning');
+      } else {
+        const msg = e?.body?.message || e?.body?.error_description || 'Failed to add relay';
+        addToast(msg, 'error');
+      }
     } finally {
       adding = false;
     }

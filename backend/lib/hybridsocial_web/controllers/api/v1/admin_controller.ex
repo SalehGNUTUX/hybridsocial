@@ -1244,10 +1244,30 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           Moderation.log(admin_id, "relay.subscribed", "relay", relay.id, %{inbox_url: inbox_url})
           conn |> put_status(:created) |> json(%{data: serialize_relay(relay)})
 
-        {:error, changeset} ->
-          conn
-          |> put_status(:unprocessable_entity)
-          |> json(%{error: "validation.failed", details: format_errors(changeset)})
+        {:error, %Ecto.Changeset{errors: errors} = changeset} ->
+          cond do
+            # Unique constraint on inbox_url — the admin is trying to
+            # add a relay that's already subscribed. Return a distinct
+            # error code + the existing row so the UI can say something
+            # useful instead of a generic validation failure.
+            Enum.any?(errors, fn {field, {_, opts}} ->
+              field == :inbox_url and Keyword.get(opts, :constraint) == :unique
+            end) ->
+              existing = Hybridsocial.Repo.get_by(Hybridsocial.Federation.Relay, inbox_url: inbox_url)
+
+              conn
+              |> put_status(:conflict)
+              |> json(%{
+                error: "relay.already_subscribed",
+                message: "This relay is already in your list.",
+                data: existing && serialize_relay(existing)
+              })
+
+            true ->
+              conn
+              |> put_status(:unprocessable_entity)
+              |> json(%{error: "validation.failed", details: format_errors(changeset)})
+          end
       end
     else
       {:error, perm} -> deny(conn, perm)
