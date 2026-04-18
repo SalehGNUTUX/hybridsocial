@@ -76,7 +76,9 @@
   let directNeedsAudience = $derived(visibility === 'direct' && mentionCount === 0);
 
   let canSubmit = $derived(
-    content.trim().length > 0
+    // Require text OR at least one media attachment — a media-only
+    // post (photo, video clip) is a perfectly valid post.
+    (content.trim().length > 0 || uploadedMedia.length > 0)
     && !isOverLimit
     && !loading
     && !mediaUploading
@@ -583,11 +585,17 @@
       if (uploadedMedia.length > 0) {
         body.media_ids = uploadedMedia.map((m) => m.id);
 
-        // Auto-promote to video_stream if every attachment is a video —
-        // this is what drops the post into the Streams (reels) feed.
-        const allVideo = uploadedMedia.every((m) => m.type === 'video');
-        if (allVideo) {
+        const isVideo = (m: MediaAttachment) =>
+          m.type === 'video' || ((m as any).content_type || '').startsWith('video/');
+
+        if (uploadedMedia.every(isVideo)) {
+          // All-video → Streams (reels) feed.
           body.post_type = 'video_stream';
+        } else if (!content.trim()) {
+          // Image-only post with no caption — mark as "media" so the
+          // backend's content-required validator (which otherwise
+          // demands text for post_type="text") doesn't reject it.
+          body.post_type = 'media';
         }
       }
       if (showPoll) {
@@ -866,13 +874,26 @@
     {#if uploadedMedia.length > 0}
       <div class="media-previews">
         {#each uploadedMedia as media (media.id)}
+          {@const ct = (media as any).content_type || ''}
+          {@const kind =
+            media.type === 'image' || media.type === 'gifv' || ct.startsWith('image/')
+              ? 'image'
+              : media.type === 'video' || ct.startsWith('video/')
+              ? 'video'
+              : media.type === 'audio' || ct.startsWith('audio/')
+              ? 'audio'
+              : 'file'}
+          {@const src = media.preview_url || media.url}
           <div class="media-preview-item">
-            {#if media.type === 'image' || media.type === 'gifv'}
-              <img src={media.preview_url || media.url} alt={media.description || ''} class="media-preview-img" />
-            {:else if media.type === 'video'}
-              <div class="media-preview-video">
-                <span class="material-symbols-outlined">play_arrow</span>
-              </div>
+            {#if kind === 'image' && src}
+              <img src={src} alt={media.description || ''} class="media-preview-img" />
+            {:else if kind === 'video'}
+              <video src={src} class="media-preview-img" muted preload="metadata"></video>
+              <span class="material-symbols-outlined media-preview-video-overlay">play_arrow</span>
+            {:else if kind === 'audio'}
+              <span class="material-symbols-outlined media-preview-icon">graphic_eq</span>
+            {:else}
+              <span class="material-symbols-outlined media-preview-icon">attach_file</span>
             {/if}
             <button
               type="button"
@@ -1470,13 +1491,26 @@
     object-fit: cover;
   }
 
-  .media-preview-video {
+  .media-preview-video-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 32px;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .media-preview-icon {
     width: 100%;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--color-text-secondary);
+    font-size: 28px;
   }
 
   .media-preview-loading {

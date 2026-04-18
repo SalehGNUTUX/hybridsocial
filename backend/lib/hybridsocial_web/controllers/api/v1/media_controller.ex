@@ -113,20 +113,34 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
   end
 
   defp render_media(media) do
+    url = Media.media_url(media)
+
     %{
       id: media.id,
       content_type: media.content_type,
+      # Broad class derived from content_type. The frontend / composer
+      # preview switches on this rather than content_type directly so
+      # new mime subtypes (e.g. image/avif, image/heic) don't need a
+      # client-side update to render a thumbnail.
+      type: media_type(media.content_type),
       file_size: media.file_size,
       alt_text: media.alt_text,
+      description: media.alt_text,
       blurhash: media.blurhash,
       width: media.width,
       height: media.height,
       duration: media.duration,
       processing_status: media.processing_status,
-      url: Media.media_url(media),
+      url: url,
+      preview_url: url,
       inserted_at: media.inserted_at
     }
   end
+
+  defp media_type("image/" <> _), do: "image"
+  defp media_type("video/" <> _), do: "video"
+  defp media_type("audio/" <> _), do: "audio"
+  defp media_type(_), do: "unknown"
 
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
