@@ -776,6 +776,12 @@ defmodule HybridsocialWeb.Router do
     delete "/webhooks/:id", AdminController, :delete_webhook
     get "/webhooks/:id/deliveries", AdminController, :list_webhook_deliveries
 
+    # Email templates
+    get "/email_templates", Admin.EmailTemplatesController, :index
+    put "/email_templates/:key", Admin.EmailTemplatesController, :update
+    post "/email_templates/:key/reset", Admin.EmailTemplatesController, :reset
+    post "/email_templates/:key/preview", Admin.EmailTemplatesController, :preview
+
     # IP Bans
     get "/ip_bans", AdminController, :list_ip_bans
     post "/ip_bans", AdminController, :create_ip_ban

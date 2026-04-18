@@ -1,170 +1,133 @@
 defmodule Hybridsocial.Emails do
   @moduledoc """
-  Email builder module. Constructs emails using Swoosh.Email.
-
-  Uses templates from the Config system when available,
-  falling back to built-in defaults.
+  Email builder module. Each function composes a Swoosh.Email for a
+  specific transactional event, using `Hybridsocial.Emails.Renderer`
+  to substitute variables into the (possibly admin-customised)
+  template. Subjects and bodies live in `Emails.Defaults` as
+  hardcoded fallbacks; admin overrides are stored in the
+  `email_templates` table and merged transparently.
   """
 
   import Swoosh.Email
 
+  alias Hybridsocial.Emails.Renderer
+
   @default_from {"HybridSocial", "noreply@hybridsocial.local"}
 
-  @doc """
-  Builds an email confirmation email with a token link.
-  """
+  # ── Builders ──────────────────────────────────────────────────────
+
+  @doc "Email confirmation with a token link."
   def confirmation_email(user) do
-    instance_name = Hybridsocial.Config.get("instance_name", "HybridSocial")
-    from_address = from_address()
+    assigns = %{
+      "instance_name" => instance_name(),
+      "user" => user_assigns(user),
+      "confirm_url" => "#{base_url()}/auth/confirm?token=#{user.confirmation_token}"
+    }
 
-    subject = "#{instance_name} - Confirm your email address"
-
-    body = """
-    Welcome to #{instance_name}!
-
-    Please confirm your email address by clicking the link below:
-
-    #{base_url()}/auth/confirm?token=#{user.confirmation_token}
-
-    If you did not create an account, you can safely ignore this email.
-    """
-
-    new()
-    |> to({user_display_name(user), user_email(user)})
-    |> from(from_address)
-    |> subject(subject)
-    |> text_body(body)
+    render("confirmation", user, assigns)
   end
 
-  @doc """
-  Builds a password reset email with a token link.
-  """
+  @doc "Password reset with a token link."
   def password_reset_email(user) do
-    instance_name = Hybridsocial.Config.get("instance_name", "HybridSocial")
-    from_address = from_address()
+    assigns = %{
+      "instance_name" => instance_name(),
+      "user" => user_assigns(user),
+      "reset_url" => "#{base_url()}/auth/reset-password?token=#{user.reset_token}"
+    }
 
-    subject = "#{instance_name} - Reset your password"
-
-    body = """
-    You requested a password reset for your #{instance_name} account.
-
-    Click the link below to reset your password:
-
-    #{base_url()}/auth/reset-password?token=#{user.reset_token}
-
-    If you did not request this, you can safely ignore this email.
-    This link will expire in 1 hour.
-    """
-
-    new()
-    |> to({user_display_name(user), user_email(user)})
-    |> from(from_address)
-    |> subject(subject)
-    |> text_body(body)
+    render("password_reset", user, assigns)
   end
 
   @doc """
   Alerts a staff member that a new item landed in the moderation
-  queue. Throttled per-recipient by the caller, so this only has to
-  render a compact message.
+  queue. Throttled per-recipient by the caller.
   """
   def moderation_queue_email(to_email, _staff_identity, item) do
-    instance_name = Hybridsocial.Config.get("instance_name", "HybridSocial")
-    from_address = from_address()
+    assigns = %{
+      "instance_name" => instance_name(),
+      "item" => %{
+        "item_type" => to_string(item.item_type),
+        "severity" => to_string(item.severity || "medium"),
+        "source" => to_string(item.source),
+        "reason" => to_string(item.reason)
+      },
+      "queue_url" => "#{base_url()}/admin/moderation-queue"
+    }
 
-    subject =
-      "#{instance_name} — moderation queue: new #{item.severity || "medium"}-severity #{item.item_type}"
-
-    body = """
-    A new item was flagged for moderator review on #{instance_name}.
-
-    Type:     #{item.item_type}
-    Severity: #{item.severity || "medium"}
-    Source:   #{item.source}
-    Reason:   #{item.reason}
-
-    Review it here:
-    #{base_url()}/admin/moderation-queue
-
-    You're receiving this because you enabled email notifications for
-    the "moderation_queue" notification type. To stop, turn it off
-    in your account's notification preferences.
-    """
+    {subject, html, text} = Renderer.render("moderation_queue", assigns)
 
     new()
     |> to(to_email)
-    |> from(from_address)
+    |> from(from_address())
     |> subject(subject)
-    |> text_body(body)
+    |> html_body(html)
+    |> text_body(text)
   end
 
-  @doc """
-  Builds a login notification email alerting the user of a new login.
-  """
+  @doc "Login notification alerting the user of a new sign-in."
   def login_notification_email(user, ip, user_agent) do
-    instance_name = Hybridsocial.Config.get("instance_name", "HybridSocial")
-    from_address = from_address()
+    assigns = %{
+      "instance_name" => instance_name(),
+      "user" => user_assigns(user),
+      "ip" => to_string(ip),
+      "user_agent" => to_string(user_agent)
+    }
 
-    subject = "#{instance_name} - New login to your account"
-
-    body = """
-    A new login was detected on your #{instance_name} account.
-
-    IP Address: #{ip}
-    Browser/App: #{user_agent}
-
-    If this was you, no action is needed.
-    If you did not log in, please change your password immediately.
-    """
-
-    new()
-    |> to({user_display_name(user), user_email(user)})
-    |> from(from_address)
-    |> subject(subject)
-    |> text_body(body)
+    render("login_notification", user, assigns)
   end
 
-  @doc """
-  Builds a notification digest email summarizing recent notifications.
-  """
+  @doc "Notification digest summarising recent notifications."
   def notification_digest_email(user, notifications) do
-    instance_name = Hybridsocial.Config.get("instance_name", "HybridSocial")
-    from_address = from_address()
-
     count = length(notifications)
-    subject = "#{instance_name} - You have #{count} new notification#{if count != 1, do: "s"}"
+    summary_html = notifications_to_html(notifications)
 
-    summary =
-      notifications
-      |> Enum.map(&format_notification/1)
-      |> Enum.join("\n")
+    assigns = %{
+      "instance_name" => instance_name(),
+      "user" => user_assigns(user),
+      "count" => count,
+      "summary_html" => summary_html,
+      "app_url" => base_url()
+    }
 
-    body = """
-    You have #{count} new notification#{if count != 1, do: "s"} on #{instance_name}:
+    render("notification_digest", user, assigns)
+  end
 
-    #{summary}
+  # ── Helpers ───────────────────────────────────────────────────────
 
-    Visit #{base_url()} to see all your notifications.
-    """
+  # User-targeted emails all share the same shape: recipient pulled
+  # from the `user` struct, sender from instance settings, subject +
+  # html + text from the Renderer.
+  defp render(key, user, assigns) do
+    {subject, html, text} = Renderer.render(key, assigns)
 
     new()
     |> to({user_display_name(user), user_email(user)})
-    |> from(from_address)
+    |> from(from_address())
     |> subject(subject)
-    |> text_body(body)
+    |> html_body(html)
+    |> text_body(text)
   end
 
-  # Private helpers
+  defp user_assigns(user) do
+    %{
+      "display_name" => user_display_name(user),
+      "handle" => Map.get(user, :handle) || ""
+    }
+  end
 
   defp from_address do
     contact_email = Hybridsocial.Config.get("contact_email", "")
-    instance_name = Hybridsocial.Config.get("instance_name", "HybridSocial")
+    instance_name = instance_name()
 
     if contact_email != "" do
       {instance_name, contact_email}
     else
       @default_from
     end
+  end
+
+  defp instance_name do
+    Hybridsocial.Config.get("instance_name", "HybridSocial")
   end
 
   defp base_url do
@@ -194,12 +157,24 @@ defmodule Hybridsocial.Emails do
     end
   end
 
-  defp user_email(user) do
-    user.email
+  defp user_email(user), do: user.email
+
+  defp notifications_to_html(notifications) do
+    items =
+      notifications
+      |> Enum.map(fn n ->
+        type = n[:type] || n["type"] || "unknown"
+        "<li>#{escape(to_string(type))} notification</li>"
+      end)
+      |> Enum.join("")
+
+    "<ul style=\"padding-left:20px;margin:0 0 16px 0;\">#{items}</ul>"
   end
 
-  defp format_notification(notification) do
-    type = notification[:type] || notification["type"] || "unknown"
-    "- #{type} notification"
+  defp escape(str) do
+    str
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
   end
 end

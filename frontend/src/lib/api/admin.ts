@@ -546,3 +546,50 @@ export function assignUserRole(
 export function revokeUserRole(userId: string, identityRoleId: string): Promise<void> {
   return api.delete(`/api/v1/admin/users/${userId}/roles/${identityRoleId}`);
 }
+
+// ── Email templates ──────────────────────────────────────────────────
+
+export interface EmailTemplate {
+  key: string;
+  name: string;
+  description: string;
+  variables: Record<string, string>;
+  default_subject: string;
+  default_html: string;
+  subject: string;
+  html_body: string;
+  enabled: boolean;
+  customized: boolean;
+  updated_at: string | null;
+}
+
+export interface EmailTemplatePreview {
+  subject: string;
+  html: string;
+  text: string;
+}
+
+export function getEmailTemplates(): Promise<EmailTemplate[]> {
+  return api.get<{ data: EmailTemplate[] }>('/api/v1/admin/email_templates').then((r) => r.data || []);
+}
+
+export function updateEmailTemplate(
+  key: string,
+  body: { subject: string; html_body: string; enabled: boolean }
+): Promise<void> {
+  return api.put(`/api/v1/admin/email_templates/${key}`, body);
+}
+
+export function resetEmailTemplate(key: string): Promise<void> {
+  return api.post(`/api/v1/admin/email_templates/${key}/reset`);
+}
+
+// `subject` and `html_body` are optional — omitting them previews the
+// saved version (or the default if nothing is saved). Passing them
+// previews an unsaved draft without persisting.
+export function previewEmailTemplate(
+  key: string,
+  draft?: { subject: string; html_body: string }
+): Promise<EmailTemplatePreview> {
+  return api.post<EmailTemplatePreview>(`/api/v1/admin/email_templates/${key}/preview`, draft || {});
+}

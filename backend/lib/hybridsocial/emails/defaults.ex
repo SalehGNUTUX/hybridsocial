@@ -1,0 +1,172 @@
+defmodule Hybridsocial.Emails.Defaults do
+  @moduledoc """
+  Hardcoded fallback subjects + HTML bodies for each template in the
+  catalog. These ship with the code so a fresh instance has sane
+  emails before any admin customises them, and so that resetting an
+  override always has something to fall back to.
+
+  Styles are **inlined** on purpose — Gmail drops `<style>` tags in
+  the `<head>`, and we don't run a CSS inliner. Keep it that way when
+  editing; the admin UI can use a CSS inliner client-side if desired
+  but the defaults should not depend on one.
+
+  Variables are `{{liquid-style}}` and resolved by `Emails.Renderer`.
+  """
+
+  # ── Public API ─────────────────────────────────────────────────────
+
+  @doc "Returns `{subject, html}` for a catalog key."
+  def for("confirmation"), do: {confirmation_subject(), confirmation_html()}
+  def for("password_reset"), do: {password_reset_subject(), password_reset_html()}
+  def for("moderation_queue"), do: {moderation_queue_subject(), moderation_queue_html()}
+  def for("login_notification"), do: {login_notification_subject(), login_notification_html()}
+  def for("notification_digest"), do: {notification_digest_subject(), notification_digest_html()}
+  def for(_), do: {"", ""}
+
+  # ── Subjects ──────────────────────────────────────────────────────
+
+  defp confirmation_subject, do: "{{instance_name}} — confirm your email address"
+  defp password_reset_subject, do: "{{instance_name}} — reset your password"
+
+  defp moderation_queue_subject,
+    do:
+      "{{instance_name}} — moderation queue: new {{item.severity}}-severity {{item.item_type}}"
+
+  defp login_notification_subject, do: "{{instance_name}} — new login to your account"
+
+  defp notification_digest_subject,
+    do: "{{instance_name}} — you have {{count}} new notifications"
+
+  # ── Shared layout helpers ─────────────────────────────────────────
+
+  # Every default wraps content in this scaffold so the look is
+  # consistent across emails. Admins can copy it verbatim into their
+  # overrides or replace it entirely.
+  defp layout(content_html, footer_note) do
+    """
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0;padding:0;background:#f4f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#191c1d;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f4f6;padding:32px 16px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+              <tr>
+                <td style="padding:28px 32px 0 32px;">
+                  <div style="font-size:14px;font-weight:700;color:#6366f1;letter-spacing:0.02em;">{{instance_name}}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 32px 32px 32px;font-size:15px;line-height:1.6;color:#191c1d;">
+                  #{content_html}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:20px 32px 28px 32px;border-top:1px solid #e6e8eb;font-size:12px;line-height:1.5;color:#6b7280;">
+                  #{footer_note}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    """
+    |> String.trim()
+  end
+
+  defp button(label, url) do
+    """
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
+      <tr>
+        <td style="border-radius:9999px;background:#6366f1;">
+          <a href="#{url}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;border-radius:9999px;">#{label}</a>
+        </td>
+      </tr>
+    </table>
+    """
+  end
+
+  # ── Per-template bodies ───────────────────────────────────────────
+
+  defp confirmation_html do
+    content = """
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;">Welcome to {{instance_name}}, @{{user.handle}}!</h1>
+    <p style="margin:0 0 8px 0;">Please confirm your email address so we can activate your account.</p>
+    #{button("Confirm email", "{{confirm_url}}")}
+    <p style="margin:0;font-size:13px;color:#6b7280;">Or copy and paste this link into your browser:<br>
+    <a href="{{confirm_url}}" style="color:#6366f1;word-break:break-all;">{{confirm_url}}</a></p>
+    """
+
+    footer =
+      "If you didn't create an account on {{instance_name}}, you can safely ignore this email."
+
+    layout(content, footer)
+  end
+
+  defp password_reset_html do
+    content = """
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;">Reset your password</h1>
+    <p style="margin:0 0 8px 0;">Hi @{{user.handle}}, we got a request to reset the password on your {{instance_name}} account.</p>
+    #{button("Reset password", "{{reset_url}}")}
+    <p style="margin:0 0 12px 0;font-size:13px;color:#6b7280;">The link expires in one hour.</p>
+    <p style="margin:0;font-size:13px;color:#6b7280;">Or copy and paste this link into your browser:<br>
+    <a href="{{reset_url}}" style="color:#6366f1;word-break:break-all;">{{reset_url}}</a></p>
+    """
+
+    footer =
+      "If you didn't request this, someone may have typed your email by mistake — it's safe to ignore this message."
+
+    layout(content, footer)
+  end
+
+  defp moderation_queue_html do
+    content = """
+    <h1 style="margin:0 0 16px 0;font-size:20px;font-weight:700;">New item in the moderation queue</h1>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px 0;font-size:14px;">
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Type</td><td style="padding:4px 0;">{{item.item_type}}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Severity</td><td style="padding:4px 0;">{{item.severity}}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Source</td><td style="padding:4px 0;">{{item.source}}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;vertical-align:top;color:#6b7280;">Reason</td><td style="padding:4px 0;">{{item.reason}}</td></tr>
+    </table>
+    #{button("Review in queue", "{{queue_url}}")}
+    """
+
+    footer =
+      "You're receiving this because the \"moderation_queue\" notification is enabled on your staff account. Turn it off anytime in your notification preferences."
+
+    layout(content, footer)
+  end
+
+  defp login_notification_html do
+    content = """
+    <h1 style="margin:0 0 16px 0;font-size:20px;font-weight:700;">New sign-in to your account</h1>
+    <p style="margin:0 0 16px 0;">Hi @{{user.handle}}, we noticed a new sign-in to your {{instance_name}} account.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px 0;font-size:14px;">
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">IP address</td><td style="padding:4px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">{{ip}}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;vertical-align:top;color:#6b7280;">Device</td><td style="padding:4px 0;">{{user_agent}}</td></tr>
+    </table>
+    <p style="margin:0;">If this was you, no action is needed. If it wasn't, change your password immediately and revoke your sessions.</p>
+    """
+
+    footer =
+      "You're receiving this because login alerts are enabled on your account."
+
+    layout(content, footer)
+  end
+
+  defp notification_digest_html do
+    content = """
+    <h1 style="margin:0 0 16px 0;font-size:20px;font-weight:700;">Your {{instance_name}} digest</h1>
+    <p style="margin:0 0 16px 0;">Hi @{{user.handle}}, you have {{count}} new notifications:</p>
+    {{summary_html}}
+    #{button("Open {{instance_name}}", "{{app_url}}")}
+    """
+
+    footer =
+      "You're receiving this digest because you opted in under notification preferences. You can turn it off anytime."
+
+    layout(content, footer)
+  end
+end
