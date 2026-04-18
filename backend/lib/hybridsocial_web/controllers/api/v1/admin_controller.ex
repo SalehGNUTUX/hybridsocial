@@ -551,14 +551,22 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
   # ── Instance Settings ────────────────────────────────────────────────
 
+  # Keys intentionally hidden from GET /admin/settings. Secrets (vapid,
+  # email creds, etc.) have their own dedicated admin UIs; theme_* keys
+  # belong to /admin/theme and would swamp this page with color pickers
+  # if included here.
   @hidden_settings ~w(vapid_public_key vapid_private_key instance_rules email_provider email_from_address email_smtp_host email_smtp_port email_smtp_username email_smtp_ssl email_resend_api_key)
+
+  defp hidden_setting?(%{key: key} = _setting) do
+    key in @hidden_settings or String.starts_with?(key, "theme_")
+  end
 
   def list_settings(conn, _params) do
     with :ok <- require_permission(conn, "settings.view") do
       settings =
         Hybridsocial.Config.Setting
         |> Hybridsocial.Repo.all()
-        |> Enum.reject(fn s -> s.key in @hidden_settings end)
+        |> Enum.reject(&hidden_setting?/1)
         |> Enum.map(fn s ->
           %{
             key: s.key,
