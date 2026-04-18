@@ -7,7 +7,7 @@ defmodule HybridsocialWeb.Api.V1.AnnouncementController do
       try do
         now = DateTime.utc_now()
 
-        from(a in "instance_announcements",
+        from(a in "announcements",
           where: a.published == true,
           where: is_nil(a.starts_at) or a.starts_at <= ^now,
           where: is_nil(a.ends_at) or a.ends_at >= ^now,
