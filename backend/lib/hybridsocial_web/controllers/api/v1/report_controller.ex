@@ -101,15 +101,11 @@ defmodule HybridsocialWeb.Api.V1.ReportController do
       end
 
     inbox =
-      cond do
-        ra =
-            Hybridsocial.Repo.get_by(Hybridsocial.Federation.RemoteActor,
-              ap_id: reported.ap_actor_url
-            ) ->
-          ra.shared_inbox_url || ra.inbox_url
-
-        true ->
-          reported.inbox_url
+      case Hybridsocial.Repo.get_by(Hybridsocial.Federation.RemoteActor,
+             ap_id: reported.ap_actor_url
+           ) do
+        nil -> reported.inbox_url
+        ra -> ra.shared_inbox_url || ra.inbox_url
       end
 
     if is_binary(inbox) and inbox != "" do

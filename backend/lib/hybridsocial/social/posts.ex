@@ -14,45 +14,10 @@ defmodule Hybridsocial.Social.Posts do
 
   def create_post(identity_id, attrs, identity \\ nil) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
-
-    # Resolve tier limits
-    limits =
-      if identity do
-        TierLimits.limits_for(identity)
-      else
-        TierLimits.limits_for_tier("verified_pro")
-      end
-
-    edit_window = limits[:edit_window] || 900
-
-    edit_expires_at =
-      if edit_window == 0 do
-        # Unlimited editing
-        nil
-      else
-        DateTime.add(now, edit_window, :second)
-        |> DateTime.truncate(:microsecond)
-      end
-
-    # Markdown level is capped by the author's tier (free → plaintext,
-    # verified_pro → full GFM). The composer can opt *down* from that
-    # ceiling by passing `markdown: false` (e.g. a pro user posting
-    # plain-text). We never let the client opt *up* past their tier.
-    tier_level = limits[:markdown] || "basic"
-
-    markdown_level =
-      case Map.get(attrs, "markdown") do
-        false -> "none"
-        "false" -> "none"
-        0 -> "none"
-        _ -> tier_level
-      end
-
-    content_html =
-      case attrs["content"] do
-        nil -> nil
-        content -> Hybridsocial.Content.Sanitizer.sanitize_post_content(content, markdown_level)
-      end
+    limits = resolve_limits(identity)
+    edit_expires_at = compute_edit_expires_at(now, limits[:edit_window] || 900)
+    markdown_level = resolve_markdown_level(attrs, limits)
+    content_html = maybe_render_content_html(attrs["content"], markdown_level)
 
     # Allocate the post ID up-front so we can stamp its canonical AP
     # URL into `ap_id` in the same insert. With this, `get_post_by_ap_id/1`
@@ -69,7 +34,7 @@ defmodule Hybridsocial.Social.Posts do
     # here (not in the changeset helper) because the two-state rule
     # matters for federation timing — federate iff published_at is set.
     published_at =
-      if is_future_datetime?(scheduled_at), do: nil, else: now
+      if future_datetime?(scheduled_at), do: nil, else: now
 
     post_attrs =
       attrs
@@ -85,18 +50,48 @@ defmodule Hybridsocial.Social.Posts do
       %Post{}
       |> Post.create_changeset(post_attrs, char_limit: limits[:char_limit] || 5000)
       |> Ecto.Changeset.put_change(:published_at, published_at)
-
-    changeset =
-      if edit_expires_at do
-        Ecto.Changeset.put_change(changeset, :edit_expires_at, edit_expires_at)
-      else
-        changeset
-      end
+      |> maybe_put_edit_expires_at(edit_expires_at)
 
     with :ok <- validate_premium_emojis(attrs["content"], identity) do
       insert_post(changeset, attrs)
     end
   end
+
+  defp resolve_limits(nil), do: TierLimits.limits_for_tier("verified_pro")
+  defp resolve_limits(identity), do: TierLimits.limits_for(identity)
+
+  # 0 means unlimited editing — TierLimits convention, mirrored by
+  # the UI; don't stamp an edit_expires_at in that case.
+  defp compute_edit_expires_at(_now, 0), do: nil
+
+  defp compute_edit_expires_at(now, window) do
+    now |> DateTime.add(window, :second) |> DateTime.truncate(:microsecond)
+  end
+
+  # Markdown level is capped by the author's tier (free → plaintext,
+  # verified_pro → full GFM). The composer can opt *down* from that
+  # ceiling by passing `markdown: false` (e.g. a pro user posting
+  # plain-text). We never let the client opt *up* past their tier.
+  defp resolve_markdown_level(attrs, limits) do
+    tier_level = limits[:markdown] || "basic"
+
+    case Map.get(attrs, "markdown") do
+      false -> "none"
+      "false" -> "none"
+      0 -> "none"
+      _ -> tier_level
+    end
+  end
+
+  defp maybe_render_content_html(nil, _level), do: nil
+
+  defp maybe_render_content_html(content, level),
+    do: Hybridsocial.Content.Sanitizer.sanitize_post_content(content, level)
+
+  defp maybe_put_edit_expires_at(changeset, nil), do: changeset
+
+  defp maybe_put_edit_expires_at(changeset, expires_at),
+    do: Ecto.Changeset.put_change(changeset, :edit_expires_at, expires_at)
 
   defp validate_premium_emojis(nil, _identity), do: :ok
   defp validate_premium_emojis(_content, nil), do: :ok
@@ -168,19 +163,19 @@ defmodule Hybridsocial.Social.Posts do
     is_nil(published_at) and DateTime.compare(scheduled_at, DateTime.utc_now()) == :gt
   end
 
-  defp is_future_datetime?(nil), do: false
+  defp future_datetime?(nil), do: false
 
-  defp is_future_datetime?(%DateTime{} = dt),
+  defp future_datetime?(%DateTime{} = dt),
     do: DateTime.compare(dt, DateTime.utc_now()) == :gt
 
-  defp is_future_datetime?(str) when is_binary(str) do
+  defp future_datetime?(str) when is_binary(str) do
     case DateTime.from_iso8601(str) do
       {:ok, dt, _} -> DateTime.compare(dt, DateTime.utc_now()) == :gt
       _ -> false
     end
   end
 
-  defp is_future_datetime?(_), do: false
+  defp future_datetime?(_), do: false
 
   @doc """
   Fires the side effects that always follow a post becoming
@@ -285,7 +280,14 @@ defmodule Hybridsocial.Social.Posts do
 
   def broadcast_direct_post_to_participants(_post), do: :ok
 
-  defp local_identity?(identity_id) do
+  # Accepts either a loaded `%Identity{}` or a binary id. The two
+  # clauses are grouped so credo's "same name/arity should be
+  # contiguous" warning stays quiet even though callers mix both
+  # shapes.
+  defp local_identity?(%Hybridsocial.Accounts.Identity{} = identity),
+    do: Hybridsocial.Federation.LocalUrl.local_identity?(identity)
+
+  defp local_identity?(identity_id) when is_binary(identity_id) do
     case Repo.get(Hybridsocial.Accounts.Identity, identity_id) do
       %Hybridsocial.Accounts.Identity{} = id ->
         Hybridsocial.Federation.LocalUrl.local_identity?(id)
@@ -628,7 +630,7 @@ defmodule Hybridsocial.Social.Posts do
       post.identity == nil ->
         :ok
 
-      not is_local_identity?(post.identity) ->
+      not local_identity?(post.identity) ->
         :ok
 
       post.visibility not in ["public", "unlisted", "followers", "direct"] ->
@@ -646,9 +648,6 @@ defmodule Hybridsocial.Social.Posts do
         :ok
     end
   end
-
-  defp is_local_identity?(identity),
-    do: Hybridsocial.Federation.LocalUrl.local_identity?(identity)
 
   # --- Post queries ---
 

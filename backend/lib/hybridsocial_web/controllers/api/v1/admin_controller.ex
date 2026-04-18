@@ -1315,29 +1315,30 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           conn |> put_status(:created) |> json(%{data: serialize_relay(relay)})
 
         {:error, %Ecto.Changeset{errors: errors} = changeset} ->
-          cond do
-            # Unique constraint on inbox_url — the admin is trying to
-            # add a relay that's already subscribed. Return a distinct
-            # error code + the existing row so the UI can say something
-            # useful instead of a generic validation failure.
+          # Unique constraint on inbox_url — the admin is trying to
+          # add a relay that's already subscribed. Return a distinct
+          # error code + the existing row so the UI can say something
+          # useful instead of a generic validation failure.
+          unique_inbox_conflict? =
             Enum.any?(errors, fn {field, {_, opts}} ->
               field == :inbox_url and Keyword.get(opts, :constraint) == :unique
-            end) ->
-              existing =
-                Hybridsocial.Repo.get_by(Hybridsocial.Federation.Relay, inbox_url: inbox_url)
+            end)
 
-              conn
-              |> put_status(:conflict)
-              |> json(%{
-                error: "relay.already_subscribed",
-                message: "This relay is already in your list.",
-                data: existing && serialize_relay(existing)
-              })
+          if unique_inbox_conflict? do
+            existing =
+              Hybridsocial.Repo.get_by(Hybridsocial.Federation.Relay, inbox_url: inbox_url)
 
-            true ->
-              conn
-              |> put_status(:unprocessable_entity)
-              |> json(%{error: "validation.failed", details: format_errors(changeset)})
+            conn
+            |> put_status(:conflict)
+            |> json(%{
+              error: "relay.already_subscribed",
+              message: "This relay is already in your list.",
+              data: existing && serialize_relay(existing)
+            })
+          else
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "validation.failed", details: format_errors(changeset)})
           end
       end
     else

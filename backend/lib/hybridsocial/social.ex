@@ -46,34 +46,7 @@ defmodule Hybridsocial.Social do
       # Publish Follow activity to remote instance if target is remote
       case result do
         {:ok, _follow} ->
-          follower = Accounts.get_identity(follower_id)
-
-          if follower && remote?(target) do
-            Logger.info("Publishing Follow activity to #{target.ap_actor_url}")
-
-            Task.Supervisor.start_child(Hybridsocial.Federation.DeliveryTaskSupervisor, fn ->
-              activity = ActivityBuilder.build_follow(follower, target.ap_actor_url)
-              Publisher.publish(activity, follower)
-            end)
-          else
-            Logger.debug(
-              "Skipping federation: follower=#{inspect(!!follower)} remote=#{inspect(remote?(target))} ap_url=#{inspect(target.ap_actor_url)}"
-            )
-
-            # Local-to-local follow: no federation needed, but the
-            # target still deserves a bell. Remote targets get their
-            # bell via the peer's own inbox delivery of the Follow
-            # activity, so we skip notifying here in that case.
-            if not remote?(target) do
-              type = if status == :pending, do: "follow_request", else: "follow"
-
-              Hybridsocial.Notifications.create_notification(%{
-                recipient_id: followee_id,
-                actor_id: follower_id,
-                type: type
-              })
-            end
-          end
+          handle_follow_side_effects(follower_id, followee_id, target, status)
 
         _ ->
           :ok
@@ -84,6 +57,44 @@ defmodule Hybridsocial.Social do
       {:not_self, false} -> {:error, :cannot_follow_self}
       {:not_blocked, true} -> {:error, :blocked}
       nil -> {:error, :not_found}
+    end
+  end
+
+  # Post-insert work for a successful follow: either federate the
+  # Follow activity (if the target is remote) or drop an in-app bell
+  # for the local target. Split out so the calling function's `case`
+  # arm stays one level deep — credo was flagging 5 levels of nesting.
+  defp handle_follow_side_effects(follower_id, followee_id, target, status) do
+    follower = Accounts.get_identity(follower_id)
+
+    if follower && remote?(target) do
+      Logger.info("Publishing Follow activity to #{target.ap_actor_url}")
+
+      Task.Supervisor.start_child(Hybridsocial.Federation.DeliveryTaskSupervisor, fn ->
+        activity = ActivityBuilder.build_follow(follower, target.ap_actor_url)
+        Publisher.publish(activity, follower)
+      end)
+    else
+      Logger.debug(
+        "Skipping federation: follower=#{inspect(!!follower)} remote=#{inspect(remote?(target))} ap_url=#{inspect(target.ap_actor_url)}"
+      )
+
+      # Local-to-local follow: no federation needed, but the target
+      # still deserves a bell. Remote targets get their bell via the
+      # peer's own inbox delivery of the Follow activity.
+      maybe_notify_local_follow(follower_id, followee_id, target, status)
+    end
+  end
+
+  defp maybe_notify_local_follow(follower_id, followee_id, target, status) do
+    if not remote?(target) do
+      type = if status == :pending, do: "follow_request", else: "follow"
+
+      Hybridsocial.Notifications.create_notification(%{
+        recipient_id: followee_id,
+        actor_id: follower_id,
+        type: type
+      })
     end
   end
 

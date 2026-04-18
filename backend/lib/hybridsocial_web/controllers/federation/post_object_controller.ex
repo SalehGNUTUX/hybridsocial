@@ -24,7 +24,7 @@ defmodule HybridsocialWeb.Federation.PostObjectController do
 
   def show(conn, %{"id" => id}) do
     with post when not is_nil(post) <- Posts.get_post_with_context(id),
-         true <- is_public?(post) do
+         true <- public?(post) do
       note = ActivityBuilder.build_note(post)
 
       # `build_note/1` is reused across Create/Update/outbox, which
@@ -51,14 +51,14 @@ defmodule HybridsocialWeb.Federation.PostObjectController do
     end
   end
 
-  defp is_public?(%{visibility: vis, deleted_at: nil}) when vis in @public_visibilities,
+  defp public?(%{visibility: vis, deleted_at: nil}) when vis in @public_visibilities,
     do: true
 
-  defp is_public?(%{visibility: v, deleted_at: nil}) when is_atom(v) do
+  defp public?(%{visibility: v, deleted_at: nil}) when is_atom(v) do
     Atom.to_string(v) in @public_visibilities
   end
 
-  defp is_public?(_), do: false
+  defp public?(_), do: false
 
   defp negotiated_content_type(conn) do
     accept = Plug.Conn.get_req_header(conn, "accept") |> List.first() |> to_string()

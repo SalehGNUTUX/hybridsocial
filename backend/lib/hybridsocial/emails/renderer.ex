@@ -57,9 +57,10 @@ defmodule Hybridsocial.Emails.Renderer do
     path
     |> String.split(".")
     |> Enum.reduce(assigns, fn segment, acc ->
-      cond do
-        is_map(acc) -> Map.get(acc, segment) || Map.get(acc, String.to_atom(segment))
-        true -> nil
+      if is_map(acc) do
+        Map.get(acc, segment) || Map.get(acc, String.to_atom(segment))
+      else
+        nil
       end
     end)
   end

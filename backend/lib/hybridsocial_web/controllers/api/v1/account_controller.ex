@@ -147,36 +147,34 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
         only_direct = params["only_direct"] == "true"
 
-        cond do
-          # Direct posts are recipient-scoped — never let another user
-          # pull someone else's direct inbox by forging this query
-          # param. The UI only surfaces this filter on own-profile
-          # anyway, so this is a defense-in-depth check against API
-          # abuse.
-          only_direct and viewer_id != id ->
-            conn |> put_status(:forbidden) |> json(%{error: "direct_tab.forbidden"})
+        # Direct posts are recipient-scoped — never let another user
+        # pull someone else's direct inbox by forging this query
+        # param. The UI only surfaces this filter on own-profile
+        # anyway, so this is a defense-in-depth check against API
+        # abuse.
+        if only_direct and viewer_id != id do
+          conn |> put_status(:forbidden) |> json(%{error: "direct_tab.forbidden"})
+        else
+          opts = [
+            limit: clamp_limit(params["limit"]),
+            exclude_replies: params["exclude_replies"] == "true",
+            only_media: params["only_media"] == "true",
+            only_direct: only_direct,
+            max_id: params["max_id"]
+          ]
 
-          true ->
-            opts = [
-              limit: clamp_limit(params["limit"]),
-              exclude_replies: params["exclude_replies"] == "true",
-              only_media: params["only_media"] == "true",
-              only_direct: only_direct,
-              max_id: params["max_id"]
-            ]
+          posts =
+            Hybridsocial.Social.Posts.posts_by_identity(id, opts)
+            |> then(fn p -> if is_list(p), do: p, else: [] end)
 
-            posts =
-              Hybridsocial.Social.Posts.posts_by_identity(id, opts)
-              |> then(fn p -> if is_list(p), do: p, else: [] end)
+          serialized =
+            HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
+              current_identity_id: viewer_id
+            )
 
-            serialized =
-              HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
-                current_identity_id: viewer_id
-              )
-
-            conn
-            |> put_status(:ok)
-            |> json(serialized)
+          conn
+          |> put_status(:ok)
+          |> json(serialized)
         end
     end
   end
