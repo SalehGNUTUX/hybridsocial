@@ -22,14 +22,27 @@
     }
   });
 
+  // <input type="datetime-local"> emits a naive wall-clock string
+  // like "2026-04-18T18:51" with no timezone. Forwarding that as-is
+  // makes the server interpret it as UTC, which for anyone not in
+  // GMT means the announcement fires at the wrong time (or, for
+  // starts_at, stays invisible until hours later). Convert the
+  // local-time string to a real UTC ISO before sending.
+  function localInputToUtcIso(value: string): string | undefined {
+    if (!value) return undefined;
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return undefined;
+    return d.toISOString();
+  }
+
   async function handleCreate() {
     if (!newContent.trim()) return;
     creating = true;
     try {
       const announcement = await createAnnouncement({
         content: newContent,
-        starts_at: newStartsAt || undefined,
-        ends_at: newEndsAt || undefined
+        starts_at: localInputToUtcIso(newStartsAt),
+        ends_at: localInputToUtcIso(newEndsAt)
       });
       announcements = [announcement, ...announcements];
       newContent = '';

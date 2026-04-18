@@ -7,12 +7,16 @@ defmodule HybridsocialWeb.Api.V1.AnnouncementController do
       try do
         now = DateTime.utc_now()
 
+        # Explicit ::text cast on id — querying a table-string (not a
+        # schema) means Ecto returns the uuid column as a raw 16-byte
+        # binary, which Jason refuses to encode. Casting to text makes
+        # the payload safely serializable.
         from(a in "announcements",
           where: a.published == true,
           where: is_nil(a.starts_at) or a.starts_at <= ^now,
           where: is_nil(a.ends_at) or a.ends_at >= ^now,
           select: %{
-            id: a.id,
+            id: fragment("?::text", a.id),
             content: a.content,
             starts_at: a.starts_at,
             ends_at: a.ends_at
