@@ -19,12 +19,22 @@ defmodule Hybridsocial.Media.MediaProxy do
   """
   def url(remote_url) when is_binary(remote_url) do
     if enabled?() and not local_url?(remote_url) do
-      base = HybridsocialWeb.Endpoint.url()
+      # Prefer the isolated media origin (e.g. https://media.arab.place)
+      # — matches where local uploads are served from and keeps
+      # every piece of user-origin content off the main app cookie.
+      base = media_host() || HybridsocialWeb.Endpoint.url()
       encoded = Base.url_encode64(remote_url, padding: false)
       signature = sign(encoded)
       "#{base}/proxy/media/#{signature}/#{encoded}"
     else
       remote_url
+    end
+  end
+
+  defp media_host do
+    case Application.get_env(:hybridsocial, :media_host) do
+      host when is_binary(host) and host != "" -> String.trim_trailing(host, "/")
+      _ -> nil
     end
   end
 
