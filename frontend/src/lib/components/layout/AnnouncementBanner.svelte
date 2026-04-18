@@ -44,7 +44,11 @@
     try {
       const { getAnnouncements } = await import('$lib/api/announcements.js');
       const result = await getAnnouncements();
-      announcements = Array.isArray(result) ? result.filter((a) => a.published) : [];
+      // The /api/v1/announcements endpoint already filters by
+      // published=true + active window server-side and strips the
+      // `published` column from the payload, so any row returned
+      // here is one we want to show.
+      announcements = Array.isArray(result) ? result : [];
     } catch {
       // Endpoint may not exist — fail silently
       announcements = [];
