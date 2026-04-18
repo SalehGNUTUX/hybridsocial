@@ -64,10 +64,20 @@
     { key: 'category', label: 'Category', sortable: true },
     { key: 'target', label: 'Target' },
     { key: 'reporter', label: 'Reporter' },
+    { key: 'content', label: 'What was reported' },
     { key: 'status', label: 'Status', sortable: true },
     { key: 'created_at', label: 'Date', sortable: true },
     { key: 'actions', label: 'Actions', width: '200px' }
   ];
+
+  function stripTags(html: string | null | undefined): string {
+    if (!html) return '';
+    return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function truncate(s: string, n: number): string {
+    return s.length > n ? s.slice(0, n).trim() + '…' : s;
+  }
 
   onMount(async () => {
     await loadReports();
@@ -270,9 +280,70 @@
         emptyMessage="No reports found"
       >
         {#snippet rowContent(row)}
-          <td><span class="report-category">{row['category']}</span></td>
-          <td>@{(row['target_account'] as Record<string, unknown>)?.['handle'] ?? 'unknown'}</td>
-          <td>@{(row['reporter'] as Record<string, unknown>)?.['handle'] ?? 'unknown'}</td>
+          {@const targetAccount = (row['target_account'] as Record<string, any>) ?? null}
+          {@const reporter = (row['reporter'] as Record<string, any>) ?? null}
+          {@const targetPost = (row['target_post'] as Record<string, any>) ?? null}
+          {@const targetHandle = targetAccount?.acct || targetAccount?.handle || 'unknown'}
+          {@const reporterHandle = reporter?.acct || reporter?.handle || 'unknown'}
+          {@const reportComment = (row['comment'] || row['description']) as string | undefined}
+          {@const postText = targetPost ? truncate(stripTags(targetPost.content_html || targetPost.content), 200) : ''}
+
+          <td><span class="report-category">{(row['category'] as string).replace(/_/g, ' ')}</span></td>
+
+          <td>
+            {#if targetAccount?.id}
+              <a href="/@{targetHandle}" class="report-account-link">@{targetHandle}</a>
+            {:else}
+              @{targetHandle}
+            {/if}
+          </td>
+
+          <td>
+            {#if reporter?.id}
+              <a href="/@{reporterHandle}" class="report-account-link">@{reporterHandle}</a>
+            {:else}
+              @{reporterHandle}
+            {/if}
+          </td>
+
+          <td class="report-content-cell">
+            {#if reportComment}
+              <div class="report-comment">
+                <span class="report-meta-label">Reporter's note:</span>
+                <span>{reportComment}</span>
+              </div>
+            {/if}
+            {#if row['target_type'] === 'post'}
+              {#if targetPost}
+                <a
+                  href={`/post/${targetPost.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="report-post-preview"
+                >
+                  {#if postText}
+                    <span class="report-post-text">{postText}</span>
+                  {:else}
+                    <span class="report-post-empty">(no text — media only)</span>
+                  {/if}
+                  <span class="material-symbols-outlined report-post-open">open_in_new</span>
+                </a>
+                {#if targetPost.deleted_at}
+                  <span class="report-deleted-badge">Post already deleted</span>
+                {/if}
+              {:else}
+                <span class="report-post-missing">
+                  Post not found (id: <code>{row['target_id']}</code>)
+                </span>
+              {/if}
+            {:else if row['target_type'] === 'account' || row['target_type'] === 'user'}
+              <span class="report-meta-label">Account report</span>
+            {/if}
+            {#if !reportComment && row['target_type'] !== 'post'}
+              <span class="report-post-empty">—</span>
+            {/if}
+          </td>
+
           <td>
             <span class="status-badge status-{row['status']}">
               {row['status']}
@@ -542,5 +613,96 @@
     font-size: var(--text-sm);
     text-align: center;
     padding: var(--space-6) 0;
+  }
+
+  .report-content-cell {
+    max-width: 360px;
+  }
+
+  .report-comment {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    margin-block-end: 6px;
+  }
+
+  .report-meta-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+    font-weight: 600;
+    margin-inline-end: 4px;
+  }
+
+  .report-post-preview {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    text-decoration: none;
+    color: var(--color-text);
+    font-size: var(--text-xs);
+    line-height: 1.4;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .report-post-preview:hover {
+    background: var(--color-surface-container-low, var(--color-surface));
+    border-color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .report-post-text {
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+  }
+
+  .report-post-empty {
+    color: var(--color-text-tertiary);
+    font-style: italic;
+    font-size: var(--text-xs);
+  }
+
+  .report-post-open {
+    font-size: 14px !important;
+    color: var(--color-text-tertiary);
+    flex-shrink: 0;
+  }
+
+  .report-post-missing {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+
+  .report-post-missing code {
+    font-size: 0.65rem;
+  }
+
+  .report-deleted-badge {
+    display: inline-block;
+    margin-block-start: 4px;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #991b1b;
+    background: var(--color-danger-soft);
+    border-radius: var(--radius-sm);
+  }
+
+  .report-account-link {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .report-account-link:hover {
+    text-decoration: underline;
   }
 </style>
