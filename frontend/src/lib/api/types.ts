@@ -637,7 +637,10 @@ export interface AuditLogEntry {
 export interface Relay {
   id: string;
   inbox_url: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  actor_url: string | null;
+  style: 'mastodon' | 'pleroma';
+  status: 'pending' | 'accepted' | 'rejected' | 'failed';
+  last_error: string | null;
   created_at: string;
 }
 

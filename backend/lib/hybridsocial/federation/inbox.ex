@@ -202,21 +202,20 @@ defmodule Hybridsocial.Federation.Inbox do
 
   defp handle_accept(%{"actor" => actor_ap_id, "object" => object})
        when is_binary(actor_ap_id) do
-    follow_object = normalize_object(object)
-
-    # Relays reply to our instance-level Follow with an Accept whose
-    # inner object is the Follow { actor: <us>, object: Public } we
-    # sent. Detect that shape and upgrade the relays row instead of
-    # trying to match against the user-follow table.
-    if relay_follow?(follow_object) do
-      case URI.parse(actor_ap_id) do
-        %URI{host: host} when is_binary(host) and host != "" ->
-          Hybridsocial.Federation.Relays.accept_relay(host)
-
-        _ ->
-          {:error, :invalid_relay_accept}
-      end
+    # Check the raw object (before normalization, which strips
+    # `type` + `object`) so we can tell a relay-shaped Follow from
+    # a user-follow Accept:
+    #
+    #   * Mastodon-style: object == AS:Public
+    #   * Pleroma-style : object == the relay's own actor URL
+    #
+    # accept_relay/1 handles both by looking up actor_url or by
+    # host-matching the inbox URL.
+    if relay_follow?(object) do
+      Hybridsocial.Federation.Relays.accept_relay(actor_ap_id)
     else
+      follow_object = normalize_object(object)
+
       with {:ok, remote_identity} <- resolve_remote_identity(actor_ap_id),
            {:ok, follow} <- find_pending_follow(follow_object, remote_identity.id) do
         Social.accept_follow(follow.id)
@@ -226,10 +225,26 @@ defmodule Hybridsocial.Federation.Inbox do
 
   defp handle_accept(_), do: {:error, :invalid_accept_activity}
 
+  # A Follow with object = AS:Public is always a relay Follow. A
+  # Follow whose object is a remote actor might be either a user
+  # follow or a Pleroma-style relay follow; accept_relay/1 will
+  # return :not_found if no matching row exists, which lets the
+  # caller fall through to user-follow handling.
   defp relay_follow?(%{"type" => "Follow", "object" => "https://www.w3.org/ns/activitystreams#Public"}),
     do: true
 
+  defp relay_follow?(%{"type" => "Follow", "object" => object})
+       when is_binary(object),
+    do: known_relay_actor?(object)
+
   defp relay_follow?(_), do: false
+
+  defp known_relay_actor?(actor_url) do
+    import Ecto.Query
+    Hybridsocial.Repo.exists?(
+      from r in Hybridsocial.Federation.Relay, where: r.actor_url == ^actor_url
+    )
+  end
 
   # --- Reject ---
   # A remote actor rejected our follow request.

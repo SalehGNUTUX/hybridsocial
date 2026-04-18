@@ -57,6 +57,7 @@
       case 'accepted': return 'status-accepted';
       case 'pending': return 'status-pending';
       case 'rejected': return 'status-rejected';
+      case 'failed': return 'status-failed';
       default: return '';
     }
   }
@@ -72,12 +73,17 @@
 
   <section class="card add-section">
     <h2 class="section-title">Add Relay</h2>
+    <p class="add-hint">
+      Paste the relay URL. Either flavor works — Mastodon-style
+      (<code>…/inbox</code>) or Pleroma-style (<code>…/actor</code>).
+      We auto-detect which handshake to use.
+    </p>
     <form class="add-form" onsubmit={(e) => { e.preventDefault(); handleAdd(); }}>
       <input
         type="url"
         class="input"
         bind:value={newInboxUrl}
-        placeholder="https://relay.example.com/inbox"
+        placeholder="https://relay.example.com/inbox  or  https://relay.example.com/actor"
         required
       />
       <button class="btn btn-primary" type="submit" disabled={adding}>
@@ -100,13 +106,17 @@
         {#each relays as relay (relay.id)}
           <div class="relay-item">
             <div class="relay-info">
-              <code class="relay-url">{relay.inbox_url}</code>
+              <code class="relay-url">{relay.actor_url || relay.inbox_url}</code>
               <div class="relay-meta">
                 <span class="relay-status {statusClass(relay.status)}">{relay.status}</span>
+                <span class="relay-style">{relay.style}</span>
                 {#if relay.created_at}
                   <span class="relay-date">Added {formatDate(relay.created_at)}</span>
                 {/if}
               </div>
+              {#if relay.last_error && relay.status === 'failed'}
+                <div class="relay-error" role="alert">{relay.last_error}</div>
+              {/if}
             </div>
             <button
               class="btn btn-sm btn-danger"
@@ -210,9 +220,35 @@
     color: #92400e;
   }
 
-  .status-rejected {
+  .status-rejected,
+  .status-failed {
     background: var(--color-danger-soft);
     color: #991b1b;
+  }
+
+  .relay-style {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .relay-error {
+    margin-block-start: var(--space-2);
+    font-size: var(--text-xs);
+    color: #991b1b;
+    background: var(--color-danger-soft);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    word-break: break-word;
+  }
+
+  .add-hint {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    margin-block-end: var(--space-3);
+    line-height: 1.5;
   }
 
   .relay-date {

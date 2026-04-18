@@ -2425,6 +2425,8 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     %{
       id: relay.id,
       inbox_url: relay.inbox_url,
+      actor_url: relay.actor_url,
+      style: if(relay.actor_url, do: "pleroma", else: "mastodon"),
       status: relay.status,
       last_error: relay.last_error,
       created_at: relay.inserted_at
