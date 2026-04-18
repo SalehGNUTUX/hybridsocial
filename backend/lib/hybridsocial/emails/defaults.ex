@@ -29,6 +29,7 @@ defmodule Hybridsocial.Emails.Defaults do
   def for("admin_new_report"), do: {admin_new_report_subject(), admin_new_report_html()}
   def for("admin_new_appeal"), do: {admin_new_appeal_subject(), admin_new_appeal_html()}
   def for("admin_backup_failed"), do: {admin_backup_failed_subject(), admin_backup_failed_html()}
+  def for("generic_notification"), do: {generic_notification_subject(), generic_notification_html()}
   def for(_), do: {"", ""}
 
   # ── Subjects ──────────────────────────────────────────────────────
@@ -61,6 +62,8 @@ defmodule Hybridsocial.Emails.Defaults do
 
   defp admin_backup_failed_subject,
     do: "[{{instance_name}}] Backup failed ({{backup.type}})"
+
+  defp generic_notification_subject, do: "{{title}}"
 
   # ── Shared layout helpers ─────────────────────────────────────────
 
@@ -306,6 +309,19 @@ defmodule Hybridsocial.Emails.Defaults do
 
     footer =
       "You're receiving this because \"admin_new_appeal\" email notifications are enabled on your staff account."
+
+    layout(content, footer)
+  end
+
+  defp generic_notification_html do
+    content = """
+    <h1 style="margin:0 0 8px 0;font-size:18px;font-weight:700;">{{title}}</h1>
+    <p style="margin:0 0 20px 0;color:#4b5563;">{{body}}</p>
+    #{button("Open on {{instance_name}}", "{{url}}")}
+    """
+
+    footer =
+      "You're receiving this because email delivery is enabled for this notification type on your account. Turn it off in your notification preferences."
 
     layout(content, footer)
   end

@@ -260,6 +260,25 @@ defmodule Hybridsocial.Emails.Templates do
       }
     },
     %{
+      key: "generic_notification",
+      name: "In-app notification (email channel)",
+      description: "Used whenever a user opted into email for a specific in-app notification type (follow, reply, mention, reaction, boost, …). Title and body come from the triggering event.",
+      variables: %{
+        "instance_name" => "Instance display name",
+        "title" => "The notification's title line (e.g. \"@alice followed you\")",
+        "body" => "Optional body / excerpt",
+        "url" => "Link back into the app for this notification",
+        "app_url" => "Absolute URL back to the app"
+      },
+      sample: %{
+        "instance_name" => "HybridSocial",
+        "title" => "@alice followed you",
+        "body" => "",
+        "url" => "https://example.com/notifications",
+        "app_url" => "https://example.com"
+      }
+    },
+    %{
       key: "notification_digest",
       name: "Notification digest",
       description: "Summarises recent in-app notifications for users who opted in.",
