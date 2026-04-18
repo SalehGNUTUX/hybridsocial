@@ -34,9 +34,19 @@ defmodule Hybridsocial.Social.Posts do
         |> DateTime.truncate(:microsecond)
       end
 
-    # Generate HTML from markdown content using the author's tier-gated
-    # markdown level. Free tier → plaintext; verified_pro → full GFM.
-    markdown_level = limits[:markdown] || "basic"
+    # Markdown level is capped by the author's tier (free → plaintext,
+    # verified_pro → full GFM). The composer can opt *down* from that
+    # ceiling by passing `markdown: false` (e.g. a pro user posting
+    # plain-text). We never let the client opt *up* past their tier.
+    tier_level = limits[:markdown] || "basic"
+
+    markdown_level =
+      case Map.get(attrs, "markdown") do
+        false -> "none"
+        "false" -> "none"
+        0 -> "none"
+        _ -> tier_level
+      end
 
     content_html =
       case attrs["content"] do

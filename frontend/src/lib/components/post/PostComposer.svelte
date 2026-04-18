@@ -32,6 +32,12 @@
   let maxMedia = $derived($currentUser?.limits?.media_per_post ?? 4);
   let maxPollOptions = $derived($currentUser?.limits?.poll_options ?? 4);
   let canSchedule = $derived($currentUser?.limits?.scheduled_posts ?? false);
+  // Markdown is tier-gated. Only expose the toggle when the user's
+  // tier actually allows something beyond plaintext — otherwise the
+  // button would be a no-op. Default to on; server caps at tier level.
+  let markdownLevel = $derived(($currentUser?.limits as any)?.markdown ?? 'basic');
+  let canMarkdown = $derived(markdownLevel && markdownLevel !== 'none');
+  let markdownEnabled = $state(true);
   let textareaEl: HTMLTextAreaElement | undefined = $state();
   let fileInputEl: HTMLInputElement | undefined = $state();
 
@@ -597,6 +603,11 @@
         content,
         visibility,
       };
+      if (canMarkdown && !markdownEnabled) {
+        // Explicit opt-down to plaintext for this post, even though
+        // the tier allows GFM. Backend honors this as "markdown: none".
+        body.markdown = false;
+      }
       if (showCW && spoilerText) {
         body.spoiler_text = spoilerText;
         body.sensitive = true;
@@ -1078,6 +1089,24 @@
             <EmojiPicker onselect={insertEmoji} />
           {/if}
         </div>
+
+        {#if canMarkdown}
+          <!-- Markdown toggle. Tier-gated — free-tier users never
+               see this because their posts are plaintext by server
+               policy anyway. When off, the post is stored and
+               rendered as plain text regardless of whether the
+               source contains ** or # characters. -->
+          <button
+            type="button"
+            class="tool-btn tool-btn-text"
+            class:tool-active={markdownEnabled}
+            onclick={() => (markdownEnabled = !markdownEnabled)}
+            aria-pressed={markdownEnabled}
+            title={markdownEnabled ? 'Markdown on — click to post as plain text' : 'Markdown off — click to enable'}
+          >
+            MD
+          </button>
+        {/if}
 
         <!-- Visibility selector -->
         <select
