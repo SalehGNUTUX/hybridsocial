@@ -165,6 +165,45 @@ defmodule Hybridsocial.Admin.Backup do
   end
 
   @doc """
+  Deletes a single backup: the encrypted file on disk (if it still
+  exists) AND the backup_jobs row. Returns `{:ok, :deleted}` on
+  success or `{:error, :not_found}` if the id doesn't exist.
+  """
+  # sobelow_skip ["Traversal.FileModule"]
+  def delete_backup(backup_id) do
+    case get_backup(backup_id) do
+      nil ->
+        {:error, :not_found}
+
+      %BackupJob{file_path: file_path} = job ->
+        # Best-effort file removal — a missing file doesn't block
+        # the DB row delete, since the whole point is to clean up.
+        if is_binary(file_path), do: _ = File.rm(file_path)
+        Repo.delete!(job)
+        {:ok, :deleted}
+    end
+  end
+
+  @doc """
+  Deletes every backup older than `retention_days` days. Runs
+  from the BackupExpiryWorker; also safe to call manually. Returns
+  the number of backups removed.
+  """
+  def prune_expired(retention_days) when is_integer(retention_days) and retention_days > 0 do
+    cutoff = DateTime.add(DateTime.utc_now(), -retention_days * 86_400, :second)
+
+    BackupJob
+    |> where([b], b.inserted_at < ^cutoff)
+    |> Repo.all()
+    |> Enum.reduce(0, fn job, acc ->
+      case delete_backup(job.id) do
+        {:ok, :deleted} -> acc + 1
+        _ -> acc
+      end
+    end)
+  end
+
+  @doc """
   Gets a single backup job by ID.
   """
   def get_backup(id) do

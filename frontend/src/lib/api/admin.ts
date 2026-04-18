@@ -213,6 +213,10 @@ export function restoreBackup(id: string, passphrase: string, confirmation: stri
   return api.post(`/api/v1/admin/backups/${id}/restore`, { passphrase, confirmation });
 }
 
+export function deleteBackup(id: string): Promise<{ status: string }> {
+  return api.delete(`/api/v1/admin/backups/${id}`);
+}
+
 // Audit Log
 export function getAuditLog(params?: Record<string, string>): Promise<PaginatedResponse<AuditLogEntry>> {
   return api.get('/api/v1/admin/audit_log', params);

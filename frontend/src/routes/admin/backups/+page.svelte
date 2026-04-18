@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast.js';
-  import { getBackups, createBackup, backupDownloadUrl, restoreBackup } from '$lib/api/admin.js';
+  import { getBackups, createBackup, backupDownloadUrl, restoreBackup, deleteBackup } from '$lib/api/admin.js';
   import type { Backup } from '$lib/api/types.js';
   import Modal from '$lib/components/ui/Modal.svelte';
 
@@ -60,6 +60,17 @@
     restorePassphrase = '';
     restoreConfirmation = '';
     restoreModalOpen = true;
+  }
+
+  async function handleDelete(backup: Backup) {
+    if (!confirm(`Delete this backup permanently? The encrypted file and its record will be removed.`)) return;
+    try {
+      await deleteBackup(backup.id);
+      backups = backups.filter((b) => b.id !== backup.id);
+      addToast('Backup deleted', 'success');
+    } catch {
+      addToast('Failed to delete backup', 'error');
+    }
   }
 
   async function handleRestore() {
@@ -123,7 +134,10 @@
 
   <section class="card create-section">
     <h2 class="section-title">Create Backup</h2>
-    <p class="section-desc">Create an encrypted backup of your instance data.</p>
+    <p class="section-desc">
+      Create an encrypted backup of your instance data.
+      Backups are retained for <strong>30 days</strong> — older files are pruned automatically by the backup expiry worker.
+    </p>
     <form class="create-form" onsubmit={(e) => { e.preventDefault(); handleCreate(); }}>
       <div class="passphrase-field">
         <label for="passphrase" class="field-label">Encryption Passphrase (optional)</label>
@@ -186,6 +200,9 @@
               {:else if backup.status === 'failed'}
                 <span class="text-danger" style="font-size: var(--text-xs)">Failed</span>
               {/if}
+              <button class="btn btn-sm btn-ghost btn-danger-text" type="button" onclick={() => handleDelete(backup)}>
+                Delete
+              </button>
             </div>
           </div>
         {/each}

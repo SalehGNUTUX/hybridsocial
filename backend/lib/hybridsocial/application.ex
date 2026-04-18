@@ -43,7 +43,9 @@ defmodule Hybridsocial.Application do
             # Story expiry (hard-deletes expired ephemeral stories)
             Hybridsocial.Social.StoryExpiryWorker,
             # Media proxy cache TTL + LRU eviction
-            Hybridsocial.Media.MediaProxyCacheWorker
+            Hybridsocial.Media.MediaProxyCacheWorker,
+            # Prunes encrypted backups older than backup_retention_days (default 30)
+            Hybridsocial.Admin.BackupExpiryWorker
           ],
           else: []
         ) ++

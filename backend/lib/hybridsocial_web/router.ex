@@ -737,6 +737,7 @@ defmodule HybridsocialWeb.Router do
     get "/backups/:id", Admin.BackupController, :show
     get "/backups/:id/download", Admin.BackupController, :download
     post "/backups/:id/restore", Admin.BackupController, :restore
+    delete "/backups/:id", Admin.BackupController, :delete
 
     # Roles & Permissions
     get "/roles", Admin.RolesController, :index

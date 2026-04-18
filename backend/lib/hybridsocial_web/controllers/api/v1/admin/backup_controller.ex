@@ -175,6 +175,20 @@ defmodule HybridsocialWeb.Api.V1.Admin.BackupController do
     end
   end
 
+  def delete(conn, %{"id" => id}) do
+    with :ok <- require_permission(conn, "backups.create") do
+      case Backup.delete_backup(id) do
+        {:ok, :deleted} ->
+          json(conn, %{status: "ok"})
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "backup.not_found"})
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   defp serialize_backup(backup_job) do
     %{
       id: backup_job.id,
