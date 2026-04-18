@@ -4,23 +4,62 @@ defmodule Hybridsocial.Federation.Relays do
   Relays broadcast content to and from other instances.
   """
   import Ecto.Query
+  require Logger
 
   alias Hybridsocial.Repo
   alias Hybridsocial.Federation.Relay
 
   @doc """
-  Subscribes to a relay by sending an AP Follow to the relay inbox.
-  Creates a relay record with status "pending".
+  Subscribes to a relay by sending an AP `Follow { object: Public }`
+  to the relay's inbox. Signed with the instance actor's key (relays
+  follow the server, not a user).
+
+  The relay will reply with an Accept activity landing on our inbox;
+  `accept_relay/1` upgrades the row status to "accepted" at that
+  point. Until then status stays "pending" and no fan-out happens.
   """
   def subscribe_to_relay(inbox_url, _admin_id) do
-    %Relay{}
-    |> Relay.changeset(%{inbox_url: inbox_url, status: "pending"})
-    |> Repo.insert()
+    alias Hybridsocial.Federation.Publisher
+
+    with {:ok, relay} <-
+           %Relay{}
+           |> Relay.changeset(%{inbox_url: inbox_url, status: "pending"})
+           |> Repo.insert() do
+      activity = build_relay_follow(relay.id)
+
+      # Fire the Follow async so the admin doesn't wait on a remote
+      # relay's response. Delivery errors flip status back to "failed"
+      # so the UI can show what happened.
+      Task.start(fn ->
+        case Publisher.deliver_as_instance(activity, inbox_url) do
+          {:ok, _status} ->
+            Logger.info("Relay Follow sent to #{inbox_url}")
+            # Stash the Follow activity so we can build a matching
+            # Undo later without regenerating the id.
+            relay
+            |> Relay.changeset(%{follow_activity_id: activity["id"]})
+            |> Repo.update()
+
+          {:error, reason} ->
+            Logger.warning("Relay Follow to #{inbox_url} failed: #{inspect(reason)}")
+
+            Repo.get(Relay, relay.id)
+            |> case do
+              nil -> :ok
+              r -> r |> Relay.changeset(%{status: "failed", last_error: inspect(reason)}) |> Repo.update()
+            end
+        end
+      end)
+
+      {:ok, relay}
+    end
   end
 
   @doc """
-  Unsubscribes from a relay. Soft-deletes the relay record.
-  In production, would also send an Undo{Follow} to the relay inbox.
+  Unsubscribes from a relay. Sends `Undo { Follow }` first, then
+  deletes the DB row. Missing instance keys or network errors are
+  logged but don't prevent the row delete — the admin asked to
+  leave, we leave locally regardless.
   """
   def unsubscribe_from_relay(relay_id, _admin_id) do
     case Repo.get(Relay, relay_id) do
@@ -28,8 +67,74 @@ defmodule Hybridsocial.Federation.Relays do
         {:error, :not_found}
 
       relay ->
+        send_undo(relay)
         Repo.delete(relay)
     end
+  end
+
+  defp send_undo(%Relay{inbox_url: inbox_url, follow_activity_id: follow_id}) do
+    alias Hybridsocial.Federation.InstanceActor
+    alias Hybridsocial.Federation.Publisher
+
+    follow =
+      case follow_id do
+        id when is_binary(id) and id != "" ->
+          %{
+            "id" => id,
+            "type" => "Follow",
+            "actor" => InstanceActor.ap_id(),
+            "object" => "https://www.w3.org/ns/activitystreams#Public",
+            "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+          }
+
+        _ ->
+          # Subscribed before follow_activity_id was tracked. Rebuild
+          # a plausible Follow shape — relays typically match on
+          # actor + object, not the id, when processing Undos.
+          build_relay_follow_body()
+      end
+
+    undo = %{
+      "@context" => "https://www.w3.org/ns/activitystreams",
+      "id" => "#{InstanceActor.ap_id()}/undo/#{Ecto.UUID.generate()}",
+      "type" => "Undo",
+      "actor" => InstanceActor.ap_id(),
+      "object" => follow
+    }
+
+    Task.start(fn ->
+      case Publisher.deliver_as_instance(undo, inbox_url) do
+        {:ok, _} -> Logger.info("Relay Undo{Follow} sent to #{inbox_url}")
+        {:error, r} -> Logger.warning("Relay Undo to #{inbox_url} failed: #{inspect(r)}")
+      end
+    end)
+
+    :ok
+  end
+
+  defp build_relay_follow(relay_row_id) do
+    alias Hybridsocial.Federation.InstanceActor
+
+    base = HybridsocialWeb.Endpoint.url()
+
+    %{
+      "@context" => "https://www.w3.org/ns/activitystreams",
+      "id" => "#{base}/activities/relay-follow-#{relay_row_id}",
+      "type" => "Follow",
+      "actor" => InstanceActor.ap_id(),
+      "object" => "https://www.w3.org/ns/activitystreams#Public",
+      "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+    }
+  end
+
+  defp build_relay_follow_body do
+    alias Hybridsocial.Federation.InstanceActor
+
+    %{
+      "type" => "Follow",
+      "actor" => InstanceActor.ap_id(),
+      "object" => "https://www.w3.org/ns/activitystreams#Public"
+    }
   end
 
   @doc """

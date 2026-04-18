@@ -2426,6 +2426,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       id: relay.id,
       inbox_url: relay.inbox_url,
       status: relay.status,
+      last_error: relay.last_error,
       created_at: relay.inserted_at
     }
   end

@@ -47,28 +47,46 @@ defmodule Hybridsocial.Federation.Publisher do
     all_targets =
       List.wrap(activity["to"]) ++ List.wrap(activity["cc"])
 
-    all_targets
-    |> Enum.flat_map(fn target ->
-      cond do
-        target == "https://www.w3.org/ns/activitystreams#Public" ->
-          # Public addressing: deliver to all followers' inboxes
-          get_follower_inboxes(identity.id)
+    is_public = Enum.any?(all_targets, &(&1 == "https://www.w3.org/ns/activitystreams#Public"))
 
-        followers_collection?(target, identity) ->
-          # Followers collection: deliver to followers' inboxes
-          get_follower_inboxes(identity.id)
+    base =
+      all_targets
+      |> Enum.flat_map(fn target ->
+        cond do
+          target == "https://www.w3.org/ns/activitystreams#Public" ->
+            # Public addressing: deliver to all followers' inboxes
+            get_follower_inboxes(identity.id)
 
-        true ->
-          # Direct actor reference: fetch their inbox
-          case get_actor_inbox(target) do
-            nil -> []
-            inbox -> [inbox]
-          end
-      end
-    end)
+          followers_collection?(target, identity) ->
+            # Followers collection: deliver to followers' inboxes
+            get_follower_inboxes(identity.id)
+
+          true ->
+            # Direct actor reference: fetch their inbox
+            case get_actor_inbox(target) do
+              nil -> []
+              inbox -> [inbox]
+            end
+        end
+      end)
+
+    # Fan out every public activity (Create, Announce, etc.) to every
+    # accepted relay too. Relays re-broadcast public posts to other
+    # subscribing instances, which is the whole point of relays for
+    # small/new servers that have no direct followers yet.
+    with_relays = if is_public, do: base ++ accepted_relay_inboxes(), else: base
+
+    with_relays
     |> Enum.uniq()
     |> Enum.reject(&local_url?/1)
     |> batch_by_shared_inbox()
+  end
+
+  defp accepted_relay_inboxes do
+    import Ecto.Query
+    alias Hybridsocial.Federation.Relay
+
+    Repo.all(from r in Relay, where: r.status == "accepted", select: r.inbox_url)
   end
 
   @doc """
@@ -84,6 +102,51 @@ defmodule Hybridsocial.Federation.Publisher do
           HTTPSignature.sign(
             %{url: inbox_url, method: "POST", body: body},
             identity.private_key,
+            key_id
+          )
+
+        [
+          {"Content-Type", @content_type},
+          {"Accept", @content_type}
+          | Enum.map(sig_headers, fn {k, v} -> {k, v} end)
+        ]
+      else
+        [
+          {"Content-Type", @content_type},
+          {"Accept", @content_type}
+        ]
+      end
+
+    case HTTPoison.post(inbox_url, body, headers, recv_timeout: 15_000, timeout: 15_000) do
+      {:ok, %{status_code: status}} when status in 200..299 ->
+        {:ok, status}
+
+      {:ok, %{status_code: status, body: resp_body}} ->
+        {:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}
+
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, "Connection error: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Delivers an activity signed with the instance actor's key (rather
+  than a user identity's). Used for relay Follow/Undo activities,
+  where the "actor" in the activity is the instance itself, not an
+  individual user.
+  """
+  def deliver_as_instance(activity, inbox_url) do
+    alias Hybridsocial.Federation.InstanceActor
+
+    body = Jason.encode!(activity)
+    key_id = "#{InstanceActor.ap_id()}#main-key"
+
+    headers =
+      if InstanceActor.keys_configured?() do
+        sig_headers =
+          HTTPSignature.sign(
+            %{url: inbox_url, method: "POST", body: body},
+            InstanceActor.private_key(),
             key_id
           )
 

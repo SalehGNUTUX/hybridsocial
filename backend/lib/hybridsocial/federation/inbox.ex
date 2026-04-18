@@ -204,13 +204,32 @@ defmodule Hybridsocial.Federation.Inbox do
        when is_binary(actor_ap_id) do
     follow_object = normalize_object(object)
 
-    with {:ok, remote_identity} <- resolve_remote_identity(actor_ap_id),
-         {:ok, follow} <- find_pending_follow(follow_object, remote_identity.id) do
-      Social.accept_follow(follow.id)
+    # Relays reply to our instance-level Follow with an Accept whose
+    # inner object is the Follow { actor: <us>, object: Public } we
+    # sent. Detect that shape and upgrade the relays row instead of
+    # trying to match against the user-follow table.
+    if relay_follow?(follow_object) do
+      case URI.parse(actor_ap_id) do
+        %URI{host: host} when is_binary(host) and host != "" ->
+          Hybridsocial.Federation.Relays.accept_relay(host)
+
+        _ ->
+          {:error, :invalid_relay_accept}
+      end
+    else
+      with {:ok, remote_identity} <- resolve_remote_identity(actor_ap_id),
+           {:ok, follow} <- find_pending_follow(follow_object, remote_identity.id) do
+        Social.accept_follow(follow.id)
+      end
     end
   end
 
   defp handle_accept(_), do: {:error, :invalid_accept_activity}
+
+  defp relay_follow?(%{"type" => "Follow", "object" => "https://www.w3.org/ns/activitystreams#Public"}),
+    do: true
+
+  defp relay_follow?(_), do: false
 
   # --- Reject ---
   # A remote actor rejected our follow request.
