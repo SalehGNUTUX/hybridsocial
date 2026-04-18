@@ -7,10 +7,12 @@ defmodule HybridsocialWeb.Api.V1.InstanceController do
 
   def info(conn, _params) do
     turnstile_key = Hybridsocial.Config.Store.get("turnstile_site_key", "")
+    reg_mode = Hybridsocial.Config.get("registration_mode", "open")
 
     json(conn, %{
       turnstile_enabled: turnstile_key != "",
-      turnstile_site_key: turnstile_key
+      turnstile_site_key: turnstile_key,
+      registration_mode: reg_mode
     })
   end
 

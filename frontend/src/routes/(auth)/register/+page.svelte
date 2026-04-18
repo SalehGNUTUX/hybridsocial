@@ -33,6 +33,12 @@
   let turnstileEnabled = $state(false);
   let turnstileContainer: HTMLDivElement | undefined = $state();
 
+  // Registration mode (open | invite_only | approval | closed). The
+  // public info endpoint reports it; we gate the form accordingly so
+  // users don't fill in a form that the backend will reject.
+  type RegMode = 'open' | 'invite_only' | 'approval' | 'closed';
+  let registrationMode = $state<RegMode>('open');
+
   // Tier plans
   interface TierLimits {
     char_limit: number;
@@ -89,7 +95,8 @@
     password.length >= 16 &&
     password === passwordConfirm &&
     agreedToTerms &&
-    !powSolving
+    !powSolving &&
+    (registrationMode !== 'invite_only' || inviteCode.trim().length > 0)
   );
 
   onMount(() => {
@@ -123,11 +130,16 @@
 
   async function checkTurnstile() {
     try {
-      const info = await api.get<{ turnstile_enabled?: boolean; turnstile_site_key?: string }>('/api/v1/instance/info');
+      const info = await api.get<{
+        turnstile_enabled?: boolean;
+        turnstile_site_key?: string;
+        registration_mode?: RegMode;
+      }>('/api/v1/instance/info');
       if (info.turnstile_enabled && info.turnstile_site_key) {
         turnstileEnabled = true;
         loadTurnstileScript(info.turnstile_site_key);
       }
+      if (info.registration_mode) registrationMode = info.registration_mode;
     } catch { /* */ }
   }
 
@@ -247,14 +259,58 @@
       <h1 class="auth-title">Create your account</h1>
       <p class="auth-subtitle">Join the conversation</p>
 
-      {#if error}
-        <div class="auth-error" role="alert">
-          <span class="auth-error-icon" aria-hidden="true">!</span>
-          {error}
+      {#if registrationMode === 'closed'}
+        <div class="reg-notice reg-notice-closed" role="status">
+          <svg class="reg-notice-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <div>
+            <h2 class="reg-notice-title">Registrations are closed</h2>
+            <p class="reg-notice-text">
+              This instance isn't accepting new sign-ups right now. Existing accounts are unaffected —
+              you can still <a href="/login">log in</a>.
+            </p>
+          </div>
         </div>
-      {/if}
+      {:else}
+        {#if registrationMode === 'invite_only'}
+          <div class="reg-notice reg-notice-info" role="status">
+            <svg class="reg-notice-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <div>
+              <h2 class="reg-notice-title">Invite required</h2>
+              <p class="reg-notice-text">
+                This instance is invite-only. You'll need a code from an existing member to sign up.
+              </p>
+            </div>
+          </div>
+        {:else if registrationMode === 'approval'}
+          <div class="reg-notice reg-notice-info" role="status">
+            <svg class="reg-notice-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <div>
+              <h2 class="reg-notice-title">Admin approval required</h2>
+              <p class="reg-notice-text">
+                You can apply now, but your account stays pending until an admin reviews it.
+                You'll get an email when it's approved.
+              </p>
+            </div>
+          </div>
+        {/if}
 
-      <form onsubmit={handleSubmit} novalidate>
+        {#if error}
+          <div class="auth-error" role="alert">
+            <span class="auth-error-icon" aria-hidden="true">!</span>
+            {error}
+          </div>
+        {/if}
+
+        <form onsubmit={handleSubmit} novalidate>
         <div class="auth-field">
           <label for="handle" class="auth-label">HANDLE</label>
           <div class="auth-handle-wrap">
@@ -270,15 +326,19 @@
 
         <div class="auth-field">
           <label for="reg-invite" class="auth-label">
-            INVITE CODE <span class="auth-label-optional">(optional)</span>
+            INVITE CODE
+            {#if registrationMode !== 'invite_only'}
+              <span class="auth-label-optional">(optional)</span>
+            {/if}
           </label>
           <input
             id="reg-invite"
             type="text"
             class="auth-input"
             class:auth-input-error={!!fieldErrors.invite_code}
-            placeholder="If an admin gave you an invite code, enter it here"
+            placeholder={registrationMode === 'invite_only' ? 'Required — ask an admin for a code' : 'If an admin gave you an invite code, enter it here'}
             bind:value={inviteCode}
+            required={registrationMode === 'invite_only'}
             disabled={loading}
             autocomplete="off"
           />
@@ -347,6 +407,7 @@
           {/if}
         </button>
       </form>
+      {/if}
 
       <p class="auth-footer">
         Already have an account? <a href="/login" class="auth-footer-link">Log in</a>
@@ -498,6 +559,51 @@
   .auth-success-icon { display: flex; justify-content: center; margin-block-end: 16px; color: #16a34a; }
 
   .auth-error { display: flex; align-items: center; gap: 8px; padding: 12px 16px; margin-block-end: 16px; background: #fef2f2; border-radius: 10px; color: #dc2626; font-size: 0.875rem; }
+
+  .reg-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    margin-block-end: 18px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .reg-notice-icon {
+    flex-shrink: 0;
+    margin-block-start: 2px;
+  }
+
+  .reg-notice-title {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .reg-notice-text {
+    margin: 0;
+    color: var(--color-text-secondary);
+  }
+
+  .reg-notice-text a {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .reg-notice-closed {
+    background: var(--color-danger-soft, #fef2f2);
+    border-color: rgba(220, 38, 38, 0.25);
+    color: #991b1b;
+  }
+
+  .reg-notice-info {
+    background: var(--color-secondary-container, #eef2ff);
+    border-color: rgba(99, 102, 241, 0.25);
+    color: var(--color-primary);
+  }
   .auth-error-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #dc2626; color: white; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
 
   .auth-field { margin-block-end: 16px; }
