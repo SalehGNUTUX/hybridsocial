@@ -133,6 +133,20 @@ defmodule HybridsocialWeb.Api.V1.Admin.RolesController do
 
   # ── User Role Assignment ──────────────────────────────────────────
 
+  def user_roles(conn, %{"user_id" => user_id}) do
+    with :ok <- require_permission(conn, "roles.view") do
+      identity_roles = RBAC.get_identity_roles(user_id)
+
+      conn
+      |> put_status(:ok)
+      |> json(%{
+        data: Enum.map(identity_roles, &serialize_user_role/1)
+      })
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   def assign_role(conn, %{"user_id" => user_id, "role_id" => role_id} = params) do
     with :ok <- require_permission(conn, "roles.manage") do
       granted_by = conn.assigns.current_identity.id
@@ -236,6 +250,20 @@ defmodule HybridsocialWeb.Api.V1.Admin.RolesController do
       identity_id: identity_role.identity_id,
       role_id: identity_role.role_id,
       granted_by: identity_role.granted_by,
+      granted_at: identity_role.granted_at,
+      expires_at: identity_role.expires_at
+    }
+  end
+
+  # `get_identity_roles/1` preloads :role, so we can flatten the pairing
+  # into one shape the UI can render without a second lookup.
+  defp serialize_user_role(identity_role) do
+    %{
+      id: identity_role.id,
+      role_id: identity_role.role_id,
+      role_name: identity_role.role.name,
+      role_description: identity_role.role.description,
+      is_system: identity_role.role.is_system,
       granted_at: identity_role.granted_at,
       expires_at: identity_role.expires_at
     }

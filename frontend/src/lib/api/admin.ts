@@ -25,8 +25,21 @@ import type {
   InviteCode,
   EmailDomainBan,
   MediaHashBan,
-  InstancePurgePreview
+  InstancePurgePreview,
+  AdminRole
 } from './types.js';
+
+// Role summary attached to an identity. Each `id` is the identity_role
+// row id (not the role id) — that's what DELETE .../roles/:id expects.
+export interface UserRoleAssignment {
+  id: string;
+  role_id: string;
+  role_name: string;
+  role_description: string | null;
+  is_system: boolean;
+  granted_at: string;
+  expires_at: string | null;
+}
 
 // Dashboard
 export function getDashboardStats(): Promise<AdminDashboardStats> {
@@ -501,4 +514,35 @@ export function revokeAllSessions(id: string): Promise<void> {
 
 export function setTrustLevel(id: string, level: number): Promise<AdminUser> {
   return api.post(`/api/v1/admin/users/${id}/trust_level`, { level });
+}
+
+// Roles — catalog + per-user assignments.
+export function getRoles(): Promise<AdminRole[]> {
+  return api.get<{ data: AdminRole[] }>('/api/v1/admin/roles').then((r) => r.data || []);
+}
+
+export function getUserRoles(userId: string): Promise<UserRoleAssignment[]> {
+  return api
+    .get<{ data: UserRoleAssignment[] }>(`/api/v1/admin/users/${userId}/roles`)
+    .then((r) => r.data || []);
+}
+
+export function assignUserRole(
+  userId: string,
+  roleId: string,
+  expiresAt?: string
+): Promise<UserRoleAssignment> {
+  const body: { role_id: string; expires_at?: string } = { role_id: roleId };
+  if (expiresAt) body.expires_at = expiresAt;
+
+  return api
+    .post<{ data: UserRoleAssignment }>(`/api/v1/admin/users/${userId}/roles`, body)
+    .then((r) => r.data);
+}
+
+// `identityRoleId` is the id of the assignment row (from getUserRoles),
+// not the role's own id — the backend route's `:role_id` path param is
+// a legacy name.
+export function revokeUserRole(userId: string, identityRoleId: string): Promise<void> {
+  return api.delete(`/api/v1/admin/users/${userId}/roles/${identityRoleId}`);
 }

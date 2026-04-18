@@ -8,9 +8,11 @@
     silenceUser, unsilenceUser, shadowBanUser, unshadowBanUser,
     forceSensitiveUser, unforceSensitiveUser, revokeAllSessions,
     setTrustLevel, getModerationNotes, createModerationNote, deleteModerationNote,
-    resetUserPassword, sendUserPasswordResetEmail, disableUserTwoFactor, changeUserEmail
+    resetUserPassword, sendUserPasswordResetEmail, disableUserTwoFactor, changeUserEmail,
+    getRoles, getUserRoles, assignUserRole, revokeUserRole,
+    type UserRoleAssignment
   } from '$lib/api/admin.js';
-  import type { AdminUser, ModerationNote } from '$lib/api/types.js';
+  import type { AdminUser, ModerationNote, AdminRole } from '$lib/api/types.js';
 
   let users: AdminUser[] = $state([]);
   let loading = $state(true);
@@ -56,6 +58,14 @@
   let passwordTarget: AdminUser | null = $state(null);
   let generatedPassword = $state('');
   let passwordSubmitting = $state(false);
+
+  // Manage roles modal
+  let rolesModalOpen = $state(false);
+  let rolesTarget: AdminUser | null = $state(null);
+  let allRoles: AdminRole[] = $state([]);
+  let userRoleAssignments: UserRoleAssignment[] = $state([]);
+  let rolesLoading = $state(false);
+  let rolesBusyRoleId: string | null = $state(null);
 
   // Actions dropdown
   let openDropdownId: string | null = $state(null);
@@ -374,6 +384,55 @@
     }
   }
 
+  async function openRolesModal(user: AdminUser) {
+    rolesTarget = user;
+    rolesModalOpen = true;
+    openDropdownId = null;
+    rolesLoading = true;
+    try {
+      const [roles, assignments] = await Promise.all([
+        getRoles(),
+        getUserRoles(user.id)
+      ]);
+      allRoles = roles;
+      userRoleAssignments = assignments;
+    } catch {
+      addToast('Failed to load roles', 'error');
+    } finally {
+      rolesLoading = false;
+    }
+  }
+
+  function assignmentForRole(roleId: string): UserRoleAssignment | undefined {
+    return userRoleAssignments.find((a) => a.role_id === roleId);
+  }
+
+  async function handleToggleRole(role: AdminRole) {
+    if (!rolesTarget) return;
+    const existing = assignmentForRole(role.id);
+    rolesBusyRoleId = role.id;
+    try {
+      if (existing) {
+        await revokeUserRole(rolesTarget.id, existing.id);
+        userRoleAssignments = userRoleAssignments.filter((a) => a.id !== existing.id);
+        addToast(`Removed ${role.name}`, 'success');
+      } else {
+        const assignment = await assignUserRole(rolesTarget.id, role.id);
+        userRoleAssignments = [...userRoleAssignments, assignment];
+        addToast(`Assigned ${role.name}`, 'success');
+      }
+    } catch (err: unknown) {
+      const e = err as { body?: { error?: string; required?: string } };
+      if (e?.body?.error === 'permission.denied') {
+        addToast(`Need "${e.body.required}" permission to change roles`, 'error');
+      } else {
+        addToast('Failed to update role', 'error');
+      }
+    } finally {
+      rolesBusyRoleId = null;
+    }
+  }
+
   async function handleAddNote() {
     if (!notesTarget || !newNote.trim()) return;
     try {
@@ -589,6 +648,9 @@
                 <button class="dropdown-item" type="button" onclick={() => openTrustModal(row as unknown as AdminUser)}>
                   Set Trust Level
                 </button>
+                <button class="dropdown-item" type="button" onclick={() => openRolesModal(row as unknown as AdminUser)}>
+                  Manage Roles
+                </button>
                 {#if row['is_local'] && row['email']}
                   <!-- Account-management actions only apply to local
                        identities that have a User row attached (i.e.
@@ -787,6 +849,59 @@
         {/each}
       </div>
     {/if}
+  {/if}
+</Modal>
+
+<Modal bind:open={rolesModalOpen} title="Manage Roles">
+  {#if rolesTarget}
+    <p class="modal-text">
+      Grant or revoke roles for <strong>@{rolesTarget.handle}</strong>.
+      Role permissions are additive — a user gets every permission from every role they hold.
+    </p>
+    {#if rolesLoading}
+      <div class="skeleton" style="height: 60px"></div>
+      <div class="skeleton" style="height: 60px; margin-block-start: 8px"></div>
+    {:else if allRoles.length === 0}
+      <p class="empty-text">No roles defined.</p>
+    {:else}
+      <ul class="roles-list">
+        {#each allRoles as role (role.id)}
+          {@const assigned = assignmentForRole(role.id)}
+          <li class="role-row" class:role-assigned={!!assigned}>
+            <div class="role-info">
+              <div class="role-name-row">
+                <span class="role-name">{role.name}</span>
+                {#if role.is_system}
+                  <span class="role-system-badge">system</span>
+                {/if}
+              </div>
+              {#if role.description}
+                <div class="role-description">{role.description}</div>
+              {/if}
+              <div class="role-permissions-summary">
+                {role.permissions.length} {role.permissions.length === 1 ? 'permission' : 'permissions'}
+              </div>
+              {#if assigned}
+                <div class="role-granted">
+                  Granted {new Date(assigned.granted_at).toLocaleDateString()}
+                </div>
+              {/if}
+            </div>
+            <button
+              class="btn btn-sm {assigned ? 'btn-danger' : 'btn-primary'}"
+              type="button"
+              disabled={rolesBusyRoleId === role.id}
+              onclick={() => handleToggleRole(role)}
+            >
+              {rolesBusyRoleId === role.id ? '...' : (assigned ? 'Revoke' : 'Assign')}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" onclick={() => (rolesModalOpen = false)}>Close</button>
+    </div>
   {/if}
 </Modal>
 
@@ -1168,6 +1283,83 @@
     padding: 1px 6px;
     border-radius: 4px;
     width: fit-content;
+    margin-block-start: 2px;
+  }
+
+  /* Manage Roles modal */
+  .roles-list {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-3) 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  .role-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+  }
+
+  .role-row.role-assigned {
+    border-color: var(--color-primary);
+    background: var(--color-secondary-container);
+  }
+
+  .role-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .role-name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .role-name {
+    font-weight: 600;
+    font-size: var(--text-sm);
+    text-transform: capitalize;
+  }
+
+  .role-system-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+    background: var(--color-surface);
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+  }
+
+  .role-description {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+  }
+
+  .role-permissions-summary {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    margin-block-start: 2px;
+  }
+
+  .role-granted {
+    font-size: var(--text-xs);
+    color: var(--color-primary);
     margin-block-start: 2px;
   }
 </style>

@@ -751,6 +751,7 @@ defmodule HybridsocialWeb.Router do
     get "/permissions", Admin.RolesController, :list_all_permissions
 
     # User role assignment
+    get "/users/:user_id/roles", Admin.RolesController, :user_roles
     post "/users/:user_id/roles", Admin.RolesController, :assign_role
     delete "/users/:user_id/roles/:role_id", Admin.RolesController, :revoke_role
 

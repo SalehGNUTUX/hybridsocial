@@ -2,8 +2,23 @@
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast.js';
   import Modal from '$lib/components/ui/Modal.svelte';
-  import { getInvites, createInvite, deleteInvite } from '$lib/api/admin.js';
+  import { getInvites, createInvite, deleteInvite, getAdminSettings, updateAdminSettings } from '$lib/api/admin.js';
   import type { InviteCode } from '$lib/api/types.js';
+
+  // Registration mode is a config-backed setting: open | invite_only |
+  // approval | closed. Lives on this page because invite_only is the
+  // only mode where the codes below are mandatory — putting the toggle
+  // anywhere else leaves admins hunting for it.
+  type RegMode = 'open' | 'invite_only' | 'approval' | 'closed';
+  const REG_MODES: { value: RegMode; label: string; hint: string }[] = [
+    { value: 'open',        label: 'Open',        hint: 'Anyone can register without an invite.' },
+    { value: 'invite_only', label: 'Invite only', hint: 'New users must supply a valid invite code.' },
+    { value: 'approval',    label: 'Approval',    hint: 'Anyone can apply; accounts are disabled until an admin approves.' },
+    { value: 'closed',      label: 'Closed',      hint: 'No new sign-ups. Existing users unaffected.' }
+  ];
+  let registrationMode = $state<RegMode>('open');
+  let regModeLoading = $state(true);
+  let regModeSaving = $state(false);
 
   let invites: InviteCode[] = $state([]);
   let loading = $state(true);
@@ -19,8 +34,37 @@
   let deleteModalOpen = $state(false);
 
   onMount(async () => {
-    await loadInvites();
+    await Promise.all([loadInvites(), loadRegistrationMode()]);
   });
+
+  async function loadRegistrationMode() {
+    regModeLoading = true;
+    try {
+      const all = await getAdminSettings();
+      const setting = all.find((s) => s.key === 'registration_mode');
+      const v = (setting?.value ?? 'open') as RegMode;
+      if (REG_MODES.some((m) => m.value === v)) registrationMode = v;
+    } catch {
+      // Non-fatal: default to "open" so the UI still renders.
+    } finally {
+      regModeLoading = false;
+    }
+  }
+
+  async function saveRegistrationMode(next: RegMode) {
+    const previous = registrationMode;
+    registrationMode = next;
+    regModeSaving = true;
+    try {
+      await updateAdminSettings([{ key: 'registration_mode', value: next }]);
+      addToast('Registration mode updated', 'success');
+    } catch {
+      registrationMode = previous;
+      addToast('Failed to update registration mode', 'error');
+    } finally {
+      regModeSaving = false;
+    }
+  }
 
   async function loadInvites() {
     loading = true;
@@ -129,6 +173,35 @@
       Create Invite
     </button>
   </div>
+
+  <section class="reg-mode card">
+    <div class="reg-mode-head">
+      <h2 class="reg-mode-title">Registration</h2>
+      <p class="reg-mode-sub">Controls who can create new accounts on this instance.</p>
+    </div>
+    {#if regModeLoading}
+      <div class="skeleton" style="height: 44px; max-width: 280px;"></div>
+    {:else}
+      <div class="reg-mode-options">
+        {#each REG_MODES as mode (mode.value)}
+          <label class="reg-mode-option" class:selected={registrationMode === mode.value}>
+            <input
+              type="radio"
+              name="registration_mode"
+              value={mode.value}
+              checked={registrationMode === mode.value}
+              disabled={regModeSaving}
+              onchange={() => saveRegistrationMode(mode.value)}
+            />
+            <div class="reg-mode-option-body">
+              <span class="reg-mode-option-label">{mode.label}</span>
+              <span class="reg-mode-option-hint">{mode.hint}</span>
+            </div>
+          </label>
+        {/each}
+      </div>
+    {/if}
+  </section>
 
   {#if loading}
     <div class="loading-area">
@@ -340,5 +413,72 @@
     font-size: var(--text-sm);
     text-align: center;
     padding: var(--space-6) 0;
+  }
+
+  .reg-mode {
+    margin-block-end: var(--space-5);
+    padding: var(--space-5);
+  }
+
+  .reg-mode-head {
+    margin-block-end: var(--space-4);
+  }
+
+  .reg-mode-title {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    margin-block-end: var(--space-1);
+  }
+
+  .reg-mode-sub {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .reg-mode-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .reg-mode-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .reg-mode-option:hover {
+    background: var(--color-surface);
+  }
+
+  .reg-mode-option.selected {
+    border-color: var(--color-primary);
+    background: var(--color-secondary-container);
+  }
+
+  .reg-mode-option input[type="radio"] {
+    margin-block-start: 3px;
+  }
+
+  .reg-mode-option-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .reg-mode-option-label {
+    font-weight: 600;
+    font-size: var(--text-sm);
+  }
+
+  .reg-mode-option-hint {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
   }
 </style>
