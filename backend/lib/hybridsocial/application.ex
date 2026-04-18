@@ -45,7 +45,9 @@ defmodule Hybridsocial.Application do
             # Media proxy cache TTL + LRU eviction
             Hybridsocial.Media.MediaProxyCacheWorker,
             # Prunes encrypted backups older than backup_retention_days (default 30)
-            Hybridsocial.Admin.BackupExpiryWorker
+            Hybridsocial.Admin.BackupExpiryWorker,
+            # Prunes resolved/dismissed reports older than report_retention_days (default 90)
+            Hybridsocial.Moderation.ReportExpiryWorker
           ],
           else: []
         ) ++

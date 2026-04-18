@@ -46,6 +46,25 @@ defmodule Hybridsocial.Moderation do
     |> Repo.preload([:reporter, :reported])
   end
 
+  @doc """
+  Hard-deletes resolved + dismissed reports whose `resolved_at` is
+  older than `retention_days` days. Pending reports are never pruned
+  — they still need moderator action. Returns the number of rows
+  removed.
+  """
+  def prune_closed_reports(retention_days) when is_integer(retention_days) and retention_days > 0 do
+    cutoff = DateTime.add(DateTime.utc_now(), -retention_days * 86_400, :second)
+
+    {n, _} =
+      Report
+      |> where([r], r.status in ["resolved", "dismissed"])
+      |> where([r], not is_nil(r.resolved_at))
+      |> where([r], r.resolved_at < ^cutoff)
+      |> Repo.delete_all()
+
+    n
+  end
+
   defp filter_reports_by_status(query, nil), do: query
   defp filter_reports_by_status(query, status), do: where(query, [r], r.status == ^status)
 

@@ -284,6 +284,9 @@
           <option value="resolved">Resolved</option>
           <option value="dismissed">Dismissed</option>
         </select>
+        <span class="retention-note" aria-live="polite">
+          Resolved and dismissed reports are kept for 90 days, then deleted. Pending reports are never deleted automatically.
+        </span>
       </div>
 
       <DataTable
@@ -502,6 +505,10 @@
 
   .tab-toolbar {
     margin-block-end: var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
   }
 
   .report-category {
@@ -718,6 +725,13 @@
     color: #991b1b;
     background: var(--color-danger-soft);
     border-radius: var(--radius-sm);
+  }
+
+  .retention-note {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    line-height: 1.4;
+    max-width: 480px;
   }
 
   .report-account-link {
