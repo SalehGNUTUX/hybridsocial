@@ -320,24 +320,49 @@
 
   async function handleFileSelected(e: Event) {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+    const files = Array.from(input.files ?? []);
     input.value = '';
+    if (files.length === 0) return;
 
-    if (uploadedMedia.length >= maxMedia) {
+    const remaining = maxMedia - uploadedMedia.length;
+    if (remaining <= 0) {
       error = `Maximum ${maxMedia} media attachments allowed`;
       return;
     }
 
+    // Trim anything past the per-post cap; tell the user what we
+    // dropped instead of silently truncating.
+    const toUpload = files.slice(0, remaining);
+    const dropped = files.length - toUpload.length;
+
     mediaUploading = true;
     error = '';
+    let failures = 0;
+
     try {
-      const attachment = await uploadMedia(file);
-      uploadedMedia = [...uploadedMedia, attachment];
-    } catch {
-      error = 'Failed to upload media. Please try again.';
+      // Upload in parallel — each media goes through media.upload() +
+      // optional antivirus which can each be slow; waiting on them
+      // sequentially would frustrate anyone attaching 4 photos.
+      const results = await Promise.allSettled(toUpload.map((f) => uploadMedia(f)));
+
+      const succeeded: MediaAttachment[] = [];
+      for (const r of results) {
+        if (r.status === 'fulfilled') succeeded.push(r.value);
+        else failures += 1;
+      }
+
+      if (succeeded.length > 0) {
+        uploadedMedia = [...uploadedMedia, ...succeeded];
+      }
     } finally {
       mediaUploading = false;
+    }
+
+    if (failures > 0 || dropped > 0) {
+      const parts: string[] = [];
+      if (failures > 0) parts.push(`${failures} upload${failures === 1 ? '' : 's'} failed`);
+      if (dropped > 0) parts.push(`${dropped} skipped (max ${maxMedia})`);
+      error = parts.join(' · ');
     }
   }
 
@@ -990,6 +1015,7 @@
       bind:this={fileInputEl}
       type="file"
       accept="image/*,video/*"
+      multiple
       class="visually-hidden"
       onchange={handleFileSelected}
     />

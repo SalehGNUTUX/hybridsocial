@@ -11,6 +11,7 @@
   import VerifiedBadge from '$lib/components/ui/VerifiedBadge.svelte';
   import RoleBadge from '$lib/components/ui/RoleBadge.svelte';
   import ProfileHoverCard from '$lib/components/ui/ProfileHoverCard.svelte';
+  import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 
   // Seeded PRNG from post ID for deterministic wave patterns
   function seededRng(seed: string) {
@@ -113,6 +114,40 @@
     : mediaCount === 2 ? 'media-grid-2'
     : 'media-grid-4'
   );
+
+  // Image lightbox: populated by an image click in the media grid.
+  // Only images (not video/audio) open the lightbox — video has its
+  // own inline <video controls>.
+  let lightboxImages = $derived(
+    mediaAttachments
+      .filter((m) => m.type === 'image' || m.type === 'gifv')
+      .map((m) => ({ url: m.url, alt: m.description }))
+  );
+  let lightboxOpen = $state(false);
+  let lightboxIndex = $state(0);
+
+  function openLightbox(media: typeof mediaAttachments[number]) {
+    const idx = lightboxImages.findIndex((s) => s.url === media.url);
+    if (idx < 0) return;
+    lightboxIndex = idx;
+    lightboxOpen = true;
+  }
+
+  function handleMediaClick(e: MouseEvent, media: typeof mediaAttachments[number]) {
+    if (media.type !== 'image' && media.type !== 'gifv') return;
+    // Stop the outer post-card click → post-detail navigation so
+    // opening the image doesn't double as "go to post page".
+    e.stopPropagation();
+    e.preventDefault();
+    openLightbox(media);
+  }
+
+  function handleMediaKey(e: KeyboardEvent, media: typeof mediaAttachments[number]) {
+    if ((e.key === 'Enter' || e.key === ' ') && (media.type === 'image' || media.type === 'gifv')) {
+      e.preventDefault();
+      openLightbox(media);
+    }
+  }
 
   // Edit mode
   let editing = $state(false);
@@ -345,7 +380,17 @@
           {#if mediaCount > 0 && !compact}
             <div class="media-grid {mediaGridClass}">
               {#each mediaAttachments as media (media.id)}
-                <div class="media-item" class:media-audio={media.type === 'audio'}>
+                {@const clickable = media.type === 'image' || media.type === 'gifv'}
+                <div
+                  class="media-item"
+                  class:media-audio={media.type === 'audio'}
+                  class:media-clickable={clickable}
+                  role={clickable ? 'button' : undefined}
+                  tabindex={clickable ? 0 : undefined}
+                  onclick={(e) => handleMediaClick(e, media)}
+                  onkeydown={(e) => handleMediaKey(e, media)}
+                  aria-label={clickable ? (media.description || 'Open image') : undefined}
+                >
                   <LazyMedia {media} isRemote={!!media.remote_url} />
                 </div>
               {/each}
@@ -507,6 +552,14 @@
     </div>
   </div>
 </article>
+{/if}
+
+{#if lightboxOpen && lightboxImages.length > 0}
+  <ImageLightbox
+    images={lightboxImages}
+    bind:index={lightboxIndex}
+    onclose={() => (lightboxOpen = false)}
+  />
 {/if}
 
 {#if editing}
@@ -1381,6 +1434,15 @@
     position: relative;
     overflow: hidden;
     background: var(--color-surface);
+  }
+
+  .media-clickable {
+    cursor: zoom-in;
+  }
+
+  .media-clickable:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .media-img {
