@@ -128,8 +128,51 @@
     }
   }
 
+  // Mirror the home-timeline / profile-page pattern so submitting a
+  // post appears on the Local/Global tab immediately (as a washed-out
+  // optimistic card) and swaps to the real server post on confirm —
+  // no refresh needed.
+  function handleNewPost(e: Event) {
+    const newPost = (e as CustomEvent<Post>).detail;
+    if (!newPost) return;
+
+    // Replies never belong on Explore — those are thread-scoped.
+    if (newPost.parent_id) return;
+
+    // Local tab: only show posts authored on this instance (remote
+    // federated posts land on Global, not Local).
+    if (exploreTab === 'local') {
+      const host = typeof window !== 'undefined' ? window.location.host : '';
+      const authorAcct = (newPost.account as any)?.acct ?? '';
+      const isLocal = !authorAcct.includes('@');
+      const authorHost = (newPost.account as any)?.url
+        ? new URL((newPost.account as any).url).host
+        : host;
+      if (!isLocal && authorHost !== host) return;
+    }
+
+    // Trending is algorithmic — a brand-new post doesn't belong on
+    // it until the algorithm picks it up later.
+    if (exploreTab === 'trending') return;
+
+    if (feedPosts.some((p) => p.id === newPost.id)) return;
+    feedPosts = [newPost, ...feedPosts];
+  }
+
+  function handlePostReplace(e: Event) {
+    const { oldId, post } = (e as CustomEvent<{ oldId: string; post: Post }>).detail;
+    if (!oldId || !post) return;
+    feedPosts = feedPosts.map((p) => (p.id === oldId ? post : p));
+  }
+
   onMount(() => {
     loadFeed(true);
+    window.addEventListener('new-post', handleNewPost);
+    window.addEventListener('post-replace', handlePostReplace);
+    return () => {
+      window.removeEventListener('new-post', handleNewPost);
+      window.removeEventListener('post-replace', handlePostReplace);
+    };
   });
 
   // React to URL query param changes
