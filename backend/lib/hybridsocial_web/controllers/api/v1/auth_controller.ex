@@ -601,6 +601,8 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
     refresh_token = tokens.refresh_token || tokens[:refresh_token]
 
     secure = conn.scheme == :https
+    access_ttl = Hybridsocial.Auth.Token.access_token_ttl()
+    refresh_ttl = Hybridsocial.Auth.Token.refresh_token_ttl()
 
     conn
     |> put_resp_cookie("hs_access", access_token,
@@ -608,14 +610,14 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
       secure: secure,
       same_site: "Lax",
       path: "/",
-      max_age: 30 * 24 * 3600
+      max_age: access_ttl
     )
     |> put_resp_cookie("hs_refresh", refresh_token,
       http_only: true,
       secure: secure,
       same_site: "Lax",
       path: "/",
-      max_age: 30 * 24 * 3600
+      max_age: refresh_ttl
     )
   end
 

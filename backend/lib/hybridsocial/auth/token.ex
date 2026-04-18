@@ -1,13 +1,17 @@
 defmodule Hybridsocial.Auth.Token do
   @moduledoc """
   JWT token generation and verification using Joken.
-  Access tokens expire in 15 minutes.
-  Refresh tokens are opaque and stored server-side.
+
+  Access tokens are 7 days — long enough that a returning user
+  after a week of inactivity is still authenticated without a
+  round trip, short enough that a leaked token has a bounded
+  blast radius. Refresh tokens are 90 days and rotate on every
+  use, so an active user effectively never logs out.
   """
   use Joken.Config
 
-  @access_token_ttl 15 * 60
-  @refresh_token_ttl 30 * 24 * 3600
+  @access_token_ttl 7 * 24 * 3600
+  @refresh_token_ttl 90 * 24 * 3600
 
   @impl true
   def token_config do

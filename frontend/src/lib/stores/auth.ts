@@ -45,13 +45,23 @@ export function isStaff(): boolean {
 
 // ---- Token Refresh ----
 
+// Access tokens are now 7 days (see Hybridsocial.Auth.Token). Refresh
+// halfway through their lifetime when the tab is visible; the tab
+// visibility listener below also triggers a refresh whenever the user
+// returns to the page after the token might have gone stale.
+const ACCESS_TOKEN_TTL_SECONDS = 7 * 24 * 3600;
+const REFRESH_LEAD_SECONDS = ACCESS_TOKEN_TTL_SECONDS / 2;
+
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let visibilityListenerAttached = false;
 
 function scheduleRefresh(expiresIn: number): void {
   if (refreshTimer) clearTimeout(refreshTimer);
-  // Refresh 2 minutes before expiry, minimum 30s
-  const delay = Math.max((expiresIn - 120) * 1000, 30_000);
-  refreshTimer = setTimeout(() => attemptRefresh(), delay);
+  // Refresh well before expiry. Browsers cap setTimeout at ~24.8 days,
+  // and long-suspended tabs don't reliably fire the timer anyway — the
+  // visibilitychange hook picks up the slack when the tab wakes.
+  const delayMs = Math.max((expiresIn - REFRESH_LEAD_SECONDS) * 1000, 30_000);
+  refreshTimer = setTimeout(() => attemptRefresh(), Math.min(delayMs, 2_147_483_000));
 }
 
 async function attemptRefresh(retries = 2): Promise<void> {
@@ -61,8 +71,8 @@ async function attemptRefresh(retries = 2): Promise<void> {
   try {
     const { refreshTokens } = await import('$lib/api/auth.js');
     await refreshTokens();
-    // Cookies updated by the response — just schedule next refresh
-    scheduleRefresh(900);
+    // Cookies rotate on success — reschedule based on the new TTL.
+    scheduleRefresh(ACCESS_TOKEN_TTL_SECONDS);
   } catch (err: unknown) {
     const { ApiError } = await import('$lib/api/client.js');
     const isAuthError = err instanceof ApiError && (err.status === 401 || err.status === 403);
@@ -76,6 +86,21 @@ async function attemptRefresh(retries = 2): Promise<void> {
       scheduleRefresh(60);
     }
   }
+}
+
+// Refresh when the tab comes back into focus after being hidden.
+// Covers the common "laptop closed overnight" case where the setTimeout
+// fires late (or not at all) and the next API call would otherwise race
+// the refresh, sometimes bouncing the user to /login unnecessarily.
+function attachVisibilityListener(): void {
+  if (visibilityListenerAttached || !browser) return;
+  visibilityListenerAttached = true;
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const state = get(authStore);
+    if (state.user) attemptRefresh();
+  });
 }
 
 // ---- Public API ----
@@ -109,7 +134,11 @@ export async function initAuth(): Promise<void> {
     return;
   }
 
-  // Try to authenticate with httpOnly cookies
+  // Try to authenticate with httpOnly cookies. getCurrentUser will
+  // trigger the api client's automatic refresh-on-401 path if the
+  // access cookie expired while the tab was closed — so by the time
+  // this returns, the session is either valid-and-refreshed or
+  // definitively gone.
   authStore.update((s) => ({ ...s, loading: true }));
   try {
     const user = await getCurrentUser();
@@ -119,7 +148,8 @@ export async function initAuth(): Promise<void> {
       loading: false,
       initialized: true
     }));
-    scheduleRefresh(900);
+    scheduleRefresh(ACCESS_TOKEN_TTL_SECONDS);
+    attachVisibilityListener();
 
     // Sync server preferences to local stores
     if ((user as any).locale) {
@@ -155,7 +185,7 @@ export async function initAuth(): Promise<void> {
 
 // Wire up API client callbacks
 api.setOnTokenRefreshed(() => {
-  scheduleRefresh(900);
+  scheduleRefresh(ACCESS_TOKEN_TTL_SECONDS);
 });
 
 api.setOnAuthFailure(() => {
