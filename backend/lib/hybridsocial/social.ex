@@ -583,6 +583,54 @@ defmodule Hybridsocial.Social do
     end
   end
 
+  @doc """
+  Mute a hashtag for a user. Sugar over the generic user-content
+  filter: creates a `#<name>` phrase filter with whole_word=true,
+  action=hide, and the three contexts that matter (home feed,
+  public timelines, and notifications — so mentions on a post that
+  carries the muted tag don't ping the user either). Returns the
+  created filter or `{:ok, :already_muted}` when an identical row
+  already exists.
+  """
+  def mute_hashtag(identity_id, name) when is_binary(name) do
+    phrase = mute_hashtag_phrase(name)
+
+    if hashtag_muted?(identity_id, name) do
+      {:ok, :already_muted}
+    else
+      create_user_filter(identity_id, %{
+        "phrase" => phrase,
+        "context" => ["home", "public", "notifications"],
+        "action" => "hide",
+        "whole_word" => true
+      })
+    end
+  end
+
+  @doc "Remove the hashtag-mute filter for `name`, if any."
+  def unmute_hashtag(identity_id, name) when is_binary(name) do
+    phrase = mute_hashtag_phrase(name)
+
+    case Repo.get_by(UserContentFilter, identity_id: identity_id, phrase: phrase) do
+      nil -> {:ok, :not_muted}
+      filter -> Repo.delete(filter)
+    end
+  end
+
+  @doc "True when the user has an active hashtag mute for `name`."
+  def hashtag_muted?(identity_id, name) when is_binary(name) do
+    phrase = mute_hashtag_phrase(name)
+
+    UserContentFilter
+    |> where([f], f.identity_id == ^identity_id and f.phrase == ^phrase)
+    |> where([f], is_nil(f.expires_at) or f.expires_at > ^DateTime.utc_now())
+    |> Repo.exists?()
+  end
+
+  defp mute_hashtag_phrase(name) do
+    "#" <> (name |> String.trim() |> String.trim_leading("#") |> String.downcase())
+  end
+
   def followed_tag_names(identity_id) do
     FollowedTag
     |> where([ft], ft.identity_id == ^identity_id)

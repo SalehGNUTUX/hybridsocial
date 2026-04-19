@@ -164,6 +164,11 @@ defmodule HybridsocialWeb.Router do
     get "/followed_tags", AccountController, :followed_tags
     post "/followed_tags", AccountController, :follow_tag
     delete "/followed_tags/:name", AccountController, :unfollow_tag
+    # Hashtag mute (notifications + timelines) — sugar over the
+    # filter API so the tag page can surface a single toggle.
+    post "/muted_tags/:name", AccountController, :mute_tag
+    delete "/muted_tags/:name", AccountController, :unmute_tag
+    get "/tags/:name/status", AccountController, :tag_status
   end
 
   # Public account endpoints (optional auth for visibility filtering)

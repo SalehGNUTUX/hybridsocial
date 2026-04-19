@@ -13,6 +13,8 @@
   let cursor: string | null = $state(null);
   let isFollowing = $state(false);
   let followLoading = $state(false);
+  let isMuted = $state(false);
+  let muteLoading = $state(false);
 
   async function loadTimeline(reset = false) {
     if (reset) { posts = []; cursor = null; hasMore = true; }
@@ -29,11 +31,30 @@
     finally { loading = false; }
   }
 
-  async function checkFollowing() {
+  async function checkTagStatus() {
+    // Single round-trip for both "following" and "muted" flags so the
+    // header buttons render the correct label on first paint.
     try {
-      const tags: { name: string }[] = await api.get('/api/v1/accounts/followed_tags');
-      isFollowing = tags.some(t => t.name === tag.toLowerCase());
+      const status = await api.get<{ following: boolean; muted: boolean }>(
+        `/api/v1/accounts/tags/${encodeURIComponent(tag)}/status`
+      );
+      isFollowing = !!status.following;
+      isMuted = !!status.muted;
     } catch { /* */ }
+  }
+
+  async function toggleMute() {
+    muteLoading = true;
+    try {
+      if (isMuted) {
+        await api.delete(`/api/v1/accounts/muted_tags/${encodeURIComponent(tag)}`);
+        isMuted = false;
+      } else {
+        await api.post(`/api/v1/accounts/muted_tags/${encodeURIComponent(tag)}`);
+        isMuted = true;
+      }
+    } catch { /* */ }
+    finally { muteLoading = false; }
   }
 
   async function toggleFollow() {
@@ -52,7 +73,7 @@
 
   onMount(() => {
     loadTimeline(true);
-    checkFollowing();
+    checkTagStatus();
   });
 </script>
 
@@ -63,21 +84,39 @@
 <div class="tag-page">
   <div class="tag-header">
     <h1 class="tag-title">#{tag}</h1>
-    <button
-      type="button"
-      class="follow-tag-btn"
-      class:following={isFollowing}
-      onclick={toggleFollow}
-      disabled={followLoading}
-    >
-      {#if isFollowing}
-        <span class="material-symbols-outlined" style="font-size: 18px">check</span>
-        Following
-      {:else}
-        <span class="material-symbols-outlined" style="font-size: 18px">add</span>
-        Follow
-      {/if}
-    </button>
+    <div class="tag-actions">
+      <button
+        type="button"
+        class="tag-action-btn"
+        class:following={isFollowing}
+        onclick={toggleFollow}
+        disabled={followLoading}
+      >
+        {#if isFollowing}
+          <span class="material-symbols-outlined" style="font-size: 18px">check</span>
+          Following
+        {:else}
+          <span class="material-symbols-outlined" style="font-size: 18px">add</span>
+          Follow
+        {/if}
+      </button>
+      <button
+        type="button"
+        class="tag-action-btn"
+        class:muted-tag={isMuted}
+        onclick={toggleMute}
+        disabled={muteLoading}
+        title={isMuted ? 'Unmute — posts with this tag will surface again' : 'Mute — hide posts with this tag from your feeds and notifications'}
+      >
+        {#if isMuted}
+          <span class="material-symbols-outlined" style="font-size: 18px">notifications_active</span>
+          Unmute
+        {:else}
+          <span class="material-symbols-outlined" style="font-size: 18px">notifications_off</span>
+          Mute
+        {/if}
+      </button>
+    </div>
   </div>
 
   <FeedList
@@ -110,7 +149,13 @@
     color: var(--color-primary);
   }
 
-  .follow-tag-btn {
+  .tag-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .tag-action-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -125,22 +170,36 @@
     transition: all 150ms ease;
   }
 
-  .follow-tag-btn:hover {
+  .tag-action-btn:hover {
     background: var(--color-primary);
     color: white;
   }
 
-  .follow-tag-btn.following {
+  .tag-action-btn.following {
     background: var(--color-primary);
     color: white;
   }
 
-  .follow-tag-btn.following:hover {
+  .tag-action-btn.following:hover {
     background: transparent;
     color: var(--color-primary);
   }
 
-  .follow-tag-btn:disabled {
+  /* Muted state uses the danger palette instead of primary so the
+     "Unmute" button reads as an opt-out destination of a
+     destructive-toward-signal action. */
+  .tag-action-btn.muted-tag {
+    border-color: var(--color-danger, #ef4444);
+    background: var(--color-danger, #ef4444);
+    color: white;
+  }
+
+  .tag-action-btn.muted-tag:hover {
+    background: transparent;
+    color: var(--color-danger, #ef4444);
+  }
+
+  .tag-action-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

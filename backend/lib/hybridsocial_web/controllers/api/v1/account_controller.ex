@@ -986,6 +986,39 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     json(conn, %{name: String.downcase(name), following: false})
   end
 
+  # ── Hashtag muting ──────────────────────────────────────────────
+  # Sugar over the user-content-filter API: "mute #news" is just a
+  # whole-word `#news` phrase filter with action=hide across home /
+  # public / notifications contexts.
+
+  def mute_tag(conn, %{"name" => name}) do
+    identity = conn.assigns.current_identity
+
+    case Social.mute_hashtag(identity.id, name) do
+      {:ok, _} ->
+        json(conn, %{name: String.downcase(name), muted: true})
+
+      {:error, _} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: "tag.mute_failed"})
+    end
+  end
+
+  def unmute_tag(conn, %{"name" => name}) do
+    identity = conn.assigns.current_identity
+    Social.unmute_hashtag(identity.id, name)
+    json(conn, %{name: String.downcase(name), muted: false})
+  end
+
+  def tag_status(conn, %{"name" => name}) do
+    identity = conn.assigns.current_identity
+
+    json(conn, %{
+      name: String.downcase(name),
+      following: Social.following_tag?(identity.id, name),
+      muted: Social.hashtag_muted?(identity.id, name)
+    })
+  end
+
   # --- Account Aliases ---
 
   def remove_alias(conn, %{"alias" => alias_uri}) do
