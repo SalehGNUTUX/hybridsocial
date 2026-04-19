@@ -29,7 +29,7 @@
 
   const SPEEDS = [1, 1.25, 1.5, 1.75, 2];
   const BIN_COUNT = 260;
-  const STRAND_COUNT = 10;
+  const STRAND_COUNT = 7;
 
   let rafId: number | null = null;
   let animPhase = 0;
@@ -134,35 +134,49 @@
     const progress = duration > 0 ? currentTime / duration : 0;
     const splitX = w * progress;
 
-    const stepX = w / envelope.length;
-    // Single-sided: strands rise UP from the bottom, like blades
-    // of grass driven by the signal. Leave a 4px padding at top
-    // and 2px at bottom so the strokes don't clip.
-    const baseY = h - 2;
-    const maxHeight = h - 6;
+    // Interlacing sine-strand render. Each strand is a smooth
+    // curve centered on midY — amplitude comes from the signal
+    // envelope (live FFT or pre-decoded peaks), frequency +
+    // phase offsets per strand are what makes the bundle
+    // interlace instead of tracking as one thick line. The
+    // whole bundle spreads wider on loud sections and collapses
+    // toward the centerline when quiet, like the reference.
+    const midY = h / 2;
+    const maxHalf = h / 2 - 3;
+    // Sample the envelope at a denser resolution than its source
+    // (linear interpolation) so strand curves stay smooth even
+    // when the FFT crop gives us only ~100 bins.
+    const SAMPLES = 220;
 
     for (let s = 0; s < STRAND_COUNT; s++) {
       const strandFrac = s / (STRAND_COUNT - 1 || 1);
-      // Taller strands at the back, shorter in front, creates the
-      // layered "multiple strands" depth without mirroring.
-      const strandScale = 0.4 + 0.6 * strandFrac;
-      const strandFreq = 0.18 + 0.08 * strandFrac;
-      const strandPhase = strandFrac * Math.PI * 2 + animPhase * (0.8 + strandFrac * 0.6);
+      // Each strand gets a distinct sine frequency + phase so
+      // they cross each other. Strand amplitudes are also
+      // slightly different so you see depth in the bundle.
+      const strandScale = 0.55 + 0.45 * Math.sin(strandFrac * Math.PI);
+      const strandFreq = 0.06 + 0.012 * s; // radians per x pixel
+      const strandPhase = strandFrac * Math.PI * 1.6 + animPhase * (0.7 + strandFrac * 0.4);
 
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (let i = 0; i < envelope.length; i++) {
-        const x = i * stepX;
-        const jitter = Math.sin(i * strandFreq + strandPhase) * 1.2;
-        const mag = Math.max(0.04, envelope[i]);
-        const amp = mag * maxHeight * strandScale;
-        const y = baseY - amp + jitter;
+      for (let i = 0; i <= SAMPLES; i++) {
+        const t = i / SAMPLES; // 0..1 across canvas
+        const x = t * w;
+        // Linear interp into the envelope for the local amplitude.
+        const envPos = t * (envelope.length - 1);
+        const envIdx = Math.floor(envPos);
+        const envFrac = envPos - envIdx;
+        const envA = envelope[envIdx] ?? 0;
+        const envB = envelope[Math.min(envIdx + 1, envelope.length - 1)] ?? envA;
+        const mag = Math.max(0.05, envA * (1 - envFrac) + envB * envFrac);
+        // Sine curve for this strand at this x.
+        const y = midY + Math.sin(x * strandFreq + strandPhase) * maxHalf * strandScale * mag;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       const grad = ctx.createLinearGradient(0, 0, w, 0);
-      grad.addColorStop(0, `rgba(23, 67, 85, ${0.35 + strandFrac * 0.25})`);
-      grad.addColorStop(1, `rgba(97, 226, 255, ${0.45 + strandFrac * 0.35})`);
+      grad.addColorStop(0, `rgba(23, 67, 85, ${0.35 + strandFrac * 0.2})`);
+      grad.addColorStop(1, `rgba(97, 226, 255, ${0.45 + strandFrac * 0.3})`);
       ctx.strokeStyle = grad;
       ctx.stroke();
     }
