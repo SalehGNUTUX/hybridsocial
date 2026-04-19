@@ -1080,7 +1080,10 @@ defmodule Hybridsocial.Social.Posts do
   # --- Hashtags ---
 
   def extract_hashtags(content) when is_binary(content) do
-    ~r/#([a-zA-Z0-9_]+)/
+    # Unicode-aware so Arabic / Cyrillic / CJK / emoji-composed tags
+    # round-trip through to the `hashtags` table. Kept in sync with
+    # the inline linkifier in Content.MarkdownRenderer.link_hashtags/1.
+    ~r/#(\p{L}[\p{L}\p{M}\p{N}_]{0,100})/u
     |> Regex.scan(content)
     |> Enum.map(fn [_, tag] -> String.downcase(tag) end)
     |> Enum.uniq()

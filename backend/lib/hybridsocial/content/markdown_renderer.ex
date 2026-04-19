@@ -132,8 +132,13 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
   end
 
   defp link_hashtags(html) do
+    # Unicode-aware: first char must be a letter in any script (`\p{L}`),
+    # subsequent chars may be letter/combining-mark/digit/underscore.
+    # The prefix character class is extended to include Unicode
+    # letters so we don't match a `#` that lives mid-word in an
+    # Arabic/Cyrillic/CJK string.
     Regex.replace(
-      ~r/(^|[^a-zA-Z0-9_>"\/])#([a-zA-Z][a-zA-Z0-9_]{0,100})/u,
+      ~r/(^|[^\p{L}\p{M}\p{N}_>"\/])#(\p{L}[\p{L}\p{M}\p{N}_]{0,100})/u,
       html,
       fn _full, prefix, tag ->
         slug = String.downcase(tag) |> URI.encode()
