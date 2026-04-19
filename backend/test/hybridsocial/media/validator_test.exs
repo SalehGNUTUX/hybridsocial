@@ -44,6 +44,54 @@ defmodule Hybridsocial.Media.ValidatorTest do
     test "rejects empty binary" do
       assert {:error, :invalid_content_type} = Validator.validate_content_type(<<>>)
     end
+
+    test "detects MP3 with ID3 header" do
+      data = <<"ID3", 0x04, 0x00, 0x00, 0::size(80)>>
+      assert {:ok, "audio/mpeg"} = Validator.validate_content_type(data)
+    end
+
+    test "detects MP3 with MPEG frame sync" do
+      data = <<0xFF, 0xFB, 0x90, 0x00, 0::size(80)>>
+      assert {:ok, "audio/mpeg"} = Validator.validate_content_type(data)
+    end
+
+    test "detects WAV" do
+      data =
+        <<0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0::size(80)>>
+
+      assert {:ok, "audio/wav"} = Validator.validate_content_type(data)
+    end
+
+    test "detects FLAC" do
+      data = <<"fLaC", 0::size(80)>>
+      assert {:ok, "audio/flac"} = Validator.validate_content_type(data)
+    end
+
+    test "detects Ogg container" do
+      data = <<"OggS", 0x00, 0x02, 0::size(80)>>
+      assert {:ok, "audio/ogg"} = Validator.validate_content_type(data)
+    end
+
+    test "detects ADTS AAC" do
+      data = <<0xFF, 0xF1, 0x00, 0x00, 0::size(80)>>
+      assert {:ok, "audio/aac"} = Validator.validate_content_type(data)
+    end
+  end
+
+  describe "audio?/1" do
+    test "accepts the canonical audio MIME list" do
+      for ct <-
+            ~w(audio/mpeg audio/wav audio/flac audio/ogg audio/aac audio/mp4 audio/webm audio/x-wav) do
+        assert Validator.audio?(ct), "expected #{ct} to be audio"
+      end
+    end
+
+    test "rejects non-audio types" do
+      refute Validator.audio?("video/mp4")
+      refute Validator.audio?("image/jpeg")
+      refute Validator.audio?("application/octet-stream")
+      refute Validator.audio?(nil)
+    end
   end
 
   describe "validate_file_size/2" do

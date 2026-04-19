@@ -25,6 +25,14 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
           |> put_status(:forbidden)
           |> json(%{error: "premium_emojis_required", shortcodes: shortcodes})
 
+        {:error, :audio_not_allowed} ->
+          conn
+          |> put_status(:forbidden)
+          |> json(%{
+            error: "audio_not_allowed",
+            message: "Your current tier does not allow audio posts."
+          })
+
         {:error, changeset} ->
           conn
           |> put_status(:unprocessable_entity)

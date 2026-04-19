@@ -57,9 +57,51 @@ defmodule Hybridsocial.Social.Posts do
       |> maybe_put_edit_expires_at(edit_expires_at)
 
     with :ok <- validate_premium_emojis(attrs["content"], identity),
-         :ok <- check_thread_not_locked(post_attrs) do
+         :ok <- check_thread_not_locked(post_attrs),
+         :ok <- check_audio_allowed(attrs, limits) do
       insert_post(changeset, attrs)
     end
+  end
+
+  # Tier gate: if the user tries to post audio (either post_type=audio
+  # or any attached media with an audio/* content type), their tier
+  # must have `audio_allowed: true`. Free tier is blocked by default.
+  #
+  # The media upload endpoint already enforces `audio_allowed` before
+  # a MediaFile is created, so in practice the post-creation check is
+  # only defence-in-depth — a user can't skip the upload step. We
+  # still verify here so tier downgrades between upload and post
+  # don't silently succeed.
+  defp check_audio_allowed(attrs, limits) do
+    if audio_intent?(attrs) and limits[:audio_allowed] != true do
+      {:error, :audio_not_allowed}
+    else
+      :ok
+    end
+  end
+
+  defp audio_intent?(attrs) do
+    post_type = Map.get(attrs, "post_type") || Map.get(attrs, :post_type)
+
+    if post_type == "audio" do
+      true
+    else
+      attrs
+      |> media_ids_from_attrs()
+      |> any_audio_media?()
+    end
+  end
+
+  defp media_ids_from_attrs(attrs) do
+    Map.get(attrs, "media_ids") || Map.get(attrs, :media_ids) || []
+  end
+
+  defp any_audio_media?([]), do: false
+
+  defp any_audio_media?(ids) when is_list(ids) do
+    Hybridsocial.Media.MediaFile
+    |> where([m], m.id in ^ids and like(m.content_type, "audio/%"))
+    |> Repo.exists?()
   end
 
   # If the target of a reply (parent or root) has been admin-locked,

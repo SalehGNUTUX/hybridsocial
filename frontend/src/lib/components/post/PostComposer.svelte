@@ -369,6 +369,11 @@
     error = '';
     let failures = 0;
 
+    // Track the first specific error so we can show something more
+    // useful than "N uploads failed" when the backend rejects audio
+    // on tier / size / duration grounds.
+    let firstErrorMsg = '';
+
     try {
       // Upload in parallel — each media goes through media.upload() +
       // optional antivirus which can each be slow; waiting on them
@@ -377,8 +382,12 @@
 
       const succeeded: MediaAttachment[] = [];
       for (const r of results) {
-        if (r.status === 'fulfilled') succeeded.push(r.value);
-        else failures += 1;
+        if (r.status === 'fulfilled') {
+          succeeded.push(r.value);
+        } else {
+          failures += 1;
+          if (!firstErrorMsg) firstErrorMsg = describeUploadError(r.reason);
+        }
       }
 
       if (succeeded.length > 0) {
@@ -390,9 +399,41 @@
 
     if (failures > 0 || dropped > 0) {
       const parts: string[] = [];
-      if (failures > 0) parts.push(`${failures} upload${failures === 1 ? '' : 's'} failed`);
+      if (firstErrorMsg) {
+        parts.push(firstErrorMsg);
+      } else if (failures > 0) {
+        parts.push(`${failures} upload${failures === 1 ? '' : 's'} failed`);
+      }
       if (dropped > 0) parts.push(`${dropped} skipped (max ${maxMedia})`);
       error = parts.join(' · ');
+    }
+  }
+
+  // Translate the backend's upload error codes to human text. The
+  // media controller uses distinct keys for audio so the composer
+  // can point at the specific tier limit that was hit.
+  function describeUploadError(reason: unknown): string {
+    const body = (reason as { body?: { error?: string; max_mb?: number; max_seconds?: number } })?.body;
+    const err = body?.error;
+    switch (err) {
+      case 'media.audio_not_allowed':
+        return 'Your tier does not allow audio uploads';
+      case 'media.audio_too_large':
+        return `Audio exceeds ${body?.max_mb ?? '?'} MB limit`;
+      case 'media.audio_too_long':
+        return `Audio exceeds ${body?.max_seconds ?? '?'}s limit`;
+      case 'media.audio_invalid':
+        return 'Audio file could not be decoded';
+      case 'media.audio_scanner_unavailable':
+        return 'Audio validation is temporarily unavailable';
+      case 'media.file_too_large':
+        return `File exceeds ${body?.max_mb ?? '?'} MB limit`;
+      case 'media.invalid_content_type':
+        return 'Unsupported file type';
+      case 'media.infected':
+        return 'File rejected — flagged as infected';
+      default:
+        return '';
     }
   }
 
@@ -679,8 +720,15 @@
 
         const isVideo = (m: MediaAttachment) =>
           m.type === 'video' || ((m as any).content_type || '').startsWith('video/');
+        const isAudio = (m: MediaAttachment) =>
+          m.type === 'audio' || ((m as any).content_type || '').startsWith('audio/');
 
-        if (uploadedMedia.every(isVideo)) {
+        if (uploadedMedia.every(isAudio)) {
+          // All-audio → dedicated "audio" post type. The backend
+          // enforces tier gating on create; if the user's tier is
+          // free, the POST returns 403 with audio_not_allowed.
+          body.post_type = 'audio';
+        } else if (uploadedMedia.every(isVideo)) {
           // All-video → Streams (reels) feed.
           body.post_type = 'video_stream';
         } else if (!content.trim()) {
@@ -1091,7 +1139,7 @@
     <input
       bind:this={fileInputEl}
       type="file"
-      accept="image/*,video/*"
+      accept="image/*,video/*,audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/flac,audio/aac,audio/mp4,audio/webm,.mp3,.wav,.ogg,.oga,.opus,.flac,.aac,.m4a,.weba"
       multiple
       class="visually-hidden"
       onchange={handleFileSelected}

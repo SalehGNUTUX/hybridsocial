@@ -13,9 +13,34 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
     alt_text = params["alt_text"]
     limits = Hybridsocial.Premium.TierLimits.limits_for(identity)
 
-    # Enforce tier-based file size limits
     file_size = File.stat!(upload.path).size
     content_type = upload.content_type || ""
+
+    # Audio uploads have their own tier gate (allowed? + size + duration)
+    # plus an ffprobe refinement step. Keep that path distinct from the
+    # image/video size check so the error messages stay precise.
+    if audio_upload?(content_type, upload) do
+      handle_audio_upload(conn, identity_id, upload, alt_text, limits)
+    else
+      handle_visual_upload(
+        conn,
+        identity_id,
+        upload,
+        alt_text,
+        limits,
+        content_type,
+        file_size
+      )
+    end
+  end
+
+  def create(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "media.file_required"})
+  end
+
+  defp handle_visual_upload(conn, identity_id, upload, alt_text, limits, content_type, file_size) do
     is_video = String.starts_with?(content_type, "video/")
 
     max_bytes =
@@ -35,10 +60,54 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
     end
   end
 
-  def create(conn, _params) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "media.file_required"})
+  defp handle_audio_upload(conn, identity_id, upload, alt_text, limits) do
+    file_size = File.stat!(upload.path).size
+
+    with :ok <- check_audio_allowed(limits),
+         :ok <- check_audio_size(file_size, limits) do
+      result = Media.upload_audio(identity_id, upload, alt_text, limits)
+      render_upload_result(conn, result, identity_id, upload.content_type || "audio/*", file_size)
+    else
+      {:error, :audio_not_allowed} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{
+          error: "media.audio_not_allowed",
+          message: "Your current tier does not allow audio uploads."
+        })
+
+      {:error, {:audio_too_large, max_mb: max_mb}} ->
+        conn
+        |> put_status(:request_entity_too_large)
+        |> json(%{error: "media.audio_too_large", max_mb: max_mb})
+    end
+  end
+
+  # Either the browser sent an `audio/*` content type, OR the filename
+  # looks like an audio file. Extension check is a coarse filter — the
+  # definitive rejection comes from magic-byte + ffprobe validation
+  # inside `Media.upload_audio`.
+  defp audio_upload?(content_type, %Plug.Upload{filename: filename}) do
+    String.starts_with?(content_type, "audio/") or
+      audio_extension?(filename)
+  end
+
+  defp audio_extension?(nil), do: false
+
+  defp audio_extension?(filename) do
+    ext = filename |> Path.extname() |> String.downcase()
+    ext in [".mp3", ".wav", ".ogg", ".oga", ".opus", ".flac", ".aac", ".m4a", ".weba"]
+  end
+
+  defp check_audio_allowed(limits) do
+    if limits[:audio_allowed] == true, do: :ok, else: {:error, :audio_not_allowed}
+  end
+
+  defp check_audio_size(size, limits) do
+    max_mb = limits[:audio_size_mb] || 10
+    max_bytes = max_mb * 1_048_576
+
+    if size <= max_bytes, do: :ok, else: {:error, {:audio_too_large, max_mb: max_mb}}
   end
 
   # Split out so credo's cyclomatic-complexity cap stays under 15 —
@@ -53,6 +122,40 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
 
   defp render_upload_result(conn, {:error, :file_too_large}, _, _, _) do
     conn |> put_status(:request_entity_too_large) |> json(%{error: "media.file_too_large"})
+  end
+
+  defp render_upload_result(
+         conn,
+         {:error, {:audio_too_long, max_seconds: max, actual_seconds: actual}},
+         _,
+         _,
+         _
+       ) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{
+      error: "media.audio_too_long",
+      max_seconds: max,
+      actual_seconds: Float.round(actual * 1.0, 2)
+    })
+  end
+
+  defp render_upload_result(conn, {:error, :ffprobe_failed}, _, _, _) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{
+      error: "media.audio_invalid",
+      message: "The audio file could not be decoded. Try a different format."
+    })
+  end
+
+  defp render_upload_result(conn, {:error, :ffprobe_unavailable}, _, _, _) do
+    conn
+    |> put_status(:service_unavailable)
+    |> json(%{
+      error: "media.audio_scanner_unavailable",
+      message: "Audio validation is temporarily unavailable. Please try again shortly."
+    })
   end
 
   # ClamAV matched a signature. Log + rate-limit-track + tell the

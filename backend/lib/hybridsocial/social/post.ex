@@ -6,7 +6,7 @@ defmodule Hybridsocial.Social.Post do
   @foreign_key_type :binary_id
 
   @valid_visibilities ~w(public unlisted followers group direct list)
-  @valid_post_types ~w(text media video_stream poll article)
+  @valid_post_types ~w(text media video_stream audio poll article)
 
   schema "posts" do
     field :post_type, :string, default: "text"
@@ -153,9 +153,10 @@ defmodule Hybridsocial.Social.Post do
   defp validate_content_for_type(changeset) do
     post_type = get_field(changeset, :post_type)
 
-    # media and video_stream posts can be caption-less — a photo or reel
-    # doesn't need text. Everything else (text/poll/article) requires content.
-    if post_type in ["media", "video_stream"] do
+    # media, video_stream and audio posts can be caption-less —
+    # a photo, reel, or voice memo doesn't need text. Everything
+    # else (text/poll/article) requires content.
+    if post_type in ["media", "video_stream", "audio"] do
       changeset
     else
       validate_required(changeset, [:content])

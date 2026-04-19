@@ -1,13 +1,16 @@
 <script lang="ts">
-  import type { MediaAttachment } from '$lib/api/types.js';
+  import type { MediaAttachment, Identity } from '$lib/api/types.js';
   import { autoLoadRemoteMedia } from '$lib/utils/media-preferences.js';
+  import AudioPlayer from './AudioPlayer.svelte';
 
   let {
     media,
     isRemote,
+    author = null,
   }: {
     media: MediaAttachment;
     isRemote: boolean;
+    author?: Identity | null;
   } = $props();
 
   // Local media or "auto-load" preference ON → always render.
@@ -82,12 +85,7 @@
       <track kind="captions" />
     </video>
   {:else if media.type === 'audio'}
-    <audio
-      src={media.url}
-      controls
-      preload="metadata"
-      aria-label={media.description || 'Audio attachment'}
-    ></audio>
+    <AudioPlayer {media} {author} />
   {/if}
 {:else}
   <button
@@ -174,9 +172,5 @@
     height: 100%;
     object-fit: cover;
     background: black;
-  }
-
-  audio {
-    width: 100%;
   }
 </style>

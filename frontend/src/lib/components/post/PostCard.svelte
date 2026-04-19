@@ -424,7 +424,7 @@
                   onkeydown={(e) => handleMediaKey(e, media)}
                   aria-label={clickable ? (media.description || 'Open image') : undefined}
                 >
-                  <LazyMedia {media} isRemote={!!media.remote_url} />
+                  <LazyMedia {media} isRemote={!!media.remote_url} author={post.account} />
                 </div>
               {/each}
             </div>
