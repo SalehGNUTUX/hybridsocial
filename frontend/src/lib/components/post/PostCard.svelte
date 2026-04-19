@@ -12,6 +12,7 @@
   import RoleBadge from '$lib/components/ui/RoleBadge.svelte';
   import ProfileHoverCard from '$lib/components/ui/ProfileHoverCard.svelte';
   import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
+  import { stripTrailingHashtags } from '$lib/utils/hashtag-footer.js';
 
   // Seeded PRNG from post ID for deterministic wave patterns
   function seededRng(seed: string) {
@@ -190,6 +191,18 @@
     editError = '';
   }
 
+  // Hashtag footer: if the post ends with a run of hashtag-only
+  // content, strip those from the body and surface ALL tags (trailing
+  // or inline) as pill buttons under the post. The dependency on
+  // `post.content_html` is intentional — re-runs after an edit.
+  let displayContentHtml = $derived.by(() => {
+    const raw = post.content_html ?? '';
+    // Only attempt trimming when the server says the post has tags;
+    // a post with no hashtag links at all can't match.
+    if (!post.tags || post.tags.length === 0) return raw;
+    return stripTrailingHashtags(raw).html;
+  });
+
   // Poll voting
   let pollVoted = $state(post.poll?.voted ?? false);
   let pollOwnVotes = $state<number[]>(post.poll?.own_votes ?? []);
@@ -359,7 +372,7 @@
               bind:this={contentEl}
               dir="auto"
             >
-              {@html post.content_html}
+              {@html displayContentHtml}
             </div>
           {:else if post.content}
             <div
@@ -383,6 +396,18 @@
               <span class="material-symbols-outlined content-toggle-icon">expand_less</span>
               Show less
             </button>
+          {/if}
+
+          {#if post.tags && post.tags.length > 0}
+            <div class="hashtag-footer" onclick={(e) => e.stopPropagation()} role="group" aria-label="Hashtags in this post">
+              {#each post.tags as tag (tag.name)}
+                <a
+                  href="/tags/{encodeURIComponent(tag.name)}"
+                  class="hashtag-chip"
+                  onclick={(e) => e.stopPropagation()}
+                >#{tag.name}</a>
+              {/each}
+            </div>
           {/if}
 
           {#if mediaCount > 0 && !compact}
@@ -1128,6 +1153,35 @@
 
   .post-content :global(p:last-child) {
     margin-block-end: 0;
+  }
+
+  /* Pill-style hashtag row under the body. Same visual weight as the
+     `action-count` badges on the action row so the bottom of the
+     post has a consistent "secondary info" tier. */
+  .hashtag-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-block-start: var(--space-2);
+  }
+
+  .hashtag-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-primary);
+    background: var(--color-secondary-container);
+    border-radius: 9999px;
+    text-decoration: none;
+    transition: background 150ms ease, color 150ms ease;
+  }
+
+  .hashtag-chip:hover {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    text-decoration: none;
   }
 
   /* CW */
