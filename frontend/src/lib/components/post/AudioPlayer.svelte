@@ -155,7 +155,17 @@
       // slightly different so you see depth in the bundle.
       const strandScale = 0.55 + 0.45 * Math.sin(strandFrac * Math.PI);
       const strandFreq = 0.06 + 0.012 * s; // radians per x pixel
-      const strandPhase = strandFrac * Math.PI * 1.6 + animPhase * (0.7 + strandFrac * 0.4);
+      // Phase advance: unique speed per strand AND alternating
+      // direction (odd strands drift right, even strands drift
+      // left). Without the sign flip every strand's phase
+      // increases monotonically and the bundle reads as a single
+      // synchronized shift even at different speeds. With it, you
+      // see strands crossing each other continuously — which is
+      // what makes the bundle look alive vs. rigid.
+      const strandSpeed = 0.5 + s * 0.28;
+      const strandDir = s % 2 === 0 ? 1 : -1;
+      const strandPhase =
+        strandFrac * Math.PI * 2 + animPhase * strandSpeed * strandDir;
 
       ctx.lineWidth = 1;
       ctx.beginPath();
