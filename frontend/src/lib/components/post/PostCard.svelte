@@ -110,8 +110,12 @@
   // Media grid class based on count
   let mediaAttachments = $derived(post.media_attachments || []);
   let mediaCount = $derived(mediaAttachments.length);
+  let mediaAllAudio = $derived(
+    mediaCount > 0 && mediaAttachments.every((m) => m.type === 'audio')
+  );
   let mediaGridClass = $derived(
-    mediaCount === 1 ? 'media-grid-1'
+    mediaAllAudio ? 'media-grid-1 media-grid-audio-only'
+    : mediaCount === 1 ? 'media-grid-1'
     : mediaCount === 2 ? 'media-grid-2'
     : 'media-grid-4'
   );
@@ -1519,6 +1523,14 @@
     grid-template-columns: 1fr;
   }
 
+  /* Audio-only post: kill the grid's visual frame so the
+     AudioPlayer's own pill container is the only chrome. */
+  .media-grid-audio-only {
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+
   .media-grid-2 {
     grid-template-columns: 1fr 1fr;
   }
@@ -1552,10 +1564,17 @@
     aspect-ratio: 16 / 9;
   }
 
+  /* Audio attachments are pill-shaped players that want to fill
+     the whole post-content column. Drop the grid cell's default
+     border + padding so the player's own rounded glassmorphism
+     frame is what the user sees, and force width:100% so the
+     flex/grid parent doesn't shrink it to intrinsic size. */
   .media-audio {
-    padding: 12px;
-    display: flex;
-    align-items: center;
+    padding: 0;
+    display: block;
+    width: 100%;
+    background: transparent;
+    aspect-ratio: auto;
   }
 
   /* Poll */
