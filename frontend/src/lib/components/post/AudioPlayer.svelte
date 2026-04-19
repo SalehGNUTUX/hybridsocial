@@ -29,7 +29,7 @@
 
   const SPEEDS = [1, 1.25, 1.5, 1.75, 2];
   const BIN_COUNT = 260;
-  const STRAND_COUNT = 7;
+  const STRAND_COUNT = 3;
 
   let rafId: number | null = null;
   let animPhase = 0;
