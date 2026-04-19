@@ -88,17 +88,25 @@
 
   // Pull a fresh frame of live frequency data into `liveSmooth`,
   // applying exponential smoothing so bins don't flicker. Returns
-  // the buffer (length = analyser.frequencyBinCount) or null if the
-  // graph isn't wired yet.
+  // a view onto the *useful* lower portion of the FFT — the upper
+  // half of the spectrum is near-silent for speech/music at 44.1kHz
+  // sample rate, which would render as a flat dead tail on the
+  // right side of the waveform. Stretching only the lower bins
+  // across the full canvas keeps every pixel reactive.
   function sampleLive(): Float32Array | null {
     if (!liveAnalyser || !liveData || !liveSmooth) return null;
     liveAnalyser.getByteFrequencyData(liveData);
-    const a = 0.32; // new-sample weight; lower = smoother, laggier
+    const a = 0.32;
     for (let i = 0; i < liveSmooth.length; i++) {
       const v = liveData[i] / 255;
       liveSmooth[i] = liveSmooth[i] * (1 - a) + v * a;
     }
-    return liveSmooth;
+    // Keep the lower ~40% of bins. With fftSize=512 that's 102 bins
+    // covering 0 → ~9 kHz at 44.1 kHz — basically everything a
+    // listener hears as "the sound", nothing past the hi-hat
+    // sparkle range that tends to read as zero.
+    const useful = Math.floor(liveSmooth.length * 0.4);
+    return liveSmooth.subarray(0, useful);
   }
 
   function drawWaveform() {
