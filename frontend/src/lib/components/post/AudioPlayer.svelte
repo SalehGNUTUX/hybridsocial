@@ -131,9 +131,6 @@
     const envelope = live ?? Float32Array.from(peaks);
     if (envelope.length === 0) return;
 
-    const progress = duration > 0 ? currentTime / duration : 0;
-    const splitX = w * progress;
-
     // Interlacing sine-strand render. Each strand is a smooth
     // curve centered on midY — amplitude comes from the signal
     // envelope (live FFT or pre-decoded peaks), frequency +
@@ -191,12 +188,9 @@
       ctx.stroke();
     }
 
-    // Played-region brighten overlay. Keep it visible in both live
-    // and idle modes so the user always has a sense of position.
-    if (splitX > 0) {
-      ctx.fillStyle = 'rgba(97, 226, 255, 0.08)';
-      ctx.fillRect(0, 0, splitX, h);
-    }
+    // The seek bar below the canvas shows played progress; no
+    // need to also overlay a played-region tint on the waveform
+    // itself — it was reading as a clipped background rectangle.
   }
 
   // Lazily build the live-analysis graph on first play. Must run
