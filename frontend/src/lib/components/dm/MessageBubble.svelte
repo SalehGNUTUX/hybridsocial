@@ -793,11 +793,17 @@
   }
 
   /* Reactions sit half-outside the bubble's bottom edge — anchor
-     to the inside-corner so the chip overlaps the rounded edge. */
+     to the inside-corner so the chip overlaps the rounded edge.
+     Physical left/right (not logical inset-inline-*) so an RTL
+     `dir="auto"` on the message text inside the bubble can't flip
+     the overlay's own axis. */
   .reactions-overlay {
     position: absolute;
-    inset-block-end: -12px;
+    bottom: -12px;
+    left: 12px;
+    right: auto;
     display: flex;
+    flex-direction: row;
     gap: 3px;
     z-index: 1;
     pointer-events: none;
@@ -807,15 +813,10 @@
     pointer-events: auto;
   }
 
-  /* Other party's bubble — chips bleed out the bottom-LEFT corner. */
-  .reactions-overlay {
-    inset-inline-start: 12px;
-  }
-
   /* Own bubble (right side) — bleed out the bottom-RIGHT instead. */
   .overlay-own {
-    inset-inline-start: auto;
-    inset-inline-end: 12px;
+    left: auto;
+    right: 12px;
   }
 
   .msg-reaction {
