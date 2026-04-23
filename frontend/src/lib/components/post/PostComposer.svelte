@@ -965,6 +965,7 @@
             placeholder="NSFW warning (optional description)"
             bind:value={spoilerText}
             aria-label="NSFW warning text"
+            dir="auto"
           />
         {/if}
 
@@ -979,6 +980,7 @@
             placeholder={replyTo ? `Reply to @${replyTo.account?.handle ?? replyTo.account?.acct ?? ''}…` : quotePost ? 'Add a comment…' : "What's on your mind?"}
             aria-label="Post content"
             rows={3}
+            dir="auto"
           ></textarea>
 
           {#if mentionActive && mentionSuggestions.length > 0}
@@ -1298,6 +1300,7 @@
         placeholder="A person sitting at a desk, looking at a monitor that shows a social-media feed."
         rows="4"
         maxlength="1500"
+        dir="auto"
         autofocus
       ></textarea>
       <div class="alt-char-count">{altEditorValue.length} / 1500</div>
@@ -1668,6 +1671,11 @@
     background: transparent;
     resize: none;
     line-height: 1.6;
+    /* Pair with dir="auto" so Arabic/Hebrew input flips alignment and
+       glyph flow automatically based on the first strong-directional
+       character. */
+    text-align: start;
+    unicode-bidi: plaintext;
   }
 
   .composer-textarea::placeholder {

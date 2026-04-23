@@ -334,6 +334,7 @@
           {#if pickerOpen}
             <div
               class="picker-anchor"
+              class:picker-anchor-own={isOwn}
               transition:fly={{ y: -6, duration: 180, easing: cubicOut }}
             >
               <MessageReactionPicker
@@ -562,6 +563,15 @@
     inset-inline-end: 0;
     z-index: var(--z-dropdown, 100);
     margin-block-start: 4px;
+  }
+
+  /* Own messages put the reaction button on the LEFT side of the
+     bubble (row-reverse). Anchoring the picker to inline-end would
+     pop it further left into the sidebar, so flip to inline-start
+     so it opens rightward, staying inside the chat area. */
+  .picker-anchor-own {
+    inset-inline-end: auto;
+    inset-inline-start: 0;
   }
 
   .delete-confirm {
