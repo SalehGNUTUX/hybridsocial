@@ -1,5 +1,6 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { currentUser } from './auth.js';
 
 interface ChatEvent {
   type: string;
@@ -64,8 +65,21 @@ export function connectChatStream(apiBase: string): void {
           // distinguish at a glance. Direct-post broadcasts ride the
           // same channel but use the notification sound since they're
           // not really "chat".
+          //
+          // Skip echoes of our own sends: the server broadcasts the
+          // new message to every participant, including the sender,
+          // so without this check we'd chime on messages we ourselves
+          // just typed.
           if (eventType === 'chat.new_message') {
-            import('./sound.js').then((m) => m.playMessageSound());
+            const viewer = get(currentUser);
+            const senderId =
+              (data?.sender as { id?: string } | undefined)?.id ??
+              (data?.sender_id as string | undefined);
+            if (viewer && senderId && viewer.id === senderId) {
+              // Our own echo — no sound.
+            } else {
+              import('./sound.js').then((m) => m.playMessageSound());
+            }
           }
         } catch {
           // Ignore malformed events

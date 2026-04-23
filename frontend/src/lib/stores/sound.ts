@@ -30,6 +30,13 @@ const NOTIFICATION_SOUND_URL = '/sounds/notification.mp3';
 let messageAudio: HTMLAudioElement | null = null;
 let notificationAudio: HTMLAudioElement | null = null;
 
+// Flipped to `true` by the audio elements' `error` handlers when the
+// preload 404s. Used to short-circuit subsequent play attempts so the
+// console isn't flooded with the same missing-file error on every
+// chat event.
+let messageAssetMissing = false;
+let notificationAssetMissing = false;
+
 let audioUnlocked = false;
 
 export function initSound(): void {
@@ -39,6 +46,13 @@ export function initSound(): void {
   notificationAudio = new Audio(NOTIFICATION_SOUND_URL);
   messageAudio.preload = 'auto';
   notificationAudio.preload = 'auto';
+
+  messageAudio.addEventListener('error', () => {
+    messageAssetMissing = true;
+  });
+  notificationAudio.addEventListener('error', () => {
+    notificationAssetMissing = true;
+  });
 
   // Gesture-gated audio unlock. Any click/keypress primes the audio
   // elements with a silent play so subsequent programmatic plays
@@ -73,12 +87,14 @@ export function initSound(): void {
 
 export function playMessageSound(): void {
   if (!browser) return;
+  if (messageAssetMissing) return;
   if (localStorage.getItem(MESSAGE_KEY) === 'false') return;
   play(messageAudio);
 }
 
 export function playNotificationSound(): void {
   if (!browser) return;
+  if (notificationAssetMissing) return;
   if (localStorage.getItem(NOTIFICATION_KEY) === 'false') return;
   play(notificationAudio);
 }
