@@ -56,6 +56,7 @@
           { id: 'replies', label: 'Replies' },
           { id: 'media', label: 'Media' },
           { id: 'direct', label: 'Direct' },
+          { id: 'reactions', label: 'Reactions' },
         ]
       : [
           { id: 'posts', label: 'Posts' },
@@ -114,6 +115,21 @@
     }
     feedLoading = true;
     try {
+      // The Reactions tab lives on the viewer's own profile only
+      // (we can't enumerate someone else's reactions). It hits the
+      // existing favourites endpoint which returns every post the
+      // caller has emoji-reacted to, newest first.
+      if (activeTab === 'reactions') {
+        const params: Record<string, string> = {};
+        if (cursor) params.max_id = cursor;
+        const items = await api.get<Post[]>('/api/v1/accounts/favourites', params);
+        const result = Array.isArray(items) ? items : [];
+        posts = reset ? result : [...posts, ...result];
+        cursor = result.length > 0 ? result[result.length - 1]?.id : null;
+        hasMore = result.length >= 20;
+        return;
+      }
+
       const params: { only_media?: boolean; pinned?: boolean; cursor?: string; exclude_replies?: boolean; only_direct?: boolean } = {};
       if (activeTab === 'posts') params.exclude_replies = true;
       if (activeTab === 'media') params.only_media = true;
@@ -371,13 +387,19 @@
 
     <div class="profile-feed-section">
       <Tabs {tabs} bind:active={activeTab}>
-        {#if activeTab === 'posts' || activeTab === 'replies' || activeTab === 'media'}
+        {#if activeTab === 'posts' || activeTab === 'replies' || activeTab === 'media' || activeTab === 'reactions'}
           <FeedList
             {posts}
             loading={feedLoading}
             {hasMore}
             onloadmore={() => loadPosts(false)}
-            emptyMessage={activeTab === 'media' ? 'No media posts yet' : 'No posts yet'}
+            emptyMessage={
+              activeTab === 'media'
+                ? 'No media posts yet'
+                : activeTab === 'reactions'
+                  ? "You haven't reacted to any posts yet."
+                  : 'No posts yet'
+            }
           />
         {/if}
       </Tabs>
