@@ -56,10 +56,26 @@
   let sender = $derived(message.sender || {});
 
   let pickerOpen = $state(false);
+  let pickerAbove = $state(false);
+  let reactionButtonEl: HTMLButtonElement | undefined = $state();
   let confirmingDelete = $state(false);
   let editing = $state(false);
   let editDraft = $state('');
   let savingEdit = $state(false);
+
+  // Space the picker needs to render comfortably. A conservative guess
+  // beats measuring the picker itself (which doesn't exist yet at the
+  // moment we decide where to place it). Flip above when the viewport
+  // has less room below the button than this threshold — that covers
+  // messages sitting close to the composer at the bottom of the chat.
+  const PICKER_ESTIMATED_HEIGHT = 140;
+
+  $effect(() => {
+    if (!pickerOpen || !reactionButtonEl) return;
+    const rect = reactionButtonEl.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    pickerAbove = spaceBelow < PICKER_ESTIMATED_HEIGHT;
+  });
 
   // Debounce timers for the hover-open picker. Open after a short
   // intent delay so a quick scroll-past doesn't pop the picker; close
@@ -326,6 +342,7 @@
             title="Add reaction"
             aria-label="Add reaction"
             aria-expanded={pickerOpen}
+            bind:this={reactionButtonEl}
             onclick={togglePickerClick}
           >
             <span class="material-symbols-outlined">add_reaction</span>
@@ -335,7 +352,8 @@
             <div
               class="picker-anchor"
               class:picker-anchor-own={isOwn}
-              transition:fly={{ y: -6, duration: 180, easing: cubicOut }}
+              class:picker-anchor-above={pickerAbove}
+              transition:fly={{ y: pickerAbove ? 6 : -6, duration: 180, easing: cubicOut }}
             >
               <MessageReactionPicker
                 onpick={handleReact}
@@ -572,6 +590,15 @@
   .picker-anchor-own {
     inset-inline-end: auto;
     inset-inline-start: 0;
+  }
+
+  /* Not enough room below (message near the composer at the bottom
+     of the chat). Flip the picker above the button. */
+  .picker-anchor-above {
+    inset-block-start: auto;
+    inset-block-end: 100%;
+    margin-block-start: 0;
+    margin-block-end: 4px;
   }
 
   .delete-confirm {
