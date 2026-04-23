@@ -167,17 +167,27 @@
   async function handleSend(content: string) {
     if (sending) return;
     sending = true;
+    // Defense-in-depth watchdog: if something in the promise chain
+    // somehow leaves `sending` stuck (past bug: silent rejection on
+    // token refresh race), force-unstick after a reasonable timeout
+    // so the composer never requires a page refresh to work again.
+    const watchdog = window.setTimeout(() => {
+      if (sending) {
+        console.warn('[messages] send watchdog fired; resetting sending flag');
+        sending = false;
+        addToast('Send timed out. Please try again.', 'error');
+      }
+    }, 10_000);
     try {
       const msg = await sendMessage(conversationId, { content });
       messages = [...messages, msg];
       triggerRipple();
       scrollToBottom();
     } catch (err) {
-      // Never leave the composer in a stuck "sending" state if something
-      // fails — surface the error so the user knows why and can retry.
       console.error('[messages] send failed', err);
       addToast('Could not send message. Please try again.', 'error');
     } finally {
+      window.clearTimeout(watchdog);
       sending = false;
     }
   }
@@ -255,24 +265,17 @@
 
   async function handleReactMessage(messageId: string, emoji: string) {
     try {
-      await addMessageReaction(conversationId, messageId, emoji);
-      // Optimistic update — bump the count locally so the user sees
-      // their reaction immediately. Server-side broadcast will
-      // reconcile state for the other participant(s).
-      const me = { id: userId, handle: '', display_name: null };
-
-      messages = messages.map((m) => {
-        if (m.id !== messageId) return m;
-        const existing = m.reactions?.find((r) => r.emoji === emoji);
-        const reactions = existing
-          ? m.reactions!.map((r) =>
-              r.emoji === emoji
-                ? { ...r, count: r.count + 1, accounts: [...r.accounts, me] }
-                : r,
-            )
-          : [...(m.reactions ?? []), { emoji, count: 1, accounts: [me] }];
-        return { ...m, reactions };
-      });
+      // Backend enforces one-per-user-per-message. Response tells us
+      // whether this was "added" (first reaction), "removed" (same
+      // emoji toggled off), or "swapped" (replaced a previous emoji).
+      // We apply the returned aggregate to the local state so the
+      // count + account list match exactly what other participants
+      // will see via SSE.
+      const res = await addMessageReaction(conversationId, messageId, emoji);
+      const nextReactions = res.reactions ?? [];
+      messages = messages.map((m) =>
+        m.id === messageId ? { ...m, reactions: nextReactions } : m
+      );
     } catch (e: unknown) {
       const err = e as { body?: { error?: string; message?: string } };
       if (err?.body?.error === 'reaction.premium_required') {

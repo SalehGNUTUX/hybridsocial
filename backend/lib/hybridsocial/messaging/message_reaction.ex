@@ -18,7 +18,7 @@ defmodule Hybridsocial.Messaging.MessageReaction do
     |> cast(attrs, [:message_id, :identity_id, :emoji])
     |> validate_required([:message_id, :identity_id, :emoji])
     |> validate_length(:emoji, max: 64)
-    |> unique_constraint([:message_id, :identity_id, :emoji])
+    |> unique_constraint([:message_id, :identity_id])
     |> foreign_key_constraint(:message_id)
     |> foreign_key_constraint(:identity_id)
   end

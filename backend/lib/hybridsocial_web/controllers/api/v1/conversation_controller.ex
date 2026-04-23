@@ -421,12 +421,44 @@ defmodule HybridsocialWeb.Api.V1.ConversationController do
   end
 
   # POST /api/v1/conversations/:id/messages/:mid/reactions
+  #
+  # One reaction per user per message. The controller returns `action`
+  # so the client can reflect the outcome without refetching:
+  #   * "added"   — no prior reaction, new one stored
+  #   * "removed" — same emoji clicked again, toggled off
+  #   * "swapped" — different emoji replaces the previous one
+  # The aggregated `reactions` list mirrors the payload that gets
+  # broadcast to other participants over SSE.
   def add_reaction(conn, %{"id" => _conv_id, "mid" => message_id, "emoji" => emoji}) do
     identity = conn.assigns.current_identity
 
     case Messaging.react_to_message(message_id, identity.id, emoji) do
-      {:ok, reaction} ->
-        json(conn, %{id: reaction.id, emoji: reaction.emoji, message_id: reaction.message_id})
+      {:ok, :added, reaction} ->
+        json(conn, %{
+          action: "added",
+          emoji: reaction.emoji,
+          previous_emoji: nil,
+          message_id: message_id,
+          reactions: Messaging.get_message_reactions(message_id)
+        })
+
+      {:ok, :removed, removed_emoji} ->
+        json(conn, %{
+          action: "removed",
+          emoji: nil,
+          previous_emoji: removed_emoji,
+          message_id: message_id,
+          reactions: Messaging.get_message_reactions(message_id)
+        })
+
+      {:ok, :swapped, reaction, previous_emoji} ->
+        json(conn, %{
+          action: "swapped",
+          emoji: reaction.emoji,
+          previous_emoji: previous_emoji,
+          message_id: message_id,
+          reactions: Messaging.get_message_reactions(message_id)
+        })
 
       {:error, :premium_required} ->
         conn

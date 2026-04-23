@@ -546,6 +546,16 @@
     display: inline-flex;
   }
 
+  /* Each .message-row creates its own stacking context via the ripple
+     animation's will-change (and later rows paint on top in DOM order),
+     so a local z-index on .picker-anchor can't escape upward — later
+     bubbles would cover the picker. Promote the host row while the
+     picker is open so it paints above its siblings. */
+  :global(.message-row:has(.picker-anchor)) {
+    position: relative;
+    z-index: 50;
+  }
+
   .picker-anchor {
     position: absolute;
     inset-block-start: 100%;

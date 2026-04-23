@@ -1133,8 +1133,82 @@ defmodule Hybridsocial.Messaging do
   """
   def react_to_message(message_id, identity_id, emoji) do
     with :ok <- check_reaction_tier(emoji, identity_id) do
-      do_react_to_message(message_id, identity_id, emoji)
+      do_react_single(message_id, identity_id, emoji)
     end
+  end
+
+  # One reaction per user per message. Clicking the same emoji again
+  # removes it (toggle). Clicking a different emoji swaps the previous
+  # one for the new one. The controller returns the action so the
+  # client can update its local view without refetching.
+  defp do_react_single(message_id, identity_id, emoji) do
+    existing =
+      Repo.get_by(MessageReaction, message_id: message_id, identity_id: identity_id)
+
+    cond do
+      is_nil(existing) ->
+        case insert_reaction(message_id, identity_id, emoji) do
+          {:ok, reaction} ->
+            broadcast_reaction(message_id, :reaction_added, identity_id, emoji)
+            {:ok, :added, reaction}
+
+          err ->
+            err
+        end
+
+      existing.emoji == emoji ->
+        case Repo.delete(existing) do
+          {:ok, _} ->
+            broadcast_reaction(message_id, :reaction_removed, identity_id, emoji)
+            {:ok, :removed, emoji}
+
+          err ->
+            err
+        end
+
+      true ->
+        previous = existing.emoji
+
+        case Repo.delete(existing) do
+          {:ok, _} ->
+            case insert_reaction(message_id, identity_id, emoji) do
+              {:ok, reaction} ->
+                broadcast_reaction(message_id, :reaction_removed, identity_id, previous)
+                broadcast_reaction(message_id, :reaction_added, identity_id, emoji)
+                {:ok, :swapped, reaction, previous}
+
+              err ->
+                err
+            end
+
+          err ->
+            err
+        end
+    end
+  end
+
+  defp insert_reaction(message_id, identity_id, emoji) do
+    %MessageReaction{}
+    |> MessageReaction.changeset(%{
+      message_id: message_id,
+      identity_id: identity_id,
+      emoji: emoji
+    })
+    |> Repo.insert()
+  end
+
+  defp broadcast_reaction(message_id, event, identity_id, emoji) do
+    # Include the aggregated reactions snapshot so the client can
+    # render the new state directly off the broadcast (otherwise the
+    # delta handler has no data to apply).
+    reactions = get_message_reactions(message_id)
+
+    broadcast_message_event(message_id, event, %{
+      message_id: message_id,
+      identity_id: identity_id,
+      emoji: emoji,
+      reactions: reactions
+    })
   end
 
   defp check_reaction_tier(emoji, identity_id) do
@@ -1159,29 +1233,6 @@ defmodule Hybridsocial.Messaging do
     end
   end
 
-  defp do_react_to_message(message_id, identity_id, emoji) do
-    %MessageReaction{}
-    |> MessageReaction.changeset(%{
-      message_id: message_id,
-      identity_id: identity_id,
-      emoji: emoji
-    })
-    |> Repo.insert(on_conflict: :nothing)
-    |> case do
-      {:ok, reaction} ->
-        broadcast_message_event(message_id, :reaction_added, %{
-          message_id: message_id,
-          identity_id: identity_id,
-          emoji: emoji
-        })
-
-        {:ok, reaction}
-
-      error ->
-        error
-    end
-  end
-
   @doc "Remove an emoji reaction from a message."
   def unreact_to_message(message_id, identity_id, emoji) do
     case Repo.get_by(MessageReaction,
@@ -1195,12 +1246,7 @@ defmodule Hybridsocial.Messaging do
       reaction ->
         case Repo.delete(reaction) do
           {:ok, _} ->
-            broadcast_message_event(message_id, :reaction_removed, %{
-              message_id: message_id,
-              identity_id: identity_id,
-              emoji: emoji
-            })
-
+            broadcast_reaction(message_id, :reaction_removed, identity_id, emoji)
             :ok
 
           error ->

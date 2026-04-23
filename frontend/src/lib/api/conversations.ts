@@ -1,5 +1,5 @@
 import { api } from './client.js';
-import type { Conversation, Message, PaginatedResponse } from './types.js';
+import type { Conversation, Message, MessageReaction, PaginatedResponse } from './types.js';
 
 export function getConversations(cursor?: string): Promise<PaginatedResponse<Conversation>> {
   const params: Record<string, string> = {};
@@ -57,7 +57,19 @@ export function declineConversation(id: string): Promise<void> {
   return api.delete(`/api/v1/conversations/${id}/decline`);
 }
 
-export function addMessageReaction(conversationId: string, messageId: string, emoji: string): Promise<void> {
+export interface ReactionUpdate {
+  action: 'added' | 'removed' | 'swapped';
+  emoji: string | null;
+  previous_emoji: string | null;
+  message_id: string;
+  reactions: MessageReaction[];
+}
+
+export function addMessageReaction(
+  conversationId: string,
+  messageId: string,
+  emoji: string,
+): Promise<ReactionUpdate> {
   return api.post(`/api/v1/conversations/${conversationId}/messages/${messageId}/reactions`, { emoji });
 }
 

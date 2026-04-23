@@ -57,6 +57,7 @@
     class="message-textarea"
     placeholder="Write a message..."
     rows="1"
+    dir="auto"
     onkeydown={handleKeydown}
     oninput={autoResize}
     {disabled}
@@ -125,6 +126,11 @@
     overflow-y: auto;
     max-height: 120px;
     transition: border-color var(--transition-fast);
+    /* Pair with dir="auto" — lets browser pick LTR/RTL from the first
+       strong character, and text-align: start flips the alignment
+       along with it so Arabic/Hebrew input right-aligns automatically. */
+    text-align: start;
+    unicode-bidi: plaintext;
   }
 
   .message-textarea::placeholder {
