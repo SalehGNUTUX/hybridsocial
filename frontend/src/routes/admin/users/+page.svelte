@@ -9,6 +9,7 @@
     forceSensitiveUser, unforceSensitiveUser, revokeAllSessions,
     setTrustLevel, getModerationNotes, createModerationNote, deleteModerationNote,
     resetUserPassword, sendUserPasswordResetEmail, disableUserTwoFactor, changeUserEmail,
+    confirmUserEmail, changeUserTier,
     getRoles, getUserRoles, assignUserRole, revokeUserRole,
     type UserRoleAssignment
   } from '$lib/api/admin.js';
@@ -63,6 +64,19 @@
   let passwordTarget: AdminUser | null = $state(null);
   let generatedPassword = $state('');
   let passwordSubmitting = $state(false);
+
+  // Verification tier modal
+  let tierModalOpen = $state(false);
+  let tierTarget: AdminUser | null = $state(null);
+  let tierValue = $state('free');
+  let tierSubmitting = $state(false);
+
+  const tierOptions: { value: string; label: string; description: string }[] = [
+    { value: 'free', label: 'Free (L0)', description: 'Default — unverified account' },
+    { value: 'verified_starter', label: 'Starter (L1)', description: 'Small creators & casual users' },
+    { value: 'verified_creator', label: 'Creator (L2)', description: 'Active creators & community builders' },
+    { value: 'verified_pro', label: 'Pro (L3)', description: 'Professional accounts — highest limits' },
+  ];
 
   // Manage roles modal
   let rolesModalOpen = $state(false);
@@ -356,6 +370,51 @@
       addToast(`2FA disabled for @${user.handle}`, 'success');
     } catch {
       addToast('Failed to disable 2FA', 'error');
+    }
+  }
+
+  async function handleConfirmEmail(user: AdminUser) {
+    openDropdownId = null;
+    if (!confirm(`Mark @${user.handle}'s email as verified? They'll skip the confirmation link.`)) return;
+    try {
+      const res = await confirmUserEmail(user.id);
+      users = users.map((u) =>
+        u.id === user.id ? { ...u, email_confirmed: true, confirmed_at: res.confirmed_at ?? u.confirmed_at ?? new Date().toISOString() } : u
+      );
+      if (res.status === 'already_confirmed') {
+        addToast(`@${user.handle} was already verified`, 'info');
+      } else {
+        addToast(`Email verified for @${user.handle}`, 'success');
+      }
+    } catch (e: any) {
+      const msg = e?.body?.message || 'Failed to mark email as verified';
+      addToast(msg, 'error');
+    }
+  }
+
+  function openTierModal(user: AdminUser) {
+    tierTarget = user;
+    tierValue = user.verification_tier || 'free';
+    tierModalOpen = true;
+    openDropdownId = null;
+  }
+
+  async function handleChangeTier() {
+    if (!tierTarget) return;
+    tierSubmitting = true;
+    try {
+      const res = await changeUserTier(tierTarget.id, tierValue);
+      const updated = (res as any).data;
+      users = users.map((u) =>
+        u.id === tierTarget!.id ? { ...u, verification_tier: updated?.verification_tier || tierValue } : u
+      );
+      const label = tierOptions.find((t) => t.value === tierValue)?.label || tierValue;
+      addToast(`@${tierTarget.handle} set to ${label}`, 'success');
+      tierModalOpen = false;
+    } catch {
+      addToast('Failed to change tier', 'error');
+    } finally {
+      tierSubmitting = false;
     }
   }
 
@@ -715,6 +774,14 @@
                       Disable 2FA
                     </button>
                   {/if}
+                  {#if !row['email_confirmed']}
+                    <button class="dropdown-item" type="button" onclick={() => handleConfirmEmail(row as unknown as AdminUser)}>
+                      Mark Email Verified
+                    </button>
+                  {/if}
+                  <button class="dropdown-item" type="button" onclick={() => openTierModal(row as unknown as AdminUser)}>
+                    Set Verification Tier…
+                  </button>
                 {/if}
                 <hr class="dropdown-divider" />
                 <button class="dropdown-item" type="button" onclick={() => openNotesModal(row as unknown as AdminUser)}>
@@ -801,6 +868,43 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" type="button" onclick={() => (trustModalOpen = false)}>Cancel</button>
       <button class="btn btn-primary" type="button" onclick={handleSetTrustLevel}>Set Level</button>
+    </div>
+  {/if}
+</Modal>
+
+<!-- Verification Tier Modal -->
+<Modal bind:open={tierModalOpen} title="Set Verification Tier">
+  {#if tierTarget}
+    <p class="modal-text">
+      Grant <strong>@{tierTarget.handle}</strong> a verification tier without
+      requiring them to purchase a subscription. Takes effect immediately.
+    </p>
+    <div class="tier-options">
+      {#each tierOptions as opt (opt.value)}
+        <label class="tier-option" class:tier-option-active={tierValue === opt.value}>
+          <input
+            type="radio"
+            name="tier"
+            value={opt.value}
+            bind:group={tierValue}
+          />
+          <div class="tier-option-body">
+            <span class="tier-option-label">{opt.label}</span>
+            <span class="tier-option-desc">{opt.description}</span>
+          </div>
+        </label>
+      {/each}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" onclick={() => (tierModalOpen = false)}>Cancel</button>
+      <button
+        class="btn btn-primary"
+        type="button"
+        disabled={tierSubmitting || tierValue === (tierTarget.verification_tier || 'free')}
+        onclick={handleChangeTier}
+      >
+        {tierSubmitting ? 'Saving...' : 'Save'}
+      </button>
     </div>
   {/if}
 </Modal>
@@ -1432,5 +1536,53 @@
     font-size: var(--text-xs);
     color: var(--color-primary);
     margin-block-start: 2px;
+  }
+
+  .tier-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-block: var(--space-3);
+  }
+
+  .tier-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+
+  .tier-option:hover {
+    background: var(--color-surface);
+  }
+
+  .tier-option-active {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft, var(--color-surface));
+  }
+
+  .tier-option input[type='radio'] {
+    margin-block-start: 4px;
+  }
+
+  .tier-option-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tier-option-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .tier-option-desc {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
   }
 </style>

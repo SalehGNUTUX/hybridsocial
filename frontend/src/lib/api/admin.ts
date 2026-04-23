@@ -87,6 +87,14 @@ export function changeUserEmail(id: string, email: string): Promise<{ status: st
   return api.put(`/api/v1/admin/users/${id}/email`, { email });
 }
 
+export function confirmUserEmail(id: string): Promise<{ status: string; confirmed_at?: string }> {
+  return api.post(`/api/v1/admin/users/${id}/confirm_email`);
+}
+
+export function changeUserTier(id: string, tier: string): Promise<{ data: AdminUser }> {
+  return api.put(`/api/v1/admin/users/${id}/tier`, { tier });
+}
+
 // Reports
 export function getReports(params?: Record<string, string>): Promise<PaginatedResponse<AdminReport>> {
   return api.get('/api/v1/admin/reports', params);

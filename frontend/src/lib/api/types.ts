@@ -430,6 +430,9 @@ export interface AdminUser {
   created_at: string;
   last_active_at: string | null;
   two_factor_enabled: boolean;
+  email_confirmed?: boolean;
+  confirmed_at?: string | null;
+  verification_tier?: string | null;
 }
 
 export interface AdminReport {

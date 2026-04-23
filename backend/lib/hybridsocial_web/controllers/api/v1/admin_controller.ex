@@ -2896,6 +2896,9 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       force_bot: Map.get(identity, :force_bot, false),
       trust_level: identity.trust_level,
       email: user && user.email,
+      email_confirmed: user != nil and not is_nil(user.confirmed_at),
+      confirmed_at: user && user.confirmed_at,
+      verification_tier: identity.verification_tier || "free",
       two_factor_enabled: (user && user.otp_enabled) || false,
       parent_identity_id: Map.get(identity, :parent_identity_id),
       created_at: identity.inserted_at
@@ -3850,6 +3853,36 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
               |> put_status(:unprocessable_entity)
               |> json(%{error: "account.2fa_disable_failed"})
           end
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  def confirm_user_email(conn, %{"id" => id}) do
+    with :ok <- require_permission(conn, "users.manage") do
+      case Accounts.admin_confirm_email(id) do
+        {:ok, :already_confirmed} ->
+          json(conn, %{status: "already_confirmed"})
+
+        {:ok, user} ->
+          admin_id = conn.assigns.current_identity.id
+          Moderation.log(admin_id, "account.email_confirmed_by_admin", "identity", id, %{})
+          json(conn, %{status: "ok", confirmed_at: user.confirmed_at})
+
+        {:error, :not_found} ->
+          conn
+          |> put_status(:not_found)
+          |> json(%{
+            error: "account.no_login",
+            message:
+              "This identity has no email/password on file — confirmation does not apply to remote or subaccount identities."
+          })
+
+        {:error, _} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "account.confirm_email_failed"})
       end
     else
       {:error, perm} -> deny(conn, perm)

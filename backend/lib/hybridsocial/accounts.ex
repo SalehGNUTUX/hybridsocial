@@ -805,6 +805,29 @@ defmodule Hybridsocial.Accounts do
   end
 
   @doc """
+  Admin-only: marks a local user's email as confirmed without requiring
+  them to click the link. Idempotent — returns `{:ok, :already_confirmed}`
+  if the user was already confirmed. Returns `{:error, :not_found}` for
+  remote identities or subaccounts that have no `users` row.
+  """
+  def admin_confirm_email(identity_id) do
+    case get_user(identity_id) do
+      nil ->
+        {:error, :not_found}
+
+      %User{confirmed_at: %DateTime{}} ->
+        {:ok, :already_confirmed}
+
+      user ->
+        now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+        user
+        |> Ecto.Changeset.change(%{confirmed_at: now, confirmation_token: nil})
+        |> Repo.update()
+    end
+  end
+
+  @doc """
   Admin-only: sends a password-reset email to a local user identified
   by identity_id. Unlike `request_password_reset/1` (the public-facing
   version, which intentionally swallows errors and always returns

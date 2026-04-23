@@ -737,6 +737,7 @@ defmodule HybridsocialWeb.Router do
     post "/users/:id/reset_password", AdminController, :reset_user_password
     post "/users/:id/send_password_reset_email", AdminController, :send_user_password_reset_email
     delete "/users/:id/otp", AdminController, :disable_user_2fa
+    post "/users/:id/confirm_email", AdminController, :confirm_user_email
     get "/users/:id/email", AdminController, :view_user_email
     put "/users/:id/email", AdminController, :change_user_email
     put "/users/:id/tier", AdminController, :change_user_tier
