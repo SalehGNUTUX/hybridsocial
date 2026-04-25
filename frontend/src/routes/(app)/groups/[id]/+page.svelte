@@ -91,7 +91,8 @@
       const cursor = posts.length > 0 ? posts[posts.length - 1]?.id : undefined;
       const result = await getGroupTimeline(groupId, cursor);
       const data = Array.isArray(result) ? result : (result as any).data || [];
-      posts = [...posts, ...data];
+      const seen = new Set(posts.map((p) => p.id));
+      posts = [...posts, ...data.filter((p: Post) => !seen.has(p.id))];
       hasMorePosts = data.length >= 20;
     } catch {
       // Error

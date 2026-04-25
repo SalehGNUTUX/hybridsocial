@@ -69,7 +69,8 @@
     postsLoading = true;
     try {
       const result = await getListTimeline(listId, postsCursor);
-      posts = [...posts, ...result.data];
+      const seen = new Set(posts.map((p) => p.id));
+      posts = [...posts, ...result.data.filter((p) => !seen.has(p.id))];
       postsCursor = result.next_cursor;
       hasMorePosts = !!result.next_cursor;
     } catch {

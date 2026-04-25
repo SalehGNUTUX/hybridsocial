@@ -40,7 +40,15 @@
       if (reset) {
         posts = items;
       } else {
-        posts = [...posts, ...items];
+        // Older-posts pagination uses the last visible id as max_id,
+        // and some backends (and our fallback paths) include that
+        // boundary post in the next page. Without dedup the {#each
+        // posts as p (p.id)} block sees the same id twice and Svelte
+        // bails with each_key_duplicate. De-dupe by id while
+        // preserving the original visible order.
+        const seen = new Set(posts.map((p) => p.id));
+        const fresh = items.filter((p) => !seen.has(p.id));
+        posts = [...posts, ...fresh];
       }
       cursor = items.length > 0 ? items[items.length - 1]?.id : null;
       hasMore = items.length >= 20;

@@ -160,7 +160,8 @@
       if (reset) {
         posts = items;
       } else {
-        posts = [...posts, ...items];
+        const seen = new Set(posts.map((p) => p.id));
+        posts = [...posts, ...items.filter((p: Post) => !seen.has(p.id))];
       }
       cursor = items.length > 0 ? items[items.length - 1]?.id : null;
       hasMore = items.length >= 20;

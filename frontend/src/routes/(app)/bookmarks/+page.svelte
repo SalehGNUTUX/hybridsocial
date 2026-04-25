@@ -25,7 +25,8 @@
       if (reset) {
         posts = result.data;
       } else {
-        posts = [...posts, ...result.data];
+        const seen = new Set(posts.map((p) => p.id));
+        posts = [...posts, ...result.data.filter((p) => !seen.has(p.id))];
       }
       cursor = result.next_cursor;
       hasMore = !!result.next_cursor;
