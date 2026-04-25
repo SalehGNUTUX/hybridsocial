@@ -328,7 +328,14 @@ defmodule Hybridsocial.Feeds do
       |> Visibility.apply_silence_filter()
       |> Visibility.apply_shadow_ban_filter(viewer_id)
       |> order_by([p],
-        desc: coalesce(p.last_activity_at, coalesce(p.published_at, p.inserted_at)),
+        # Strict chronological order by *post time*. The previous
+        # ordering coalesced last_activity_at first, which meant any
+        # reply or boost on an old post bumped it ahead of a brand-new
+        # post with zero engagement — fine for a forum thread list,
+        # confusing for a global timeline. Use published_at when set
+        # (so scheduled posts surface at their intended publish time)
+        # and fall back to inserted_at for inbound/legacy rows.
+        desc: coalesce(p.published_at, p.inserted_at),
         desc: p.id
       )
       |> limit(^limit)
