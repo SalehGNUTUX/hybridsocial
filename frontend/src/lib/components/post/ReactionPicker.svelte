@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { currentUser } from '$lib/stores/auth.js';
+  import { getPremiumReactions, type PremiumReactionsResponse } from '$lib/api/conversations.js';
+
   let {
     selected = null,
     onselect,
@@ -7,25 +11,59 @@
     onselect: (emoji: string) => void;
   } = $props();
 
-  const reactions = [
-    { emoji: '\u{1F600}', type: 'like', label: 'Like' },
+  // The fixed 7 default reactions every user can pick. The user-asked
+  // canonical set: thumbs-up Like, ❤ Love, 🤯 Wow, 🥰 Care, 😡 Angry,
+  // 😢 Sad, 😂 LOL.
+  const defaultReactions = [
+    { emoji: '\u{1F44D}', type: 'like', label: 'Like' },
     { emoji: '\u{2764}\u{FE0F}', type: 'love', label: 'Love' },
-    { emoji: '\u{1F917}', type: 'care', label: 'Care' },
+    { emoji: '\u{1F92F}', type: 'wow', label: 'Wow' },
+    { emoji: '\u{1F970}', type: 'care', label: 'Care' },
     { emoji: '\u{1F621}', type: 'angry', label: 'Angry' },
     { emoji: '\u{1F622}', type: 'sad', label: 'Sad' },
     { emoji: '\u{1F602}', type: 'lol', label: 'LOL' },
-    { emoji: '\u{1F92F}', type: 'wow', label: 'Wow' },
   ];
 
-  function handleClick(e: MouseEvent, type: string) {
+  // Premium reactions come from the admin-curated catalog
+  // (/api/v1/premium_reactions). They render alongside the defaults
+  // for paid tiers (custom_emoji limit) and are visually muted
+  // otherwise — a small "Premium" hint replaces the click handler.
+  let premium = $state<PremiumReactionsResponse['premium']>([]);
+  let isPremiumUser = $derived(!!$currentUser?.limits?.custom_emoji);
+
+  onMount(async () => {
+    try {
+      const cat = await getPremiumReactions();
+      premium = cat.premium ?? [];
+    } catch {
+      premium = [];
+    }
+  });
+
+  let reactions = $derived(
+    [
+      ...defaultReactions,
+      ...premium.map((p) => ({
+        emoji: p.character || ':' + p.shortcode + ':',
+        type: p.shortcode,
+        label: p.shortcode,
+        image: p.image_url,
+        premium: true,
+      })),
+    ] as Array<{ emoji: string; type: string; label: string; image?: string | null; premium?: boolean }>,
+  );
+
+  function handleClick(e: MouseEvent, type: string, isPremium?: boolean) {
     e.stopPropagation();
+    if (isPremium && !isPremiumUser) return;
     onselect(type);
   }
 
-  function handleKeydown(e: KeyboardEvent, type: string) {
+  function handleKeydown(e: KeyboardEvent, type: string, isPremium?: boolean) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       e.stopPropagation();
+      if (isPremium && !isPremiumUser) return;
       onselect(type);
     }
   }
@@ -42,13 +80,20 @@
       type="button"
       class="reaction-btn"
       class:reaction-selected={selected === reaction.type}
+      class:reaction-locked={reaction.premium && !isPremiumUser}
       style="animation-delay: {80 + i * 40}ms"
-      onclick={(e) => handleClick(e, reaction.type)}
-      onkeydown={(e) => handleKeydown(e, reaction.type)}
-      aria-label={reaction.label}
+      onclick={(e) => handleClick(e, reaction.type, reaction.premium)}
+      onkeydown={(e) => handleKeydown(e, reaction.type, reaction.premium)}
+      aria-label={reaction.premium && !isPremiumUser ? `${reaction.label} (premium)` : reaction.label}
       aria-pressed={selected === reaction.type}
+      title={reaction.premium && !isPremiumUser ? `${reaction.label} — premium tier only` : reaction.label}
+      disabled={reaction.premium && !isPremiumUser}
     >
-      <span class="reaction-emoji">{reaction.emoji}</span>
+      {#if reaction.image}
+        <img class="reaction-image" src={reaction.image} alt={reaction.label} />
+      {:else}
+        <span class="reaction-emoji">{reaction.emoji}</span>
+      {/if}
     </button>
   {/each}
 </div>
@@ -143,5 +188,22 @@
   .reaction-emoji {
     font-size: 1.25rem;
     line-height: 1;
+  }
+
+  .reaction-image {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+  }
+
+  .reaction-locked {
+    opacity: 0.45;
+    filter: grayscale(0.6);
+    cursor: not-allowed;
+  }
+
+  .reaction-locked:hover {
+    transform: none;
+    background: transparent;
   }
 </style>

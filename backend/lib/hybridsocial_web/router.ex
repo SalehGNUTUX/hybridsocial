@@ -874,6 +874,12 @@ defmodule HybridsocialWeb.Router do
     post "/premium_reactions", Admin.PremiumReactionController, :create
     patch "/premium_reactions/:id", Admin.PremiumReactionController, :update
     delete "/premium_reactions/:id", Admin.PremiumReactionController, :delete
+
+    # Custom emojis (instance-wide, available to every user in posts)
+    get "/custom_emojis", Admin.CustomEmojisController, :index
+    post "/custom_emojis", Admin.CustomEmojisController, :create
+    patch "/custom_emojis/:id", Admin.CustomEmojisController, :update
+    delete "/custom_emojis/:id", Admin.CustomEmojisController, :delete
   end
 
   # Markers (authenticated)
