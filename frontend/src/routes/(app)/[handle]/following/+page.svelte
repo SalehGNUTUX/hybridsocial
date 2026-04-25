@@ -49,7 +49,12 @@
   });
 
   const unsub = page.subscribe(($page) => {
-    handle = $page.params.handle!;
+    // The URL segment for /@tester/... is captured verbatim including
+    // the leading "@", so the raw param is "@tester". Strip it once
+    // here so every consumer (display, lookupAccount, back-link)
+    // sees the bare handle and doesn't end up double-prefixing.
+    const raw = $page.params.handle ?? '';
+    handle = raw.startsWith('@') ? raw.slice(1) : raw;
   });
 
   // Pull every page of /following so the buckets are accurate. Cap at
