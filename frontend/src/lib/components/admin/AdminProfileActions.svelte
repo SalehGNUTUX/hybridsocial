@@ -274,7 +274,24 @@
     showRevokeConfirm = false;
     showTrustLevel = false;
   }
+
+  // Close the popover when clicking outside of it. The popover is a
+  // standalone floating panel anchored to the icon button; without
+  // this it would only close when toggling the icon again.
+  function handleDocumentClick(event: MouseEvent) {
+    if (!expanded) return;
+    const target = event.target as Element | null;
+    if (!target) return;
+    if (
+      !target.closest('.admin-popover') &&
+      !target.closest('.admin-profile-toggle')
+    ) {
+      expanded = false;
+    }
+  }
 </script>
+
+<svelte:window onclick={handleDocumentClick} />
 
 <div class="admin-profile-section">
   <button
@@ -282,25 +299,17 @@
     class="admin-profile-toggle"
     onclick={toggleExpanded}
     aria-expanded={expanded}
+    aria-haspopup="menu"
+    aria-label="Moderation tools"
+    title="Moderation tools"
   >
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-    </svg>
-    <span class="admin-profile-toggle-label">Moderation</span>
-    <svg
-      width="14" height="14"
-      viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" stroke-width="2"
-      class="admin-chevron"
-      class:admin-chevron-open={expanded}
-      aria-hidden="true"
-    >
-      <polyline points="6 9 12 15 18 9"/>
     </svg>
   </button>
 
   {#if expanded}
-    <div class="admin-profile-panel">
+    <div class="admin-popover" role="menu" aria-label="Moderation actions">
       {#if loading}
         <div class="admin-panel-loading">Loading moderation data...</div>
       {:else if adminUser}
@@ -595,51 +604,63 @@
 {/if}
 
 <style>
+  /* The component renders inline as a small icon button next to the
+     profile's other action buttons (Follow, Message, …). The popover
+     is anchored to the icon and right-aligned so it stays inside the
+     viewport on the right side of the row. */
   .admin-profile-section {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-warning, #f59e0b);
-    border-radius: var(--radius-xl);
-    overflow: hidden;
+    position: relative;
+    display: inline-flex;
   }
 
   .admin-profile-toggle {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
-    background: transparent;
-    border: none;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: var(--radius-full, 999px);
+    color: #fbbf24;
     cursor: pointer;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-warning, #f59e0b);
-    font-family: inherit;
-    transition: background-color var(--transition-fast);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    transition: background-color var(--transition-fast), transform var(--transition-fast);
   }
 
   .admin-profile-toggle:hover {
-    background: var(--color-warning-light, rgba(245, 158, 11, 0.08));
+    background: rgba(245, 158, 11, 0.85);
+    color: #0f172a;
   }
 
-  .admin-profile-toggle-label {
-    flex: 1;
-    text-align: start;
+  .admin-profile-toggle:focus-visible {
+    outline: 2px solid var(--color-warning, #f59e0b);
+    outline-offset: 2px;
   }
 
-  .admin-chevron {
-    transition: transform var(--transition-fast);
-  }
-
-  .admin-chevron-open {
-    transform: rotate(180deg);
-  }
-
-  .admin-profile-panel {
-    padding: 0 var(--space-4) var(--space-4);
+  .admin-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(360px, calc(100vw - 32px));
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-warning, #f59e0b);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    animation: admin-popover-in 0.16s ease;
+  }
+
+  @keyframes admin-popover-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .admin-panel-loading {

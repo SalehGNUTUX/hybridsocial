@@ -332,7 +332,13 @@
       onmute={handleMute}
       onmessage={handleMessage}
       onedit={handleEdit}
-    />
+    >
+      {#snippet staffActions()}
+        {#if $isStaffMember && !isOwnProfile && account}
+          <AdminProfileActions {account} />
+        {/if}
+      {/snippet}
+    </ProfileHeader>
 
     {#if familiarFollowers.length > 0}
       <div class="familiar-followers">
@@ -379,10 +385,6 @@
           </button>
         {/if}
       </div>
-    {/if}
-
-    {#if $isStaffMember && !isOwnProfile}
-      <AdminProfileActions {account} />
     {/if}
 
     <div class="profile-feed-section">

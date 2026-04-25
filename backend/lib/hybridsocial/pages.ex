@@ -52,7 +52,7 @@ defmodule Hybridsocial.Pages do
   @doc "Updates a page. Must be admin or owner."
   def update_page(page_identity_id, editor_id, attrs) do
     with {:ok, identity, _org} <- get_page_with_auth(page_identity_id),
-         true <- can_edit?(page_identity_id, editor_id) do
+         true <- can_edit?(page_identity_id, editor_id) or staff_member?(editor_id) do
       identity_attrs =
         Map.take(attrs, ["display_name", "bio", "avatar_url", "header_url"])
 
@@ -81,10 +81,10 @@ defmodule Hybridsocial.Pages do
     end
   end
 
-  @doc "Soft deletes a page. Must be the owner."
+  @doc "Soft deletes a page. Must be the owner or instance staff."
   def delete_page(page_identity_id, owner_id) do
     with {:ok, identity, org} <- get_page_with_auth(page_identity_id),
-         true <- org.owner_id == owner_id do
+         true <- org.owner_id == owner_id or staff_member?(owner_id) do
       case identity |> Identity.soft_delete_changeset() |> Repo.update() do
         {:ok, deleted} ->
           Phoenix.PubSub.broadcast(
@@ -341,4 +341,10 @@ defmodule Hybridsocial.Pages do
       identity -> {:ok, identity, identity.organization}
     end
   end
+
+  # Instance admins/moderators (anyone with an active row in
+  # identity_roles) can edit or delete any page. Per-page ACLs still
+  # govern non-staff editors.
+  defp staff_member?(nil), do: false
+  defp staff_member?(identity_id), do: Hybridsocial.Auth.RBAC.staff?(identity_id)
 end

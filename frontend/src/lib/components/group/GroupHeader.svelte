@@ -1,17 +1,20 @@
 <script lang="ts">
   import type { GroupDetail } from '$lib/api/groups.js';
+  import type { Snippet } from 'svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
 
   let {
     group,
     onjoin,
     onleave,
-    onsettings
+    onsettings,
+    staffActions
   }: {
     group: GroupDetail;
     onjoin?: () => void;
     onleave?: () => void;
     onsettings?: () => void;
+    staffActions?: Snippet;
   } = $props();
 
   let memberLabel = $derived(
@@ -61,6 +64,9 @@
           </div>
         </div>
         <div class="header-actions">
+          {#if staffActions}
+            {@render staffActions()}
+          {/if}
           {#if isAdmin}
             <button type="button" class="btn btn-ghost" onclick={onsettings} aria-label="Group settings">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

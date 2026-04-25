@@ -10,6 +10,8 @@
   import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
   import { filterBadges, type Badge } from '$lib/utils/badges.js';
 
+  import type { Snippet } from 'svelte';
+
   let {
     account,
     relationship = null,
@@ -20,6 +22,7 @@
     onmute,
     onmessage,
     onedit,
+    staffActions,
   }: {
     account: Identity;
     relationship?: Relationship | null;
@@ -30,6 +33,7 @@
     onmute?: () => void;
     onmessage?: () => void;
     onedit?: () => void;
+    staffActions?: Snippet;
   } = $props();
 
   let joinDate = $derived(
@@ -154,6 +158,9 @@
       {/if}
 
       <div class="profile-actions">
+        {#if staffActions}
+          {@render staffActions()}
+        {/if}
         {#if isOwnProfile}
           <button class="btn btn-outline" type="button" onclick={onedit}>
             Edit profile

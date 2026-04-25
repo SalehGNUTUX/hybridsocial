@@ -197,7 +197,10 @@
             />
           </div>
           <div class="page-actions">
-            {#if isOwner}
+            {#if $isStaffMember && !isOwner && pageData}
+              <AdminProfileActions account={pageData} />
+            {/if}
+            {#if isOwner || ($isStaffMember && pageData)}
               <button type="button" class="btn btn-outline" onclick={openEditDialog}>
                 Edit page
               </button>
@@ -289,10 +292,6 @@
         {/if}
       </div>
     </div>
-
-    {#if $isStaffMember && !isOwner && pageData}
-      <AdminProfileActions account={pageData} />
-    {/if}
 
     <div class="page-feed-section">
       <Tabs {tabs} bind:active={activeTab}>

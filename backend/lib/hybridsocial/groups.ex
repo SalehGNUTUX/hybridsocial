@@ -567,12 +567,22 @@ defmodule Hybridsocial.Groups do
   defp require_role(group_id, identity_id, allowed_roles) do
     case member_role(group_id, identity_id) do
       nil ->
-        {:error, :forbidden}
+        if staff_member?(identity_id), do: {:ok, :staff}, else: {:error, :forbidden}
 
       role ->
-        if role in allowed_roles, do: {:ok, role}, else: {:error, :forbidden}
+        cond do
+          role in allowed_roles -> {:ok, role}
+          staff_member?(identity_id) -> {:ok, :staff}
+          true -> {:error, :forbidden}
+        end
     end
   end
+
+  # Instance admins/moderators (anyone with an active row in
+  # identity_roles) can manage any group regardless of group-internal
+  # role — used by the moderation icon panel on group profiles.
+  defp staff_member?(nil), do: false
+  defp staff_member?(identity_id), do: Hybridsocial.Auth.RBAC.staff?(identity_id)
 
   defp get_application(application_id) do
     case Repo.get(GroupApplication, application_id) do

@@ -203,23 +203,25 @@
       onjoin={handleJoin}
       onleave={handleLeave}
       onsettings={openSettings}
-    />
+    >
+      {#snippet staffActions()}
+        {#if $isStaffMember && !isOwner && group?.identity}
+          <AdminProfileActions account={group.identity} />
+        {/if}
+      {/snippet}
+    </GroupHeader>
 
-    {#if isAdmin}
+    {#if isAdmin || $isStaffMember}
       <div class="admin-bar">
         <button type="button" class="btn btn-outline btn-sm" onclick={openEdit}>
           Edit Group
         </button>
-        {#if isOwner}
+        {#if isOwner || $isStaffMember}
           <button type="button" class="btn btn-outline btn-sm btn-danger-outline" onclick={() => showDeleteConfirm = true}>
             Delete Group
           </button>
         {/if}
       </div>
-    {/if}
-
-    {#if $isStaffMember && !isOwner && group?.identity}
-      <AdminProfileActions account={group.identity} />
     {/if}
 
     <div class="group-content">
