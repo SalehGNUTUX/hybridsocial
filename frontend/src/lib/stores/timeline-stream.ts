@@ -121,6 +121,17 @@ export function connectStream(
       try {
         const post: Post = JSON.parse(event.data);
         dlog('update recv', { id: post.id, isAtTop });
+        // Replies are excluded from the home / public / local
+        // timelines on the backend (`maybe_exclude_replies`), so
+        // they must also be excluded from the SSE-driven prepend.
+        // Otherwise a reply pops in as a new top-level item with a
+        // "new posts" badge, then disappears on refresh because the
+        // refetch filters it out — exactly the ghost behaviour
+        // users were seeing.
+        if (post.parent_id) {
+          dlog('update reply skipped', post.id);
+          return;
+        }
         if (currentFilter && !currentFilter(post)) {
           dlog('update filtered out', post.id);
           return;
