@@ -22,8 +22,22 @@
       });
       goto(`/groups/${group.id}`);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Failed to create group.';
-      error = message;
+      // The backend slugifies the group's name into the federated
+      // actor handle, so a name that collides with another group or
+      // user surfaces as a `details.handle: ["has already been taken"]`
+      // validation error. Translate that into something the user can
+      // act on — they don't see "handle" in this form.
+      const body = (e as { body?: { details?: Record<string, string[]>; message?: string } })?.body;
+      const handleErrs = body?.details?.handle;
+      if (handleErrs?.some((m) => /taken|exist|use|unique/i.test(m))) {
+        error = 'A group or account is already using a similar name. Please choose a different name.';
+      } else if (handleErrs?.length) {
+        error = `Name: ${handleErrs[0]}`;
+      } else if (body?.message) {
+        error = body.message;
+      } else {
+        error = e instanceof Error ? e.message : 'Failed to create group.';
+      }
     } finally {
       submitting = false;
     }

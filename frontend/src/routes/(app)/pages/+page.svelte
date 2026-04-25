@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getPages, createPage } from '$lib/api/pages.js';
+  import { api } from '$lib/api/client.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
@@ -51,6 +52,41 @@
   let creating = $state(false);
   let createError = $state('');
 
+  // Live handle availability check. The /api/v1/accounts/lookup
+  // endpoint returns 404 when no identity owns the handle, which is
+  // the cheapest signal we can probe for "available". A short debounce
+  // keeps us from hitting the lookup on every keystroke.
+  let handleStatus = $state<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  let handleCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  let handleCheckSeq = 0;
+  $effect(() => {
+    const raw = createData.handle.trim();
+    if (handleCheckTimer) clearTimeout(handleCheckTimer);
+    if (raw.length === 0) {
+      handleStatus = 'idle';
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]{1,20}$/.test(raw)) {
+      handleStatus = 'invalid';
+      return;
+    }
+    handleStatus = 'checking';
+    const seq = ++handleCheckSeq;
+    handleCheckTimer = setTimeout(async () => {
+      try {
+        await api.get(`/api/v1/accounts/lookup`, { handle: raw });
+        if (seq === handleCheckSeq) handleStatus = 'taken';
+      } catch (e: any) {
+        if (seq !== handleCheckSeq) return;
+        if (e?.status === 404) {
+          handleStatus = 'available';
+        } else {
+          handleStatus = 'idle';
+        }
+      }
+    }, 350);
+  });
+
   const categories = [
     'Business',
     'Technology',
@@ -94,8 +130,17 @@
       const newPage = await createPage(createData);
       pages = [newPage, ...pages];
       showCreateModal = false;
-    } catch {
-      createError = 'Failed to create page. Please try again.';
+    } catch (e: any) {
+      // Backend returns { error: "validation.failed", details: { handle: ["has already been taken"] } }
+      // when the requested handle collides with another identity.
+      const handleErrs: string[] | undefined = e?.body?.details?.handle;
+      if (handleErrs?.some((m) => /taken|exist|use|unique/i.test(m))) {
+        createError = `The handle "@${createData.handle.trim()}" is already in use. Please choose a different one.`;
+      } else if (e?.body?.details?.handle?.length) {
+        createError = `Handle: ${e.body.details.handle[0]}`;
+      } else {
+        createError = e?.body?.message || 'Failed to create page. Please try again.';
+      }
     } finally {
       creating = false;
     }
@@ -210,7 +255,34 @@
   <div class="create-form">
     <div class="form-group">
       <label class="form-label" for="page-handle">Handle</label>
-      <input id="page-handle" type="text" class="form-input" bind:value={createData.handle} placeholder="my-page" />
+      <input
+        id="page-handle"
+        type="text"
+        class="form-input"
+        class:form-input-invalid={handleStatus === 'taken' || handleStatus === 'invalid'}
+        bind:value={createData.handle}
+        placeholder="my_page"
+        autocomplete="off"
+        aria-invalid={handleStatus === 'taken' || handleStatus === 'invalid'}
+        aria-describedby="page-handle-status"
+      />
+      <p
+        id="page-handle-status"
+        class="handle-status handle-status-{handleStatus}"
+        aria-live="polite"
+      >
+        {#if handleStatus === 'checking'}
+          Checking availability…
+        {:else if handleStatus === 'available'}
+          ✓ "@{createData.handle.trim()}" is available
+        {:else if handleStatus === 'taken'}
+          ✕ "@{createData.handle.trim()}" is already in use — please choose a different one
+        {:else if handleStatus === 'invalid'}
+          Only letters, numbers, and underscores; up to 20 characters
+        {:else}
+          &nbsp;
+        {/if}
+      </p>
     </div>
     <div class="form-group">
       <label class="form-label" for="page-name">Display Name</label>
@@ -240,7 +312,7 @@
 
     <div class="form-actions">
       <button type="button" class="btn btn-ghost" onclick={() => (showCreateModal = false)}>Cancel</button>
-      <button type="button" class="btn btn-primary" onclick={handleCreate} disabled={creating}>
+      <button type="button" class="btn btn-primary" onclick={handleCreate} disabled={creating || handleStatus === 'taken' || handleStatus === 'invalid' || handleStatus === 'checking'}>
         {creating ? 'Creating...' : 'Create Page'}
       </button>
     </div>
@@ -561,6 +633,30 @@
   .form-error {
     font-size: var(--text-sm);
     color: var(--color-danger);
+  }
+
+  .form-input-invalid {
+    border-color: var(--color-danger, #dc2626);
+  }
+
+  .handle-status {
+    margin: 4px 0 0;
+    font-size: 12px;
+    min-height: 1.1em;
+    color: var(--color-text-secondary);
+  }
+
+  .handle-status-checking {
+    color: var(--color-text-secondary);
+  }
+
+  .handle-status-available {
+    color: var(--color-success, #16a34a);
+  }
+
+  .handle-status-taken,
+  .handle-status-invalid {
+    color: var(--color-danger, #dc2626);
   }
 
   .form-actions {

@@ -147,8 +147,16 @@
       bots = await api.get<BotEntry[]>('/api/v1/bots');
       wizardStep = null;
       addToast('Bot created', 'success');
-    } catch {
-      addToast('Failed to create bot', 'error');
+    } catch (e: any) {
+      // Bot handles are auto-generated with a random suffix so
+      // collisions are rare — but if they happen, give the user a
+      // useful hint instead of the generic toast.
+      const handleErrs: string[] | undefined = e?.body?.details?.handle;
+      if (handleErrs?.some((m: string) => /taken|exist|use|unique/i.test(m))) {
+        addToast('That bot handle is already taken — please try a different name.', 'error');
+      } else {
+        addToast('Failed to create bot', 'error');
+      }
     } finally { creating = false; }
   }
 
