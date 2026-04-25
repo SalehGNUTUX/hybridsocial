@@ -15,14 +15,19 @@
     onedit?: () => void;
   } = $props();
 
+  // Canonical 7 default reactions — must match ReactionPicker.svelte
+  // exactly so a click on 👍 doesn't display as 😀 elsewhere on the
+  // card (the stacked summary chip, the user's "current reaction"
+  // mark, the floating-emoji animation on tap, and the Reactions
+  // detail modal all read from this map).
   const reactionEmojis: Record<string, string> = {
-    like: '\u{1F600}',
-    love: '\u{2764}\u{FE0F}',
-    care: '\u{1F917}',
-    angry: '\u{1F621}',
-    sad: '\u{1F622}',
-    lol: '\u{1F602}',
-    wow: '\u{1F92F}',
+    like: '\u{1F44D}', // 👍
+    love: '\u{2764}\u{FE0F}', // ❤️
+    wow: '\u{1F92F}', // 🤯
+    care: '\u{1F970}', // 🥰
+    angry: '\u{1F621}', // 😡
+    sad: '\u{1F622}', // 😢
+    lol: '\u{1F602}', // 😂
   };
 
   import { onMount } from 'svelte';

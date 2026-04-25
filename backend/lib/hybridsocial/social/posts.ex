@@ -1101,11 +1101,11 @@ defmodule Hybridsocial.Social.Posts do
   # love → ❤️ → love stays stable.
   defp reaction_emoji_for("like"), do: nil
   defp reaction_emoji_for("love"), do: "❤️"
-  defp reaction_emoji_for("care"), do: "🤗"
-  defp reaction_emoji_for("lol"), do: "😂"
   defp reaction_emoji_for("wow"), do: "🤯"
-  defp reaction_emoji_for("sad"), do: "😢"
+  defp reaction_emoji_for("care"), do: "🥰"
   defp reaction_emoji_for("angry"), do: "😡"
+  defp reaction_emoji_for("sad"), do: "😢"
+  defp reaction_emoji_for("lol"), do: "😂"
   defp reaction_emoji_for(_), do: nil
 
   def unreact(post_id, identity_id) do
