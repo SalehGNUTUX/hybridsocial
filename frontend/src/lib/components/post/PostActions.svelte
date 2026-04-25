@@ -31,6 +31,12 @@
   let boostCount = $state(post.boost_count);
   let replyCount = $state(post.reply_count);
   let reactionCount = $state(post.reaction_count);
+  // Local mirror of the server flag — mutating `post.is_bookmarked`
+  // directly was unreliable because `post` is a $props() proxy and
+  // doesn't always propagate back to the parent's reactivity graph,
+  // so the menu icon never updated and it looked like the click
+  // had failed even though the server stored the bookmark.
+  let isBookmarked = $state(!!post.is_bookmarked);
   let currentReaction = $state(post.current_user_reaction);
   let showReactionPicker = $state(false);
   let showMoreMenu = $state(false);
@@ -267,11 +273,10 @@
   async function handleBookmark(e: MouseEvent) {
     e.stopPropagation();
     showMoreMenu = false;
-    const wasBookmarked = !!post.is_bookmarked;
-    // Optimistic flip — flipping on the live `post` so the menu icon
-    // updates immediately. Without this the user clicks "Bookmark",
-    // sees nothing change, and thinks the action did nothing.
-    post.is_bookmarked = !wasBookmarked;
+    const wasBookmarked = isBookmarked;
+    // Optimistic flip on the LOCAL state so the menu icon updates
+    // immediately and reactively. Roll back on failure.
+    isBookmarked = !wasBookmarked;
     try {
       if (wasBookmarked) {
         await api.delete(`/api/v1/statuses/${post.id}/bookmark`);
@@ -285,8 +290,7 @@
         );
       }
     } catch {
-      // Roll back the optimistic flip and surface the failure.
-      post.is_bookmarked = wasBookmarked;
+      isBookmarked = wasBookmarked;
       window.dispatchEvent(
         new CustomEvent('toast', { detail: { message: 'Could not update bookmark', type: 'error' } }),
       );
@@ -630,8 +634,8 @@
           Share
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleBookmark}>
-          <span class="material-symbols-outlined menu-icon">{post.is_bookmarked ? 'bookmark_remove' : 'bookmark'}</span>
-          {post.is_bookmarked ? 'Remove bookmark' : 'Bookmark'}
+          <span class="material-symbols-outlined menu-icon">{isBookmarked ? 'bookmark_remove' : 'bookmark'}</span>
+          {isBookmarked ? 'Remove bookmark' : 'Bookmark'}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleMuteNotifications}>
           <span class="material-symbols-outlined menu-icon">{isPostMuted ? 'notifications_active' : 'notifications_off'}</span>

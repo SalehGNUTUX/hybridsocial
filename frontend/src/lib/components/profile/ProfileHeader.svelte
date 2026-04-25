@@ -7,6 +7,7 @@
   import VerifiedBadge from '$lib/components/ui/VerifiedBadge.svelte';
   import RoleBadge from '$lib/components/ui/RoleBadge.svelte';
   import AccountTypeIndicator from '$lib/components/ui/AccountTypeIndicator.svelte';
+  import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 
   let {
     account,
@@ -91,18 +92,61 @@
   function cancelReport() {
     showReportModal = false;
   }
+
+  // Lightbox for the banner + avatar. We only open it for real
+  // uploaded images (skip the default placeholders) so a brand-new
+  // account doesn't show the platform's default cover full-screen.
+  let lightboxImages = $state<{ url: string; alt?: string | null }[]>([]);
+  let lightboxIndex = $state(0);
+  let lightboxOpen = $state(false);
+
+  function openAvatar() {
+    if (!account.avatar_url) return;
+    lightboxImages = [{ url: account.avatar_url, alt: `${account.display_name || account.handle}'s avatar` }];
+    lightboxIndex = 0;
+    lightboxOpen = true;
+  }
+
+  function openBanner() {
+    if (!account.header_url) return;
+    lightboxImages = [{ url: account.header_url, alt: `${account.display_name || account.handle}'s header` }];
+    lightboxIndex = 0;
+    lightboxOpen = true;
+  }
 </script>
 
 <div class="profile-header">
   <div class="profile-banner">
-    <img src={account.header_url || '/images/default-cover.svg'} alt="" class="banner-img" />
+    {#if account.header_url}
+      <button
+        type="button"
+        class="banner-button"
+        onclick={openBanner}
+        aria-label="View header image"
+      >
+        <img src={account.header_url} alt="" class="banner-img" />
+      </button>
+    {:else}
+      <img src="/images/default-cover.svg" alt="" class="banner-img" />
+    {/if}
   </div>
 
   <div class="profile-info-section">
     <div class="profile-avatar-row">
-      <div class="profile-avatar-wrapper">
-        <Avatar src={account.avatar_url} name={account.display_name || account.handle} size="xl" />
-      </div>
+      {#if account.avatar_url}
+        <button
+          type="button"
+          class="profile-avatar-wrapper avatar-button"
+          onclick={openAvatar}
+          aria-label="View profile picture"
+        >
+          <Avatar src={account.avatar_url} name={account.display_name || account.handle} size="xl" />
+        </button>
+      {:else}
+        <div class="profile-avatar-wrapper">
+          <Avatar src={account.avatar_url} name={account.display_name || account.handle} size="xl" />
+        </div>
+      {/if}
 
       <div class="profile-actions">
         {#if isOwnProfile}
@@ -191,6 +235,14 @@
   </div>
 </div>
 
+{#if lightboxOpen}
+  <ImageLightbox
+    images={lightboxImages}
+    bind:index={lightboxIndex}
+    onclose={() => (lightboxOpen = false)}
+  />
+{/if}
+
 {#if showReportModal}
   <div class="report-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label="Report user">
     <div class="report-dialog" onclick={(e) => e.stopPropagation()}>
@@ -246,6 +298,33 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  /* Buttonized banner / avatar — reset native button chrome so the
+     image still fills the slot, only the cursor + focus ring change
+     to signal it's now clickable. */
+  .banner-button {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+  }
+
+  .avatar-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+  }
+
+  .banner-button:focus-visible,
+  .avatar-button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .banner-gradient {
