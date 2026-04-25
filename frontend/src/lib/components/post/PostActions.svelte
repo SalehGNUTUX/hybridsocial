@@ -219,14 +219,17 @@
 
   function toggleReactionPicker(e: MouseEvent) {
     e.stopPropagation();
-    // If already reacted, clicking removes the reaction
+    // If already reacted, clicking removes the reaction.
     if (currentReaction) {
       handleReaction(currentReaction);
       return;
     }
-    showReactionPicker = !showReactionPicker;
+    // Default click leaves a 👍 (like). The picker is still reachable
+    // via hover on desktop and via long-press fallbacks elsewhere.
+    showReactionPicker = false;
     showMoreMenu = false;
     showReactionDetail = false;
+    handleReaction('like');
   }
 
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
