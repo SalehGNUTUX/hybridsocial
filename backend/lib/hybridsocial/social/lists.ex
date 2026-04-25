@@ -108,6 +108,16 @@ defmodule Hybridsocial.Social.Lists do
     |> Repo.all()
   end
 
+  @doc """
+  Returns the number of members in a list. Used by the list serializer
+  so the UI can show "Members (N)" without a second round trip.
+  """
+  def count_members(list_id) do
+    ListMember
+    |> where([lm], lm.list_id == ^list_id)
+    |> Repo.aggregate(:count)
+  end
+
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------

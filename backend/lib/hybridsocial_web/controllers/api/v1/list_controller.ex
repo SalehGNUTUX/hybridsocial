@@ -147,6 +147,7 @@ defmodule HybridsocialWeb.Api.V1.ListController do
     %{
       id: list.id,
       name: list.name,
+      member_count: Lists.count_members(list.id),
       created_at: list.inserted_at,
       updated_at: list.updated_at
     }
