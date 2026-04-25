@@ -2,6 +2,9 @@
   import type { Post } from '$lib/api/types.js';
   import { relativeTime, fullDateTime } from '$lib/utils/time.js';
   import { editPost } from '$lib/api/statuses.js';
+  import { uploadMedia } from '$lib/api/media.js';
+  import { currentUser } from '$lib/stores/auth.js';
+  import type { MediaAttachment } from '$lib/api/types.js';
   import { api } from '$lib/api/client.js';
   import { isStaffMember } from '$lib/stores/auth.js';
   import PostActions from './PostActions.svelte';
@@ -158,34 +161,91 @@
     }
   }
 
-  // Edit mode
+  // Edit mode — full editor: content + media (add/remove) + NSFW
+  // toggle + spoiler text + (when allowed) markdown toggle. Schedule
+  // is intentionally absent: an existing post can't be re-scheduled.
   let editing = $state(false);
   let editContent = $state('');
   let editSaving = $state(false);
   let editError = $state('');
-
   let editSpoilerText = $state('');
+  let editShowCW = $state(false);
+  let editSensitive = $state(false);
+  let editMedia = $state<MediaAttachment[]>([]);
+  let editMediaUploading = $state(false);
+  let editFileInputEl: HTMLInputElement | undefined = $state();
+  // Per-tier media cap — read off the current user since the editor
+  // owner is always the post's author. Defaults to 4 if limits aren't
+  // populated yet (matches the composer's fallback).
+  let editMediaMax = $derived($currentUser?.limits?.media_per_post ?? 4);
 
   function startEditing() {
-    editContent = post.content;
+    editContent = post.content || '';
     editSpoilerText = post.spoiler_text || '';
+    editShowCW = !!(post.spoiler_text && post.spoiler_text.length > 0);
+    editSensitive = !!post.sensitive;
+    editMedia = [...(post.media_attachments || [])];
     editError = '';
     editing = true;
   }
 
+  async function handleEditFileSelected(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (files.length === 0) return;
+
+    const remaining = editMediaMax - editMedia.length;
+    if (remaining <= 0) {
+      editError = `Maximum ${editMediaMax} media attachments allowed`;
+      return;
+    }
+
+    const toUpload = files.slice(0, remaining);
+    editMediaUploading = true;
+    editError = '';
+    try {
+      const results = await Promise.allSettled(toUpload.map((f) => uploadMedia(f)));
+      const succeeded: MediaAttachment[] = [];
+      let firstErr = '';
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          succeeded.push(r.value);
+        } else {
+          if (!firstErr) {
+            const body = (r.reason as { body?: { error?: string } })?.body;
+            firstErr = body?.error || 'Upload failed';
+          }
+        }
+      }
+      if (succeeded.length > 0) editMedia = [...editMedia, ...succeeded];
+      if (firstErr) editError = firstErr;
+    } finally {
+      editMediaUploading = false;
+    }
+  }
+
+  function removeEditMedia(id: string) {
+    editMedia = editMedia.filter((m) => m.id !== id);
+  }
+
   async function saveEdit() {
-    if (!editContent.trim()) return;
+    if (!editContent.trim() && editMedia.length === 0) return;
     editSaving = true;
     editError = '';
     try {
       const updated = await editPost(post.id, {
         content: editContent,
-        ...(post.spoiler_text !== null ? { spoiler_text: editSpoilerText } : {}),
+        sensitive: editSensitive || (editShowCW && !!editSpoilerText.trim()),
+        spoiler_text: editShowCW ? editSpoilerText : '',
+        media_ids: editMedia.map((m) => m.id),
       });
       post.content = updated.content;
       post.content_html = updated.content_html;
       post.edited_at = updated.edited_at;
-      if (updated.spoiler_text !== undefined) post.spoiler_text = updated.spoiler_text;
+      post.spoiler_text = updated.spoiler_text;
+      post.sensitive = updated.sensitive;
+      post.media_attachments = updated.media_attachments;
       editing = false;
     } catch {
       editError = 'Failed to save edit. Please try again.';
@@ -628,13 +688,14 @@
         </button>
       </div>
 
-      {#if post.spoiler_text !== null && post.spoiler_text !== undefined}
+      {#if editShowCW}
         <input
           type="text"
           class="edit-cw-input"
           bind:value={editSpoilerText}
-          placeholder="Content warning"
+          placeholder="Content warning (e.g. spoilers, NSFW)"
           aria-label="Content warning"
+          dir="auto"
         />
       {/if}
 
@@ -643,8 +704,93 @@
         bind:value={editContent}
         rows="6"
         aria-label="Edit post content"
+        dir="auto"
         autofocus
       ></textarea>
+
+      {#if editMedia.length > 0}
+        <div class="edit-media-grid">
+          {#each editMedia as m (m.id)}
+            <div class="edit-media-item">
+              {#if m.type === 'image'}
+                <img src={m.preview_url || m.url} alt={m.description || ''} class="edit-media-preview" loading="lazy" />
+              {:else if m.type === 'video' || m.type === 'gifv'}
+                <video src={m.url} class="edit-media-preview" muted></video>
+              {:else if m.type === 'audio'}
+                <div class="edit-media-audio">
+                  <span class="material-symbols-outlined">music_note</span>
+                  Audio
+                </div>
+              {:else}
+                <div class="edit-media-other">{m.type || 'file'}</div>
+              {/if}
+              <button
+                type="button"
+                class="edit-media-remove"
+                onclick={() => removeEditMedia(m.id)}
+                aria-label="Remove attachment"
+                title="Remove attachment"
+              >
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <input
+        type="file"
+        bind:this={editFileInputEl}
+        onchange={handleEditFileSelected}
+        accept="image/*,video/*,audio/*"
+        multiple
+        style="display: none;"
+      />
+
+      <div class="edit-toolbar">
+        <button
+          type="button"
+          class="edit-tool"
+          onclick={() => editFileInputEl?.click()}
+          disabled={editMedia.length >= editMediaMax || editMediaUploading}
+          aria-label="Attach media"
+          title={editMedia.length >= editMediaMax
+            ? `Maximum ${editMediaMax} attachments`
+            : `Attach photo, video, or audio (up to ${editMediaMax})`}
+        >
+          <span class="material-symbols-outlined">image</span>
+        </button>
+
+        <button
+          type="button"
+          class="edit-tool"
+          class:edit-tool-active={editShowCW}
+          onclick={() => (editShowCW = !editShowCW)}
+          aria-pressed={editShowCW}
+          aria-label="Toggle content warning"
+          title={editShowCW ? 'Remove content warning' : 'Add content warning'}
+        >
+          CW
+        </button>
+
+        <button
+          type="button"
+          class="edit-tool"
+          class:edit-tool-active={editSensitive}
+          onclick={() => (editSensitive = !editSensitive)}
+          aria-pressed={editSensitive}
+          aria-label="Mark media as sensitive"
+          title={editSensitive
+            ? 'Remove sensitive flag — media shows immediately'
+            : 'Mark media as sensitive — readers tap to reveal'}
+        >
+          NSFW
+        </button>
+
+        {#if editMediaUploading}
+          <span class="edit-uploading">Uploading…</span>
+        {/if}
+      </div>
 
       {#if editError}
         <p class="edit-error">{editError}</p>
@@ -652,7 +798,12 @@
 
       <div class="edit-dialog-actions">
         <button type="button" class="edit-cancel" onclick={cancelEdit}>Cancel</button>
-        <button type="button" class="edit-save" onclick={saveEdit} disabled={editSaving || !editContent.trim()}>
+        <button
+          type="button"
+          class="edit-save"
+          onclick={saveEdit}
+          disabled={editSaving || (!editContent.trim() && editMedia.length === 0)}
+        >
           {editSaving ? 'Saving...' : 'Save'}
         </button>
       </div>
@@ -1521,6 +1672,115 @@
   .edit-error {
     font-size: 0.875rem;
     color: var(--color-danger);
+  }
+
+  /* --- Edit-mode media + toolbar --- */
+  .edit-media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    margin: 8px 0;
+  }
+
+  .edit-media-item {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    aspect-ratio: 1;
+    background: var(--color-surface);
+  }
+
+  .edit-media-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .edit-media-audio,
+  .edit-media-other {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    background: var(--color-surface-container);
+  }
+
+  .edit-media-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .edit-media-remove:hover {
+    background: rgba(0, 0, 0, 0.85);
+  }
+
+  .edit-media-remove .material-symbols-outlined {
+    font-size: 16px;
+  }
+
+  .edit-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-block: 4px;
+  }
+
+  .edit-tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    min-width: 36px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: 9999px;
+    color: var(--color-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .edit-tool:hover:not(:disabled) {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .edit-tool:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .edit-tool-active {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .edit-tool .material-symbols-outlined {
+    font-size: 18px;
+  }
+
+  .edit-uploading {
+    margin-inline-start: 6px;
+    font-size: 0.75rem;
+    color: var(--color-text-tertiary);
   }
 
   .edit-actions {

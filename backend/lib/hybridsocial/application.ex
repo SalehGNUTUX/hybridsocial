@@ -44,6 +44,9 @@ defmodule Hybridsocial.Application do
             Hybridsocial.Social.StoryExpiryWorker,
             # Media proxy cache TTL + LRU eviction
             Hybridsocial.Media.MediaProxyCacheWorker,
+            # Hard-deletes media soft-deleted >7 days ago — covers
+            # post-edit removals plus any other soft-delete path.
+            Hybridsocial.Media.PurgeWorker,
             # Prunes encrypted backups older than backup_retention_days (default 30)
             Hybridsocial.Admin.BackupExpiryWorker,
             # Prunes resolved/dismissed reports older than report_retention_days (default 90)

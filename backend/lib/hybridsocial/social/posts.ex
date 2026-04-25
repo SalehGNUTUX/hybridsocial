@@ -482,6 +482,45 @@ defmodule Hybridsocial.Social.Posts do
     :ok
   end
 
+  # Reconcile a post's media to match the supplied id list:
+  # - Anything currently attached but missing from the list is
+  #   soft-deleted (deleted_at = now). The MediaPurgeWorker hard-
+  #   deletes rows where deleted_at < now - 7 days, giving the
+  #   author a window to undo.
+  # - Anything new in the list that the author owns and isn't
+  #   attached to a different post gets attached to this one.
+  # The order matters: detach first so a media row that's both
+  # "kept" and would re-attach doesn't land in the wrong post_id.
+  defp reconcile_media(%Post{id: post_id, identity_id: owner_id}, desired_ids)
+       when is_list(desired_ids) do
+    now = DateTime.utc_now()
+
+    current =
+      Repo.all(
+        from m in Hybridsocial.Media.MediaFile,
+          where: m.post_id == ^post_id and is_nil(m.deleted_at),
+          select: m.id
+      )
+
+    desired_set = MapSet.new(desired_ids)
+    current_set = MapSet.new(current)
+    to_remove = MapSet.difference(current_set, desired_set) |> MapSet.to_list()
+    to_add = MapSet.difference(desired_set, current_set) |> MapSet.to_list()
+
+    if to_remove != [] do
+      from(m in Hybridsocial.Media.MediaFile,
+        where: m.id in ^to_remove and m.post_id == ^post_id
+      )
+      |> Repo.update_all(set: [deleted_at: now, updated_at: now])
+    end
+
+    if to_add != [] do
+      attach_media(%Post{id: post_id, identity_id: owner_id}, to_add)
+    end
+
+    :ok
+  end
+
   @doc """
   Resolves root_id from parent chain. If the post has a parent_id but no root_id,
   walks up the parent chain to find the root post.
@@ -558,6 +597,15 @@ defmodule Hybridsocial.Social.Posts do
       |> case do
         {:ok, %{post: post}} ->
           if post.content, do: extract_and_link_hashtags(post)
+
+          # Reconcile media attachments if the editor supplied a
+          # media_ids list. Sticking to "supplied → reconcile, absent
+          # → leave alone" so legacy callers that only edit text don't
+          # accidentally detach attachments.
+          case media_ids_from_attrs(attrs) do
+            [] -> :ok
+            ids -> reconcile_media(post, ids)
+          end
 
           # Mentions can change between versions. For a direct post
           # that means access changes: someone removed from the
