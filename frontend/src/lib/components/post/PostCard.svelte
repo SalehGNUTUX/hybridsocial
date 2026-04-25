@@ -993,11 +993,15 @@
 
   .post-content {
     font-size: 15px;
-    line-height: 1.65;
+    line-height: 1.55;
     color: var(--color-text);
     word-break: break-word;
     overflow-wrap: break-word;
-    white-space: pre-line;
+    /* No `white-space: pre-line` — the markdown renderer already
+       emits <p> for paragraph breaks and <br> for soft newlines, so
+       preserving the literal `\n\n` between tags would just stack a
+       blank visual line on top of the <p> margin and read as triple
+       spacing. */
     transition: max-height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
     overflow: hidden;
   }
@@ -1152,7 +1156,7 @@
   }
 
   .post-content :global(p) {
-    margin-block-end: 8px;
+    margin-block: 0 0.5em;
   }
 
   .post-content :global(p:last-child) {

@@ -723,6 +723,17 @@ defmodule Hybridsocial.Social.Posts do
     with {:ok, post} <- get_owned_post(post_id, identity_id) do
       case post |> Post.soft_delete_changeset() |> Repo.update() do
         {:ok, deleted} ->
+          # Mirror the increment in create_post: when a reply is
+          # deleted, drop the parent's reply_count so the bubble in
+          # the UI stays accurate. Floor at 0 in case create-time
+          # increments and delete-time decrements ever fall out of
+          # sync (e.g. a partial migration leaves an orphaned row).
+          if deleted.parent_id do
+            Post
+            |> where([p], p.id == ^deleted.parent_id and p.reply_count > 0)
+            |> Repo.update_all(inc: [reply_count: -1])
+          end
+
           Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "posts", {:post_deleted, post_id})
           federate_delete(deleted)
 
@@ -1133,10 +1144,12 @@ defmodule Hybridsocial.Social.Posts do
     # Unicode-aware so Arabic / Cyrillic / CJK / emoji-composed tags
     # round-trip through to the `hashtags` table. Kept in sync with
     # the inline linkifier in Content.MarkdownRenderer.link_hashtags/1.
+    # Returns `{lowercase_name, original_display}` pairs so the upsert
+    # can record the first author's casing without breaking lookup.
     ~r/#(\p{L}[\p{L}\p{M}\p{N}_]{0,100})/u
     |> Regex.scan(content)
-    |> Enum.map(fn [_, tag] -> String.downcase(tag) end)
-    |> Enum.uniq()
+    |> Enum.map(fn [_, tag] -> {String.downcase(tag), tag} end)
+    |> Enum.uniq_by(fn {name, _} -> name end)
   end
 
   def extract_hashtags(_), do: []
@@ -1475,17 +1488,23 @@ defmodule Hybridsocial.Social.Posts do
   defp extract_and_link_hashtags(post) do
     tags = extract_hashtags(post.content)
 
-    Enum.each(tags, fn tag_name ->
-      {:ok, hashtag} = upsert_hashtag(tag_name)
+    Enum.each(tags, fn {name, display} ->
+      {:ok, hashtag} = upsert_hashtag(name, display)
       link_post_hashtag(post.id, hashtag.id)
     end)
   end
 
-  defp upsert_hashtag(name) do
+  # First-writer-wins for display casing. The `set:` clause only
+  # touches usage_count + updated_at; on conflict the existing
+  # display_name is preserved, so once a tag has been recorded as
+  # "#HelloWorld" by the first author, later "#helloworld" or
+  # "#HELLOWORLD" still bumps the same row but doesn't overwrite
+  # the canonical display.
+  defp upsert_hashtag(name, display) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     %Hashtag{}
-    |> Hashtag.changeset(%{name: name})
+    |> Hashtag.changeset(%{name: name, display_name: display})
     |> Repo.insert(
       on_conflict: [inc: [usage_count: 1]],
       conflict_target: [:name],

@@ -266,16 +266,31 @@
 
   async function handleBookmark(e: MouseEvent) {
     e.stopPropagation();
+    showMoreMenu = false;
+    const wasBookmarked = !!post.is_bookmarked;
+    // Optimistic flip — flipping on the live `post` so the menu icon
+    // updates immediately. Without this the user clicks "Bookmark",
+    // sees nothing change, and thinks the action did nothing.
+    post.is_bookmarked = !wasBookmarked;
     try {
-      if (post.is_bookmarked) {
+      if (wasBookmarked) {
         await api.delete(`/api/v1/statuses/${post.id}/bookmark`);
+        window.dispatchEvent(
+          new CustomEvent('toast', { detail: { message: 'Bookmark removed', type: 'success' } }),
+        );
       } else {
         await api.post(`/api/v1/statuses/${post.id}/bookmark`);
+        window.dispatchEvent(
+          new CustomEvent('toast', { detail: { message: 'Saved to bookmarks', type: 'success' } }),
+        );
       }
     } catch {
-      // Handle error
+      // Roll back the optimistic flip and surface the failure.
+      post.is_bookmarked = wasBookmarked;
+      window.dispatchEvent(
+        new CustomEvent('toast', { detail: { message: 'Could not update bookmark', type: 'error' } }),
+      );
     }
-    showMoreMenu = false;
   }
 
   function handleEdit(e: MouseEvent) {

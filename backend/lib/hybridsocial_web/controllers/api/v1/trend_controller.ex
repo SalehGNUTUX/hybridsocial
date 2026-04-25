@@ -2,6 +2,7 @@ defmodule HybridsocialWeb.Api.V1.TrendController do
   use HybridsocialWeb, :controller
 
   alias Hybridsocial.Trending
+  import Ecto.Query, only: [from: 2]
   import HybridsocialWeb.Helpers.Pagination, only: [clamp_limit: 1]
 
   # GET /api/v1/trends/tags
@@ -48,8 +49,20 @@ defmodule HybridsocialWeb.Api.V1.TrendController do
   defp parse_int(_val, default), do: default
 
   defp serialize_trending_hashtag(td) do
+    # Trending stores the canonical (lowercase) tag in target_id, but
+    # the UI should render the first-seen casing. Look up the row's
+    # display_name once per result; fall back to the slug if the
+    # hashtag was deleted between snapshot and render.
+    display =
+      Hybridsocial.Repo.one(
+        from h in Hybridsocial.Social.Hashtag,
+          where: h.name == ^td.target_id,
+          select: h.display_name
+      ) || td.target_id
+
     %{
-      name: td.target_id,
+      name: display,
+      slug: td.target_id,
       score: td.score,
       metadata: td.metadata
     }

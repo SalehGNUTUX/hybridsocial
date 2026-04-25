@@ -46,7 +46,8 @@ defmodule Hybridsocial.Premium.TierLimits do
       profile_fields: 0,
       scheduled_posts: false,
       custom_emoji: false,
-      follows_limit: 100
+      follows_limit: 100,
+      stories_max_active: 1
     },
     "verified_starter" => %{
       char_limit: 1200,
@@ -65,7 +66,8 @@ defmodule Hybridsocial.Premium.TierLimits do
       profile_fields: 2,
       scheduled_posts: false,
       custom_emoji: false,
-      follows_limit: 0
+      follows_limit: 0,
+      stories_max_active: 3
     },
     "verified_creator" => %{
       char_limit: 3000,
@@ -84,7 +86,8 @@ defmodule Hybridsocial.Premium.TierLimits do
       profile_fields: 5,
       scheduled_posts: true,
       custom_emoji: true,
-      follows_limit: 0
+      follows_limit: 0,
+      stories_max_active: 10
     },
     "verified_pro" => %{
       char_limit: 5000,
@@ -103,7 +106,8 @@ defmodule Hybridsocial.Premium.TierLimits do
       profile_fields: 10,
       scheduled_posts: true,
       custom_emoji: true,
-      follows_limit: 0
+      follows_limit: 0,
+      stories_max_active: 30
     }
   }
 

@@ -46,6 +46,16 @@ defmodule HybridsocialWeb.Api.V1.StoryController do
       {:error, :media_not_owned} ->
         send_error(conn, :forbidden, "story.media_not_owned")
 
+      {:error, {:stories_limit_reached, limit}} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{
+          error: "story.limit_reached",
+          message:
+            "You can only have #{limit} active #{if limit == 1, do: "story", else: "stories"} at a time on your tier.",
+          limit: limit
+        })
+
       {:error, %Ecto.Changeset{} = cs} ->
         send_validation_error(conn, cs)
     end

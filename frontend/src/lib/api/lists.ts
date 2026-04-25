@@ -23,7 +23,8 @@ export function createList(title: string): Promise<List> {
 }
 
 export function updateList(id: string, title: string): Promise<List> {
-  return api.put(`/api/v1/lists/${id}`, { name: title });
+  // The router registers PATCH (Mastodon-compatible). PUT 404s.
+  return api.patch(`/api/v1/lists/${id}`, { name: title });
 }
 
 export function deleteList(id: string): Promise<void> {

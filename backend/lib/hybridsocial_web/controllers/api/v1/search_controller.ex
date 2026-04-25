@@ -276,7 +276,8 @@ defmodule HybridsocialWeb.Api.V1.SearchController do
 
   defp serialize_hashtag(hashtag) do
     %{
-      name: hashtag.name,
+      name: hashtag.display_name || hashtag.name,
+      slug: hashtag.name,
       usage_count: hashtag.usage_count
     }
   end

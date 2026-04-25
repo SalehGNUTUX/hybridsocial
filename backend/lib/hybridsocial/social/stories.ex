@@ -25,7 +25,8 @@ defmodule Hybridsocial.Social.Stories do
   identity. Returns `{:ok, story}` or `{:error, changeset | reason}`.
   """
   def create_story(identity_id, attrs) do
-    with {:ok, media_id} <- fetch_media_id(attrs),
+    with :ok <- check_active_story_limit(identity_id),
+         {:ok, media_id} <- fetch_media_id(attrs),
          %MediaFile{identity_id: ^identity_id} <- Media.get_media(media_id) do
       %Story{}
       |> Story.create_changeset(
@@ -42,6 +43,27 @@ defmodule Hybridsocial.Social.Stories do
       nil -> {:error, :media_not_found}
       %MediaFile{} -> {:error, :media_not_owned}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Cap concurrent active (non-expired) stories per author. Limit
+  # comes from the caller's verification tier — Free authors get 1,
+  # Pro 30, etc. The expiry worker hard-deletes lapsed rows so this
+  # query naturally only sees what's still visible to followers.
+  defp check_active_story_limit(identity_id) do
+    identity = Repo.get(Hybridsocial.Accounts.Identity, identity_id)
+    limit = Hybridsocial.Premium.TierLimits.limit(identity, :stories_max_active) || 1
+
+    active_count =
+      Story
+      |> where([s], s.identity_id == ^identity_id)
+      |> where([s], s.expires_at > ^DateTime.utc_now())
+      |> Repo.aggregate(:count)
+
+    if active_count >= limit do
+      {:error, {:stories_limit_reached, limit}}
+    else
+      :ok
     end
   end
 

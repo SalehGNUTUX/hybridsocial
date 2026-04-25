@@ -538,34 +538,28 @@
     detectMention();
   }
 
-  // Pull every image File off the clipboard. Browsers expose pasted
-  // bitmaps two ways depending on source: clipboardData.files for
-  // "real" copy-image, and clipboardData.items[…].kind === "file"
-  // for screenshot tools. Reading both and deduping by File covers
-  // every case I've seen across Chrome / Firefox / Safari.
+  // Pull every image File off the clipboard. clipboardData.files and
+  // clipboardData.items both reference the pasted bitmap, but
+  // .items[].getAsFile() returns a *fresh* File object each time, so
+  // a naive identity Set won't dedupe a paste that surfaces in both.
+  // Prefer `.files` when populated (modern Chrome/Firefox) and only
+  // fall back to `.items` when it's empty (older Safari paths).
   function collectPastedImages(cd: DataTransfer | null): File[] {
     if (!cd) return [];
-    const out: File[] = [];
-    const seen = new Set<File>();
 
-    for (const f of Array.from(cd.files ?? [])) {
-      if (f.type.startsWith('image/') && !seen.has(f)) {
-        seen.add(f);
-        out.push(f);
-      }
-    }
+    const fromFiles = Array.from(cd.files ?? []).filter((f) =>
+      f.type.startsWith('image/'),
+    );
+    if (fromFiles.length > 0) return fromFiles;
 
+    const fromItems: File[] = [];
     for (const item of Array.from(cd.items ?? [])) {
       if (item.kind === 'file' && item.type.startsWith('image/')) {
         const f = item.getAsFile();
-        if (f && !seen.has(f)) {
-          seen.add(f);
-          out.push(f);
-        }
+        if (f) fromItems.push(f);
       }
     }
-
-    return out;
+    return fromItems;
   }
 
   function handlePaste(e: ClipboardEvent) {

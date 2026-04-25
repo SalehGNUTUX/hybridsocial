@@ -530,13 +530,19 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
         join: h in Hybridsocial.Social.Hashtag,
         on: h.id == ph.hashtag_id,
         where: ph.post_id == ^post_uuid,
-        select: %{name: h.name}
+        select: %{name: h.name, display_name: h.display_name}
 
     base_url = HybridsocialWeb.Endpoint.url()
 
     Repo.all(query)
     |> Enum.map(fn tag ->
-      %{name: tag.name, url: "#{base_url}/tags/#{tag.name}"}
+      # Display the first-seen casing if recorded, else fall back to
+      # the lowercase canonical. URL stays canonical for routing.
+      %{
+        name: tag.display_name || tag.name,
+        slug: tag.name,
+        url: "#{base_url}/tags/#{tag.name}"
+      }
     end)
   end
 
