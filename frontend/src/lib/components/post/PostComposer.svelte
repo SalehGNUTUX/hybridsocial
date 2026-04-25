@@ -353,6 +353,14 @@
     const files = Array.from(input.files ?? []);
     input.value = '';
     if (files.length === 0) return;
+    await uploadFiles(files);
+  }
+
+  // Shared upload path so the file-picker, drag-drop, and paste-image
+  // entry points all enforce the same per-post cap, the same error
+  // mapping, and append into the same uploadedMedia list.
+  async function uploadFiles(files: File[]) {
+    if (files.length === 0) return;
 
     const remaining = maxMedia - uploadedMedia.length;
     if (remaining <= 0) {
@@ -530,7 +538,48 @@
     detectMention();
   }
 
+  // Pull every image File off the clipboard. Browsers expose pasted
+  // bitmaps two ways depending on source: clipboardData.files for
+  // "real" copy-image, and clipboardData.items[…].kind === "file"
+  // for screenshot tools. Reading both and deduping by File covers
+  // every case I've seen across Chrome / Firefox / Safari.
+  function collectPastedImages(cd: DataTransfer | null): File[] {
+    if (!cd) return [];
+    const out: File[] = [];
+    const seen = new Set<File>();
+
+    for (const f of Array.from(cd.files ?? [])) {
+      if (f.type.startsWith('image/') && !seen.has(f)) {
+        seen.add(f);
+        out.push(f);
+      }
+    }
+
+    for (const item of Array.from(cd.items ?? [])) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const f = item.getAsFile();
+        if (f && !seen.has(f)) {
+          seen.add(f);
+          out.push(f);
+        }
+      }
+    }
+
+    return out;
+  }
+
   function handlePaste(e: ClipboardEvent) {
+    // Image paste — screenshot tools, "Copy image" from a browser,
+    // Snipping Tool, etc. all hand the bitmap over via clipboardData.
+    // Treat it like a normal upload so the user can drop a screenshot
+    // into the composer without saving-then-attaching first.
+    const imageFiles = collectPastedImages(e.clipboardData);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      uploadFiles(imageFiles);
+      return;
+    }
+
     // Prefer text/plain when available. For a user copying markdown
     // source, this is what preserves their pipes, emoji, newlines, etc.
     // Only fall back to parsing text/html when the plain version is
