@@ -397,6 +397,14 @@ defmodule Hybridsocial.Feeds do
     |> max(1)
   end
 
+  # Cursor filters used by public_timeline / hashtag_timeline /
+  # account_timeline / list_timeline. The visible ORDER BY for those
+  # feeds is `coalesce(last_activity_at, published_at, inserted_at)
+  # DESC, id DESC`, so the cursor must compare against the same
+  # expression — UUIDs aren't time-ordered, so the previous
+  # `p.id < max_id` skipped or repeated rows arbitrarily and posts
+  # whose UUID happened to sort lex-after the boundary just never
+  # appeared.
   defp apply_cursor_filters(query, opts) do
     query
     |> maybe_max_id(Keyword.get(opts, :max_id))
@@ -405,13 +413,96 @@ defmodule Hybridsocial.Feeds do
   end
 
   defp maybe_max_id(query, nil), do: query
-  defp maybe_max_id(query, max_id), do: where(query, [p], p.id < ^max_id)
+
+  defp maybe_max_id(query, max_id) do
+    case lookup_activity_cursor(max_id) do
+      nil ->
+        query
+
+      {ia, pid} ->
+        where(
+          query,
+          [p],
+          fragment(
+            "(COALESCE(?, COALESCE(?, ?)), ?) < (?, ?)",
+            p.last_activity_at,
+            p.published_at,
+            p.inserted_at,
+            p.id,
+            ^ia,
+            type(^pid, Ecto.UUID)
+          )
+        )
+    end
+  end
 
   defp maybe_min_id(query, nil), do: query
-  defp maybe_min_id(query, min_id), do: where(query, [p], p.id > ^min_id)
+
+  defp maybe_min_id(query, min_id) do
+    case lookup_activity_cursor(min_id) do
+      nil ->
+        query
+
+      {ia, pid} ->
+        where(
+          query,
+          [p],
+          fragment(
+            "(COALESCE(?, COALESCE(?, ?)), ?) > (?, ?)",
+            p.last_activity_at,
+            p.published_at,
+            p.inserted_at,
+            p.id,
+            ^ia,
+            type(^pid, Ecto.UUID)
+          )
+        )
+    end
+  end
 
   defp maybe_since_id(query, nil), do: query
-  defp maybe_since_id(query, since_id), do: where(query, [p], p.id > ^since_id)
+
+  defp maybe_since_id(query, since_id) do
+    case lookup_activity_cursor(since_id) do
+      nil ->
+        query
+
+      {ia, pid} ->
+        where(
+          query,
+          [p],
+          fragment(
+            "(COALESCE(?, COALESCE(?, ?)), ?) > (?, ?)",
+            p.last_activity_at,
+            p.published_at,
+            p.inserted_at,
+            p.id,
+            ^ia,
+            type(^pid, Ecto.UUID)
+          )
+        )
+    end
+  end
+
+  # Resolve the boundary post id into the same coalesced timestamp
+  # used in the ORDER BY. Falls back to nil when the cursor doesn't
+  # match any row, in which case the caller falls through to no-cursor
+  # behaviour (latest page) instead of returning empty.
+  defp lookup_activity_cursor(id) when is_binary(id) do
+    Repo.one(
+      from p in Post,
+        where: p.id == ^id,
+        select:
+          {fragment(
+             "COALESCE(?, COALESCE(?, ?))",
+             p.last_activity_at,
+             p.published_at,
+             p.inserted_at
+           ), p.id}
+    )
+  end
+
+  defp lookup_activity_cursor(_), do: nil
 
   defp apply_boost_cursor_filters(query, opts) do
     query

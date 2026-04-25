@@ -138,11 +138,11 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
   defp apply_post_cursor(query, nil), do: query
 
   defp apply_post_cursor(query, {:older, ia, id}) do
-    where(query, [p], fragment("(?, ?) < (?, ?)", p.inserted_at, p.id, ^ia, ^id))
+    where(query, [p], fragment("(?, ?) < (?, ?)", p.inserted_at, p.id, ^ia, type(^id, Ecto.UUID)))
   end
 
   defp apply_post_cursor(query, {:newer, ia, id}) do
-    where(query, [p], fragment("(?, ?) > (?, ?)", p.inserted_at, p.id, ^ia, ^id))
+    where(query, [p], fragment("(?, ?) > (?, ?)", p.inserted_at, p.id, ^ia, type(^id, Ecto.UUID)))
   end
 
   # Boost cursor filters by inserted_at only — boost ids and post ids
