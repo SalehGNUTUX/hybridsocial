@@ -62,7 +62,10 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
       |> Visibility.apply_block_filter(identity_id)
       |> Visibility.apply_mute_filter(identity_id)
       |> Visibility.apply_shadow_ban_filter(identity_id)
-      |> order_by([p], desc: p.inserted_at)
+      # `id DESC` is the explicit tie-breaker for posts inserted in
+      # the same instant; without it the row-tuple cursor below
+      # couldn't deterministically pick a "next page" boundary.
+      |> order_by([p], desc: p.inserted_at, desc: p.id)
       |> limit(^limit)
       |> preload([:identity, :quote])
       |> Repo.all()
@@ -102,13 +105,55 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
   end
 
   defp maybe_max_id(query, nil), do: query
-  defp maybe_max_id(query, max_id), do: where(query, [p], p.id < ^max_id)
+
+  # Row-tuple cursor: paginate strictly older than the boundary post
+  # in (inserted_at DESC, id DESC) order. Plain `p.id < max_id` would
+  # only work if UUIDs were time-ordered — they aren't, so it pulled
+  # an arbitrary slice and the page either repeated rows or left
+  # gaps. The subquery looks up the boundary's (inserted_at, id) so
+  # the comparison is deterministic.
+  defp maybe_max_id(query, max_id) do
+    where(
+      query,
+      [p],
+      fragment(
+        "(?, ?) < (SELECT p2.inserted_at, p2.id FROM posts AS p2 WHERE p2.id = ?)",
+        p.inserted_at,
+        p.id,
+        ^max_id
+      )
+    )
+  end
 
   defp maybe_min_id(query, nil), do: query
-  defp maybe_min_id(query, min_id), do: where(query, [p], p.id > ^min_id)
+
+  defp maybe_min_id(query, min_id) do
+    where(
+      query,
+      [p],
+      fragment(
+        "(?, ?) > (SELECT p2.inserted_at, p2.id FROM posts AS p2 WHERE p2.id = ?)",
+        p.inserted_at,
+        p.id,
+        ^min_id
+      )
+    )
+  end
 
   defp maybe_since_id(query, nil), do: query
-  defp maybe_since_id(query, since_id), do: where(query, [p], p.id > ^since_id)
+
+  defp maybe_since_id(query, since_id) do
+    where(
+      query,
+      [p],
+      fragment(
+        "(?, ?) > (SELECT p2.inserted_at, p2.id FROM posts AS p2 WHERE p2.id = ?)",
+        p.inserted_at,
+        p.id,
+        ^since_id
+      )
+    )
+  end
 
   defp apply_boost_cursor_filters(query, opts) do
     query
