@@ -528,24 +528,51 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
 
   # Compact group/page summary so a post rendered in a feed can show
   # a "from <Group>" / "from <Page>" chip without the client needing
-  # an extra round trip to /api/v1/groups/:id.
+  # an extra round trip. Wrapped in try/rescue so a schema mismatch
+  # (or a deleted row) can never 500 the whole timeline — the chip
+  # just renders nil and the post still ships.
   defp group_summary_for(%{group_id: nil}), do: nil
 
   defp group_summary_for(%{group_id: id}) when is_binary(id) do
-    case Repo.get(Hybridsocial.Groups.Group, id) do
-      nil -> nil
-      g -> %{id: g.id, name: g.name, avatar_url: g.avatar_url, visibility: g.visibility}
+    try do
+      case Repo.get(Hybridsocial.Groups.Group, id) do
+        nil -> nil
+        g -> %{id: g.id, name: g.name, avatar_url: g.avatar_url, visibility: g.visibility}
+      end
+    rescue
+      _ -> nil
     end
   end
 
+  defp group_summary_for(_), do: nil
+
+  # Pages are stored as Identity rows with type="organization" — there
+  # is no Hybridsocial.Pages.Page schema. Use Pages.get_page/1 which
+  # preloads the organization, and synthesize a {id, name, avatar} chip
+  # off the identity / organization fields.
   defp page_summary_for(%{page_id: nil}), do: nil
 
   defp page_summary_for(%{page_id: id}) when is_binary(id) do
-    case Repo.get(Hybridsocial.Pages.Page, id) do
-      nil -> nil
-      p -> %{id: p.id, name: Map.get(p, :title) || Map.get(p, :name), avatar_url: Map.get(p, :avatar_url)}
+    try do
+      case Hybridsocial.Pages.get_page(id) do
+        nil ->
+          nil
+
+        identity ->
+          name =
+            case Map.get(identity, :organization) do
+              %{name: n} when is_binary(n) and n != "" -> n
+              _ -> identity.display_name || identity.handle
+            end
+
+          %{id: identity.id, name: name, avatar_url: identity.avatar_url}
+      end
+    rescue
+      _ -> nil
     end
   end
+
+  defp page_summary_for(_), do: nil
 
   defp tags_for(post_id) do
     {:ok, post_uuid} = Ecto.UUID.dump(post_id)
