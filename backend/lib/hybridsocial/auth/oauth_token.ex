@@ -16,6 +16,7 @@ defmodule Hybridsocial.Auth.OAuthToken do
     field :device_name, :string
     field :last_active_at, :utc_datetime_usec
     field :sudo_until, :utc_datetime_usec
+    field :rotated_at, :utc_datetime_usec
 
     belongs_to :identity, Hybridsocial.Accounts.Identity
     belongs_to :application, Hybridsocial.Auth.OAuthApplication
@@ -36,7 +37,8 @@ defmodule Hybridsocial.Auth.OAuthToken do
       :user_agent,
       :device_name,
       :last_active_at,
-      :sudo_until
+      :sudo_until,
+      :rotated_at
     ])
     |> validate_required([:identity_id, :token_hash, :scopes, :expires_at])
     |> unique_constraint(:token_hash)

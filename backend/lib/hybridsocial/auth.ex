@@ -64,18 +64,27 @@ defmodule Hybridsocial.Auth do
     end
   end
 
+  # Rotation grace: how long a just-rotated refresh token stays
+  # honorable. Closes the cross-tab race where two contexts present
+  # the same refresh token simultaneously — the second one used to
+  # land on `invalid_refresh_token` and bounce the user to /login.
+  @rotation_grace_seconds 30
+
   def refresh(refresh_token, session_info \\ %{}) do
     refresh_hash = Token.hash_token(refresh_token)
 
-    case get_valid_token_by_refresh(refresh_hash) do
+    case get_refreshable_token(refresh_hash) do
       nil ->
         {:error, :invalid_refresh_token}
 
       oauth_token ->
-        # Revoke old token
-        revoke_token(oauth_token)
+        # Stamp rotated_at instead of revoking — the token row stays
+        # alive for `@rotation_grace_seconds` so a racing concurrent
+        # refresh from another tab still lands on a valid record. A
+        # third call after the grace window passes lapses naturally
+        # (the WHERE clause in get_refreshable_token excludes it).
+        mark_rotated(oauth_token)
 
-        # Generate new pair, carry forward session info from old token
         merged_info = %{
           ip_address: session_info[:ip_address] || oauth_token.ip_address,
           user_agent: session_info[:user_agent] || oauth_token.user_agent,
@@ -101,6 +110,26 @@ defmodule Hybridsocial.Auth do
            }}
         end
     end
+  end
+
+  # Acceptable for refresh: not revoked, and either never rotated or
+  # rotated within the grace window.
+  defp get_refreshable_token(refresh_hash) do
+    cutoff = DateTime.add(DateTime.utc_now(), -@rotation_grace_seconds, :second)
+
+    OAuthToken
+    |> where([t], t.refresh_token_hash == ^refresh_hash)
+    |> where([t], is_nil(t.revoked_at))
+    |> where([t], is_nil(t.rotated_at) or t.rotated_at >= ^cutoff)
+    |> Repo.one()
+  end
+
+  defp mark_rotated(oauth_token) do
+    now = DateTime.utc_now()
+
+    OAuthToken
+    |> where([t], t.id == ^oauth_token.id)
+    |> Repo.update_all(set: [rotated_at: now])
   end
 
   def logout(access_token) do
@@ -323,12 +352,6 @@ defmodule Hybridsocial.Auth do
         t.revoked_at < ^cutoff
     )
     |> Repo.delete_all()
-  end
-
-  defp get_valid_token_by_refresh(refresh_hash) do
-    OAuthToken
-    |> where([t], t.refresh_token_hash == ^refresh_hash and is_nil(t.revoked_at))
-    |> Repo.one()
   end
 
   defp get_token_by_hash(token_hash) do
