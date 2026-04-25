@@ -27,6 +27,10 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
   @impl true
   def home_feed(identity_id, opts) do
     limit = parse_limit(opts)
+    # Resolve the cursor *once* from the cursor's post id. Both the
+    # post and the boost queries paginate against the same instant,
+    # so a single lookup keeps the page coherent.
+    cursor = resolve_cursor(opts)
 
     # Subquery: IDs of accounts the viewer follows
     followed_ids =
@@ -58,7 +62,7 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
       )
       |> where([p], is_nil(p.deleted_at))
       |> where([p], is_nil(p.parent_id))
-      |> apply_cursor_filters(opts)
+      |> apply_post_cursor(cursor)
       |> Visibility.apply_block_filter(identity_id)
       |> Visibility.apply_mute_filter(identity_id)
       |> Visibility.apply_shadow_ban_filter(identity_id)
@@ -76,7 +80,7 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
       |> where([b], b.identity_id in subquery(followed_ids) or b.identity_id == ^identity_id)
       |> where([b], is_nil(b.deleted_at))
       |> join(:inner, [b], p in Post, on: b.post_id == p.id and is_nil(p.deleted_at))
-      |> apply_boost_cursor_filters(opts)
+      |> apply_boost_cursor(cursor)
       |> order_by([b], desc: b.inserted_at)
       |> limit(^limit)
       |> preload([b, p], post: {p, [:identity, :quote]})
@@ -97,65 +101,28 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
     |> max(1)
   end
 
-  defp apply_cursor_filters(query, opts) do
-    query
-    |> maybe_max_id(Keyword.get(opts, :max_id))
-    |> maybe_min_id(Keyword.get(opts, :min_id))
-    |> maybe_since_id(Keyword.get(opts, :since_id))
-  end
+  # Resolve the client's cursor (max_id / min_id / since_id) into a
+  # boundary {direction, inserted_at, id}. The cursor must reference a
+  # row in `posts` — feed entries can be either Posts or Boosts, but
+  # only the post id paired with its inserted_at gives us a stable
+  # ordering anchor for both queries to share.
+  #
+  # Returns nil when no cursor was sent OR the cursor doesn't resolve
+  # (stale client, boost id leaking through, etc.) — both branches
+  # fall back to the latest page rather than an empty one.
+  defp resolve_cursor(opts) do
+    cond do
+      max_id = Keyword.get(opts, :max_id) ->
+        case lookup_post_cursor(max_id), do: (nil -> nil; {ia, id} -> {:older, ia, id})
 
-  defp maybe_max_id(query, nil), do: query
+      min_id = Keyword.get(opts, :min_id) ->
+        case lookup_post_cursor(min_id), do: (nil -> nil; {ia, id} -> {:newer, ia, id})
 
-  # Row-tuple cursor: paginate strictly older than the boundary post
-  # in (inserted_at DESC, id DESC) order. Plain `p.id < max_id` would
-  # only work if UUIDs were time-ordered — they aren't, so it pulled
-  # an arbitrary slice and the page either repeated rows or left
-  # gaps. The lookup also resolves the boundary post first; if the
-  # id doesn't exist (stale client cursor, boost id, …) we ignore
-  # the cursor entirely instead of returning an empty page.
-  defp maybe_max_id(query, max_id) do
-    case lookup_post_cursor(max_id) do
-      nil ->
-        query
+      since_id = Keyword.get(opts, :since_id) ->
+        case lookup_post_cursor(since_id), do: (nil -> nil; {ia, id} -> {:newer, ia, id})
 
-      {boundary_inserted_at, boundary_id} ->
-        where(
-          query,
-          [p],
-          fragment("(?, ?) < (?, ?)", p.inserted_at, p.id, ^boundary_inserted_at, ^boundary_id)
-        )
-    end
-  end
-
-  defp maybe_min_id(query, nil), do: query
-
-  defp maybe_min_id(query, min_id) do
-    case lookup_post_cursor(min_id) do
-      nil ->
-        query
-
-      {boundary_inserted_at, boundary_id} ->
-        where(
-          query,
-          [p],
-          fragment("(?, ?) > (?, ?)", p.inserted_at, p.id, ^boundary_inserted_at, ^boundary_id)
-        )
-    end
-  end
-
-  defp maybe_since_id(query, nil), do: query
-
-  defp maybe_since_id(query, since_id) do
-    case lookup_post_cursor(since_id) do
-      nil ->
-        query
-
-      {boundary_inserted_at, boundary_id} ->
-        where(
-          query,
-          [p],
-          fragment("(?, ?) > (?, ?)", p.inserted_at, p.id, ^boundary_inserted_at, ^boundary_id)
-        )
+      true ->
+        nil
     end
   end
 
@@ -168,15 +135,28 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
 
   defp lookup_post_cursor(_), do: nil
 
-  defp apply_boost_cursor_filters(query, opts) do
-    query
-    |> maybe_boost_max_id(Keyword.get(opts, :max_id))
-    |> maybe_boost_min_id(Keyword.get(opts, :min_id))
+  defp apply_post_cursor(query, nil), do: query
+
+  defp apply_post_cursor(query, {:older, ia, id}) do
+    where(query, [p], fragment("(?, ?) < (?, ?)", p.inserted_at, p.id, ^ia, ^id))
   end
 
-  defp maybe_boost_max_id(query, nil), do: query
-  defp maybe_boost_max_id(query, max_id), do: where(query, [b], b.id < ^max_id)
+  defp apply_post_cursor(query, {:newer, ia, id}) do
+    where(query, [p], fragment("(?, ?) > (?, ?)", p.inserted_at, p.id, ^ia, ^id))
+  end
 
-  defp maybe_boost_min_id(query, nil), do: query
-  defp maybe_boost_min_id(query, min_id), do: where(query, [b], b.id > ^min_id)
+  # Boost cursor filters by inserted_at only — boost ids and post ids
+  # live in different tables, so a row-tuple comparison would mix
+  # incompatible UUIDs. We accept that boosts inserted in the exact
+  # same microsecond as the boundary post may be re-shown; the
+  # render-layer dedupe in FeedList catches that case in practice.
+  defp apply_boost_cursor(query, nil), do: query
+
+  defp apply_boost_cursor(query, {:older, ia, _id}) do
+    where(query, [b], b.inserted_at < ^ia)
+  end
+
+  defp apply_boost_cursor(query, {:newer, ia, _id}) do
+    where(query, [b], b.inserted_at > ^ia)
+  end
 end
