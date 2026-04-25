@@ -102,9 +102,19 @@
       if (reset) {
         feedPosts = result;
       } else {
-        feedPosts = [...feedPosts, ...result];
+        const seen = new Set(feedPosts.map((p) => p.id));
+        feedPosts = [...feedPosts, ...result.filter((p) => !seen.has(p.id))];
       }
-      feedCursor = result.length > 0 ? result[result.length - 1]?.id : null;
+      // Same boost-vs-post cursor-id concern as the home feed: the
+      // backend's row-tuple WHERE expects a posts.id, but feed
+      // entries can be boosts. Reach through to the inner post id
+      // when the tail entry is a boost.
+      const lastEntry: any =
+        result.length > 0 ? result[result.length - 1] : null;
+      feedCursor =
+        lastEntry?.type === 'boost'
+          ? lastEntry.post?.id ?? null
+          : lastEntry?.id ?? null;
       feedHasMore = result.length >= 20;
     } catch {
       // Handle silently

@@ -110,50 +110,63 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
   # in (inserted_at DESC, id DESC) order. Plain `p.id < max_id` would
   # only work if UUIDs were time-ordered — they aren't, so it pulled
   # an arbitrary slice and the page either repeated rows or left
-  # gaps. The subquery looks up the boundary's (inserted_at, id) so
-  # the comparison is deterministic.
+  # gaps. The lookup also resolves the boundary post first; if the
+  # id doesn't exist (stale client cursor, boost id, …) we ignore
+  # the cursor entirely instead of returning an empty page.
   defp maybe_max_id(query, max_id) do
-    where(
-      query,
-      [p],
-      fragment(
-        "(?, ?) < (SELECT p2.inserted_at, p2.id FROM posts AS p2 WHERE p2.id = ?)",
-        p.inserted_at,
-        p.id,
-        ^max_id
-      )
-    )
+    case lookup_post_cursor(max_id) do
+      nil ->
+        query
+
+      {boundary_inserted_at, boundary_id} ->
+        where(
+          query,
+          [p],
+          fragment("(?, ?) < (?, ?)", p.inserted_at, p.id, ^boundary_inserted_at, ^boundary_id)
+        )
+    end
   end
 
   defp maybe_min_id(query, nil), do: query
 
   defp maybe_min_id(query, min_id) do
-    where(
-      query,
-      [p],
-      fragment(
-        "(?, ?) > (SELECT p2.inserted_at, p2.id FROM posts AS p2 WHERE p2.id = ?)",
-        p.inserted_at,
-        p.id,
-        ^min_id
-      )
-    )
+    case lookup_post_cursor(min_id) do
+      nil ->
+        query
+
+      {boundary_inserted_at, boundary_id} ->
+        where(
+          query,
+          [p],
+          fragment("(?, ?) > (?, ?)", p.inserted_at, p.id, ^boundary_inserted_at, ^boundary_id)
+        )
+    end
   end
 
   defp maybe_since_id(query, nil), do: query
 
   defp maybe_since_id(query, since_id) do
-    where(
-      query,
-      [p],
-      fragment(
-        "(?, ?) > (SELECT p2.inserted_at, p2.id FROM posts AS p2 WHERE p2.id = ?)",
-        p.inserted_at,
-        p.id,
-        ^since_id
-      )
-    )
+    case lookup_post_cursor(since_id) do
+      nil ->
+        query
+
+      {boundary_inserted_at, boundary_id} ->
+        where(
+          query,
+          [p],
+          fragment("(?, ?) > (?, ?)", p.inserted_at, p.id, ^boundary_inserted_at, ^boundary_id)
+        )
+    end
   end
+
+  defp lookup_post_cursor(id) when is_binary(id) do
+    case Repo.one(from p in Post, where: p.id == ^id, select: {p.inserted_at, p.id}) do
+      nil -> nil
+      {ia, pid} -> {ia, pid}
+    end
+  end
+
+  defp lookup_post_cursor(_), do: nil
 
   defp apply_boost_cursor_filters(query, opts) do
     query

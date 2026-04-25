@@ -50,7 +50,20 @@
         const fresh = items.filter((p) => !seen.has(p.id));
         posts = [...posts, ...fresh];
       }
-      cursor = items.length > 0 ? items[items.length - 1]?.id : null;
+      // Cursor must be a POST id — the chronological backend's
+      // row-tuple WHERE looks the cursor up in `posts`, and a feed
+      // entry can be either a Post or a Boost. Walking back from
+      // the tail until we hit something that is unmistakably a post
+      // (or the inner post of a boost entry) keeps the next page
+      // anchored to a real row even when the last visible entry is
+      // a boost.
+      const lastEntry: any =
+        items.length > 0 ? items[items.length - 1] : null;
+      const lastPostId =
+        lastEntry?.type === 'boost'
+          ? lastEntry.post?.id ?? null
+          : lastEntry?.id ?? null;
+      cursor = lastPostId;
       hasMore = items.length >= 20;
     } catch {
       // Handle error silently
