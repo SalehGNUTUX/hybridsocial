@@ -80,6 +80,10 @@ defmodule HybridsocialWeb.Api.V1.PageController do
           |> order_by([p], desc: p.inserted_at)
           |> limit(^limit)
           |> Hybridsocial.Repo.all()
+          # PostSerializer reads `post.identity.show_badge` etc.; an
+          # unpreloaded :identity here crashes serialize_many. Match
+          # the preloads other timeline queries do.
+          |> Hybridsocial.Repo.preload([:identity, :quote])
 
         serialized =
           HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
