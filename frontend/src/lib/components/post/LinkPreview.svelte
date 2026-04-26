@@ -12,6 +12,14 @@
     image?: string;
     siteName?: string;
   } = $props();
+
+  // OG `og:image` URLs go stale (host serves 404, asset deleted, hot-
+  // linking blocked, etc). Default <img> would render a broken-image
+  // icon and a useless empty 2:1 box. Track the load failure and drop
+  // the slot entirely once we know it's bad — same outcome as if the
+  // page had no og:image to begin with. LinkPreview is rendered once
+  // per post and `image` doesn't change, so a plain $state is enough.
+  let imageBroken = $state(false);
 </script>
 
 <a
@@ -21,9 +29,14 @@
   rel="noopener noreferrer"
   onclick={(e) => e.stopPropagation()}
 >
-  {#if image}
+  {#if image && !imageBroken}
     <div class="link-preview-image">
-      <img src={image} alt="" loading="lazy" />
+      <img
+        src={image}
+        alt=""
+        loading="lazy"
+        onerror={() => (imageBroken = true)}
+      />
     </div>
   {/if}
   <div class="link-preview-body">

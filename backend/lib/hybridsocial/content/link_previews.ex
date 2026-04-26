@@ -183,12 +183,61 @@ defmodule Hybridsocial.Content.LinkPreviews do
     title = og_title || extract_title(html)
     description = og_description || extract_meta_description(html)
 
+    # Meta tags often arrive HTML-encoded — Arabic / non-Latin pages
+    # tend to use `&#x62f;` numeric refs in og:description, which would
+    # otherwise reach the client as literal `&#x62f;` text and render
+    # as ASCII gibberish. Decode once on store so every consumer sees
+    # the real string.
     %{
-      title: title,
-      description: description,
-      image: og_image,
-      site_name: og_site_name
+      title: decode_entities(title),
+      description: decode_entities(description),
+      image: decode_entities(og_image),
+      site_name: decode_entities(og_site_name)
     }
+  end
+
+  defp decode_entities(nil), do: nil
+
+  defp decode_entities(str) when is_binary(str) do
+    str
+    |> decode_numeric_refs()
+    |> decode_named_entities()
+  end
+
+  defp decode_numeric_refs(str) do
+    # Hex (`&#x62f;`) then decimal (`&#1583;`). Hex first because the
+    # decimal regex would otherwise consume `&#` and leave a stray
+    # `xNNN;` behind.
+    str
+    |> then(&Regex.replace(~r/&#x([0-9a-fA-F]+);/, &1, fn _full, hex ->
+      case Integer.parse(hex, 16) do
+        {code, _} when code in 0..0x10FFFF -> <<code::utf8>>
+        _ -> ""
+      end
+    end))
+    |> then(&Regex.replace(~r/&#(\d+);/, &1, fn _full, dec ->
+      case Integer.parse(dec) do
+        {code, _} when code in 0..0x10FFFF -> <<code::utf8>>
+        _ -> ""
+      end
+    end))
+  end
+
+  # `&amp;` last so we don't double-decode something like `&amp;lt;` into `<`.
+  @named_entities [
+    {"&lt;", "<"},
+    {"&gt;", ">"},
+    {"&quot;", "\""},
+    {"&apos;", "'"},
+    {"&#39;", "'"},
+    {"&nbsp;", " "},
+    {"&amp;", "&"}
+  ]
+
+  defp decode_named_entities(str) do
+    Enum.reduce(@named_entities, str, fn {from, to}, acc ->
+      String.replace(acc, from, to)
+    end)
   end
 
   defp extract_og_tag(html, property) do
