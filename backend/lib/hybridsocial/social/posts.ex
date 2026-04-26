@@ -1397,7 +1397,10 @@ defmodule Hybridsocial.Social.Posts do
     base =
       Post
       |> where([p], is_nil(p.deleted_at))
-      |> order_by([p], desc: p.published_at)
+      # `id DESC` is the explicit tie-breaker for posts published in
+      # the same instant; without it the row-tuple cursor below
+      # couldn't pick a deterministic next-page boundary.
+      |> order_by([p], desc: p.published_at, desc: p.id)
       |> limit(^limit)
 
     # The "Direct" profile tab is a recipient-facing view: it shows
@@ -1418,12 +1421,44 @@ defmodule Hybridsocial.Social.Posts do
         where(base, [p], p.identity_id == ^identity_id)
       end
 
-    query = if max_id, do: where(query, [p], p.id < ^max_id), else: query
+    # Profile pagination orders by `published_at`, so a `p.id < max_id`
+    # UUID compare against that ordering returns an arbitrary slice
+    # and the profile freezes after one page (37 posts in the field
+    # report). Look up the boundary post's published_at first, then
+    # row-tuple compare on the same expression as the ORDER BY. Falls
+    # through to no-cursor when the cursor doesn't resolve (stale
+    # client, deleted post, etc.) — never emit an empty page just
+    # because the cursor is unrecognised.
+    query =
+      case lookup_published_cursor(max_id) do
+        nil ->
+          query
+
+        {pa, id} ->
+          where(
+            query,
+            [p],
+            fragment("(?, ?) < (?, ?)", p.published_at, p.id, ^pa, type(^id, Ecto.UUID))
+          )
+      end
+
     query = if exclude_replies, do: where(query, [p], is_nil(p.parent_id)), else: query
     query = if only_media, do: where(query, [p], p.post_type == "media"), else: query
 
     Repo.all(query) |> Repo.preload([:identity, :quote])
   end
+
+  defp lookup_published_cursor(nil), do: nil
+
+  defp lookup_published_cursor(id) when is_binary(id) do
+    case Repo.one(from p in Post, where: p.id == ^id, select: {p.published_at, p.id}) do
+      nil -> nil
+      {nil, _id} -> nil
+      {pa, pid} -> {pa, pid}
+    end
+  end
+
+  defp lookup_published_cursor(_), do: nil
 
   # --- Admin operations ---
 
