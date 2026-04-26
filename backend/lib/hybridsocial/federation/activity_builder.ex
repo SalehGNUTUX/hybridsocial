@@ -330,7 +330,12 @@ defmodule Hybridsocial.Federation.ActivityBuilder do
       "summary" => post.spoiler_text,
       "tag" => build_tags(post),
       "attachment" => build_attachments(post),
-      "url" => post_url(post.id)
+      # The AP `id` is the JSON-LD object URL; `url` is supposed to be
+      # the human-readable page so a remote client's "Open original"
+      # link lands on something a browser can render. We were emitting
+      # `id == url == /posts/:id`, so clicking "View on origin" from
+      # Mastodon dropped users on a JSON document.
+      "url" => post_html_url(post.id)
     }
 
     # Direct-visibility posts participate in a "conversation" thread on
@@ -571,26 +576,52 @@ defmodule Hybridsocial.Federation.ActivityBuilder do
   # --- Media attachments ---
 
   defp build_attachments(post) do
-    # Post schema has no direct media association; query via identity's media
-    # linked to this post. Since there's no post_media join table yet,
-    # return an empty list. When a post_media join table is added, this
-    # can be wired up.
-    #
-    # For now, if post has a media association preloaded, use it.
-    case Map.get(post, :media) do
-      media when is_list(media) ->
-        Enum.map(media, fn m ->
-          %{
-            "type" => media_ap_type(m.content_type),
-            "mediaType" => m.content_type,
-            "url" => Hybridsocial.Media.media_url(m),
-            "name" => m.alt_text || ""
-          }
-        end)
+    # Post schema has the association as `media_attachments` (the AP
+    # builder used to grep for `post.media` and the wrong key meant
+    # every Create/Update we federated arrived with `attachment: []`,
+    # so remote peers never showed our images). Query MediaFile
+    # directly by post_id so the result doesn't depend on whether the
+    # caller preloaded the association.
+    import Ecto.Query, only: [from: 2]
 
-      _ ->
-        []
-    end
+    medias =
+      Hybridsocial.Repo.all(
+        from m in Hybridsocial.Media.MediaFile,
+          where: m.post_id == ^post.id and is_nil(m.deleted_at),
+          order_by: [asc: m.inserted_at]
+      )
+
+    Enum.map(medias, fn m ->
+      url =
+        if is_binary(m.remote_url) and m.remote_url != "" do
+          # Re-federate as the source URL — peers that already have
+          # the byte cached should reuse it, and our media proxy is
+          # an internal-routing detail, not a canonical origin.
+          m.remote_url
+        else
+          Hybridsocial.Media.media_url(m)
+        end
+
+      attachment = %{
+        "type" => media_ap_type(m.content_type),
+        "mediaType" => m.content_type,
+        "url" => url,
+        "name" => m.alt_text || ""
+      }
+
+      attachment =
+        if is_binary(m.blurhash) and m.blurhash != "" do
+          Map.put(attachment, "blurhash", m.blurhash)
+        else
+          attachment
+        end
+
+      if m.width && m.height do
+        Map.put(attachment, "width", m.width) |> Map.put("height", m.height)
+      else
+        attachment
+      end
+    end)
   end
 
   defp media_ap_type("image/" <> _), do: "Image"
@@ -611,6 +642,13 @@ defmodule Hybridsocial.Federation.ActivityBuilder do
 
   defp post_url(post_id) do
     "#{base_url()}/posts/#{post_id}"
+  end
+
+  # Human-readable post page (SvelteKit), distinct from the AP JSON-LD
+  # endpoint at `/posts/:id`. Used for the AP `url` field so remote
+  # "View original" links resolve to a viewable page.
+  defp post_html_url(post_id) do
+    "#{base_url()}/post/#{post_id}"
   end
 
   defp followers_url(identity) do

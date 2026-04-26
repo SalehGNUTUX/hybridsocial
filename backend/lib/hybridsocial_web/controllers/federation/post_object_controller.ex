@@ -26,6 +26,21 @@ defmodule HybridsocialWeb.Federation.PostObjectController do
   # Safe: negotiated_content_type/1 returns one of two module
   # attributes — no user input reaches the content-type header.
   def show(conn, %{"id" => id}) do
+    # Browsers that follow a federated "View original" link don't ask
+    # for AP — they ask for `text/html`. Without a redirect they used
+    # to receive the raw JSON-LD document. Serve AP only when the
+    # client actually asked for it; otherwise bounce them to the
+    # SvelteKit page (`/post/:id`, singular).
+    if wants_activity_pub?(conn) do
+      serve_activity_pub(conn, id)
+    else
+      conn
+      |> Phoenix.Controller.redirect(to: "/post/#{id}")
+      |> halt()
+    end
+  end
+
+  defp serve_activity_pub(conn, id) do
     with post when not is_nil(post) <- Posts.get_post_with_context(id),
          true <- public?(post) do
       note = ActivityBuilder.build_note(post)
@@ -52,6 +67,13 @@ defmodule HybridsocialWeb.Federation.PostObjectController do
         |> put_status(:not_found)
         |> json(%{error: "post.not_found"})
     end
+  end
+
+  defp wants_activity_pub?(conn) do
+    accept = Plug.Conn.get_req_header(conn, "accept") |> List.first() |> to_string()
+
+    String.contains?(accept, "application/activity+json") or
+      String.contains?(accept, "application/ld+json")
   end
 
   defp public?(%{visibility: vis, deleted_at: nil}) when vis in @public_visibilities,
