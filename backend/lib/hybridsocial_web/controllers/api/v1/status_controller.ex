@@ -271,11 +271,26 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
     custom_emoji_allowed = Hybridsocial.Premium.TierLimits.limit(identity, :custom_emoji) == true
 
     is_custom_emoji = String.starts_with?(type, ":") and String.ends_with?(type, ":")
-    is_valid = type in @valid_reaction_types or (is_custom_emoji and custom_emoji_allowed)
+    # Premium reactions are bare shortcodes from the admin-curated
+    # catalog (e.g. "fire"). The picker sends them without colons —
+    # before this branch we 422'd them as invalid_type.
+    is_premium_reaction =
+      not is_custom_emoji and type not in @valid_reaction_types and
+        Hybridsocial.Reactions.premium_reaction?(type)
 
-    if is_valid do
-      # Verify custom emoji exists
-      if is_custom_emoji do
+    is_valid =
+      type in @valid_reaction_types or
+        (is_custom_emoji and custom_emoji_allowed) or
+        (is_premium_reaction and custom_emoji_allowed)
+
+    cond do
+      not is_valid ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "reaction.invalid_type", valid_types: @valid_reaction_types})
+
+      is_custom_emoji ->
+        # Verify custom emoji exists
         shortcode = String.trim(type, ":")
 
         case Hybridsocial.Repo.get_by(Hybridsocial.Content.CustomEmoji,
@@ -290,13 +305,12 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
           _emoji ->
             do_react(conn, id, identity.id, type, custom_emoji_allowed)
         end
-      else
+
+      true ->
+        # Standard reaction or premium-catalog shortcode — both are
+        # bare strings of `[a-z]+` and pass `Reaction.changeset`'s
+        # custom_emoji_allowed format when the user is premium.
         do_react(conn, id, identity.id, type, custom_emoji_allowed)
-      end
-    else
-      conn
-      |> put_status(:unprocessable_entity)
-      |> json(%{error: "reaction.invalid_type", valid_types: @valid_reaction_types})
     end
   end
 
