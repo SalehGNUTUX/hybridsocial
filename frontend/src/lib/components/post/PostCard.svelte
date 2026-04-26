@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Post } from '$lib/api/types.js';
   import { relativeTime, fullDateTime } from '$lib/utils/time.js';
-  import { editPost } from '$lib/api/statuses.js';
+  import { editPost, getPost } from '$lib/api/statuses.js';
   import { uploadMedia } from '$lib/api/media.js';
   import { currentUser } from '$lib/stores/auth.js';
   import type { MediaAttachment } from '$lib/api/types.js';
@@ -160,6 +160,39 @@
   );
   let lightboxOpen = $state(false);
   let lightboxIndex = $state(0);
+
+  // Separate state for the parent post's lightbox — opened when the
+  // user clicks the "Replying to image #N" chip on a per-image
+  // reply. Loads the parent post's media on demand so we don't do a
+  // round-trip per reply on the feed.
+  let parentLightboxOpen = $state(false);
+  let parentLightboxIndex = $state(0);
+  let parentLightboxImages = $state<
+    Array<{ id: string; url: string; alt: string | null }>
+  >([]);
+  let parentLightboxLoading = $state(false);
+
+  async function openParentLightbox() {
+    if (!post.parent_id || !post.target_media_id) return;
+    if (parentLightboxLoading) return;
+    parentLightboxLoading = true;
+    try {
+      const parent = await getPost(post.parent_id);
+      const images = (parent.media_attachments || [])
+        .filter((m) => m.type === 'image' || m.type === 'gifv')
+        .map((m) => ({ id: m.id, url: m.url, alt: m.description }));
+      const idx = images.findIndex((s) => s.id === post.target_media_id);
+      if (idx < 0 || images.length === 0) return;
+      parentLightboxImages = images;
+      parentLightboxIndex = idx;
+      parentLightboxOpen = true;
+    } catch {
+      // Parent fetch failed — fall back to navigating to the post.
+      window.location.href = `/post/${post.parent_id}`;
+    } finally {
+      parentLightboxLoading = false;
+    }
+  }
 
   async function handleMediaReact(mediaId: string, next: string | null) {
     const prev = mediaReactionOverrides[mediaId];
@@ -493,14 +526,22 @@
         <div class="post-reply-indicator">
           <span class="material-symbols-outlined reply-icon" aria-hidden="true">reply</span>
           {#if post.target_media_id}
-            <a class="reply-target-media" href="/post/{post.parent_id}" onclick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              class="reply-target-media"
+              onclick={(e) => { e.stopPropagation(); openParentLightbox(); }}
+              disabled={parentLightboxLoading}
+              aria-label={post.target_media_index
+                ? `Open image #${post.target_media_index}`
+                : 'Open the targeted image'}
+            >
               {#if post.target_media_preview_url}
                 <img class="reply-target-thumb" src={post.target_media_preview_url} alt="" />
               {/if}
               <span>
                 Replying to {post.target_media_index ? `image #${post.target_media_index}` : 'a specific image'}
               </span>
-            </a>
+            </button>
           {:else if post.in_reply_to_account_id}
             <span>Replying to <a href="/post/{post.parent_id}" class="reply-to-link">a post</a></span>
           {:else}
@@ -768,6 +809,14 @@
       );
     }}
     onreact={handleMediaReact}
+  />
+{/if}
+
+{#if parentLightboxOpen && parentLightboxImages.length > 0}
+  <ImageLightbox
+    images={parentLightboxImages}
+    bind:index={parentLightboxIndex}
+    onclose={() => (parentLightboxOpen = false)}
   />
 {/if}
 
@@ -1180,7 +1229,8 @@
     align-items: center;
     gap: 8px;
     color: inherit;
-    text-decoration: none;
+    font: inherit;
+    cursor: pointer;
     padding: 2px 8px 2px 2px;
     border-radius: 999px;
     background: var(--color-surface-raised, var(--color-surface));
@@ -1188,8 +1238,13 @@
     line-height: 1;
   }
 
-  .reply-target-media:hover {
+  .reply-target-media:hover:not(:disabled) {
     background: var(--color-surface-container-low, var(--color-surface-raised));
+  }
+
+  .reply-target-media:disabled {
+    opacity: 0.6;
+    cursor: progress;
   }
 
   .reply-target-thumb {
