@@ -15,7 +15,7 @@ defmodule Hybridsocial.Repo.Migrations.AddTargetMediaToReactions do
   def up do
     alter table(:reactions) do
       add :target_media_id,
-          references(:media_files, type: :binary_id, on_delete: :nilify_all)
+          references(:media, type: :binary_id, on_delete: :nilify_all)
     end
 
     create index(:reactions, [:target_media_id])
