@@ -4,12 +4,24 @@ import type { Post, PaginatedResponse } from './types.js';
 interface TimelineParams {
   cursor?: string;
   limit?: string;
+  // Backend cursor params — pages by row-tuple compare on
+  // (timestamp, id). Earlier this helper only forwarded `cursor`
+  // and `limit`, so any caller that set `max_id` had it silently
+  // dropped — the server returned the same first page over and
+  // over and home pagination froze at 20.
+  max_id?: string;
+  min_id?: string;
+  since_id?: string;
+  // Home-feed tab toggle: "true" → algorithmic, "trending" → top.
+  algorithm?: string;
 }
 
-function buildParams(params?: TimelineParams): Record<string, string> {
+function buildParams(params?: TimelineParams | Record<string, string>): Record<string, string> {
+  if (!params) return {};
   const query: Record<string, string> = {};
-  if (params?.cursor) query.cursor = params.cursor;
-  if (params?.limit) query.limit = params.limit;
+  for (const [k, v] of Object.entries(params)) {
+    if (typeof v === 'string' && v.length > 0) query[k] = v;
+  }
   return query;
 }
 
