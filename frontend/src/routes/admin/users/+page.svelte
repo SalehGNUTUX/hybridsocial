@@ -547,6 +547,10 @@
   }
 
   function toggleDropdown(userId: string, e?: MouseEvent) {
+    // The trigger click bubbles to the window-level close handler
+    // below, so if we don't stop it here the handler that *just*
+    // opened the menu would also close it on the same click.
+    e?.stopPropagation();
     if (openDropdownId === userId) {
       openDropdownId = null;
       return;
@@ -563,6 +567,17 @@
       };
     }
   }
+
+  // Close the row dropdown on any click outside it. Without this a
+  // user clicking a different row's ⋯ would leave the previous menu
+  // visible until that handler ran, and clicking off the table didn't
+  // close it at all.
+  $effect(() => {
+    if (!openDropdownId) return;
+    function close() { openDropdownId = null; }
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  });
 
   function formatDate(iso: string): string {
     return new Date(iso).toLocaleDateString(undefined, {
@@ -712,7 +727,17 @@
               </svg>
             </button>
             {#if openDropdownId === row['id']}
-              <div class="dropdown-menu" style="top: {dropdownPos.top}px; left: {dropdownPos.left}px">
+              <!-- Close on any bubbled click from a menu item — every
+                   row action either opens a modal or kicks off a
+                   request, and the user expects the menu to disappear
+                   the moment they pick something. Doing it here means
+                   we don't have to remember to clear openDropdownId in
+                   every handler. -->
+              <div
+                class="dropdown-menu"
+                style="top: {dropdownPos.top}px; left: {dropdownPos.left}px"
+                onclick={(e) => { e.stopPropagation(); openDropdownId = null; }}
+              >
                 <button class="dropdown-item" type="button" onclick={() => openWarnModal(row as unknown as AdminUser)}>
                   Warn
                 </button>

@@ -48,7 +48,11 @@
   </button>
 
   {#if open}
-    <div class="dropdown-menu dropdown-align-{align}" role="menu">
+    <!-- Close on any click bubbling up from a menu item. Without this
+         the dropdown stays open while SvelteKit handles the SPA
+         navigation (there's no unmount until the new route mounts),
+         which is what made the user-menu look frozen. -->
+    <div class="dropdown-menu dropdown-align-{align}" role="menu" onclick={() => (open = false)}>
       {#if children}{@render children()}{/if}
     </div>
   {/if}
