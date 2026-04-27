@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api/client.js';
+  import { uploadMedia } from '$lib/api/media.js';
   import { authStore, setUser } from '$lib/stores/auth.js';
   import { get } from 'svelte/store';
   import type { Identity } from '$lib/api/types.js';
@@ -29,6 +30,9 @@
   // keep this checked unless they specifically want private profiles.
   let allowUnfurl = $state(true);
 
+  let saving = $state(false);
+  let saveError = $state('');
+
   function handleAvatarChange(e: Event) {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -38,15 +42,38 @@
     }
   }
 
-  async function saveProfile() {
-    try {
-      const body: Record<string, string> = {};
-      if (displayName) body.display_name = displayName;
-      if (bio) body.bio = bio;
+  async function saveProfile(): Promise<boolean> {
+    saveError = '';
+    // Avatar arrives as a File and must be uploaded through the media
+    // endpoint first so the credentials PATCH can reference it by URL —
+    // update_credentials accepts `avatar_url`, not raw multipart.
+    let avatarUrl: string | undefined;
+    if (avatarFile) {
+      try {
+        const media = await uploadMedia(avatarFile);
+        avatarUrl = media.url;
+      } catch (err) {
+        console.error('Avatar upload failed during onboarding', err);
+        saveError = "Couldn't upload your photo. Please try again.";
+        return false;
+      }
+    }
 
+    const body: Record<string, unknown> = {};
+    if (displayName.trim()) body.display_name = displayName.trim();
+    if (bio.trim()) body.bio = bio.trim();
+    if (avatarUrl) body.avatar_url = avatarUrl;
+    if (Object.keys(body).length === 0) return true;
+
+    try {
       const updated = await api.patch<Identity>('/api/v1/accounts/update_credentials', body);
       setUser(updated);
-    } catch { /* */ }
+      return true;
+    } catch (err) {
+      console.error('Profile save failed during onboarding', err);
+      saveError = "Couldn't save your profile. Please try again.";
+      return false;
+    }
   }
 
   async function loadSuggestions() {
@@ -82,14 +109,23 @@
   }
 
   async function next() {
+    if (saving) return;
     if (step === 1) {
-      await saveProfile();
+      saving = true;
+      const ok = await saveProfile();
+      saving = false;
+      // Block advancing on failure so the user can fix and retry —
+      // silently moving on is what made the form feel like it never
+      // saved anything.
+      if (!ok) return;
       await loadSuggestions();
       step = 2;
     } else if (step === 2) {
       step = 3;
     } else {
+      saving = true;
       await markOnboarded();
+      saving = false;
       onclose();
     }
   }
@@ -136,6 +172,10 @@
           <label class="field-label" for="ob-bio">Bio</label>
           <textarea id="ob-bio" class="field-input field-textarea" bind:value={bio} placeholder="Tell us about yourself..." rows={3}></textarea>
         </div>
+
+        {#if saveError}
+          <p class="save-error" role="alert">{saveError}</p>
+        {/if}
       </div>
 
     {:else if step === 2}
@@ -197,11 +237,17 @@
     {/if}
 
     <div class="onboarding-actions">
-      <button type="button" class="skip-btn" onclick={skip}>
+      <button type="button" class="skip-btn" onclick={skip} disabled={saving}>
         {step === totalSteps ? 'Close' : 'Skip for now'}
       </button>
-      <button type="button" class="next-btn" onclick={next}>
-        {step === totalSteps ? 'Get started' : 'Continue'}
+      <button type="button" class="next-btn" onclick={next} disabled={saving}>
+        {#if saving}
+          Saving…
+        {:else if step === totalSteps}
+          Get started
+        {:else}
+          Continue
+        {/if}
       </button>
     </div>
   </div>
@@ -450,4 +496,13 @@
   }
 
   .next-btn:hover { opacity: 0.9; }
+  .next-btn:disabled,
+  .skip-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .save-error {
+    margin-top: 4px;
+    font-size: 0.8125rem;
+    color: var(--color-danger);
+    text-align: center;
+  }
 </style>
