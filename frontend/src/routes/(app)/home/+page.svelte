@@ -14,12 +14,22 @@
     disconnectTimelineStream,
     maybeTruncate,
   } from '$lib/stores/timeline-stream.js';
+  import { readHomeFeed, writeHomeFeed } from '$lib/stores/home-feed-cache.js';
 
-  let posts: Post[] = $state([]);
-  let loading = $state(true);
-  let hasMore = $state(true);
-  let cursor: string | null = $state(null);
-  let feedType: FeedTab = $state('latest');
+  // Hydrate from the session-scoped feed cache so a back-nav from a
+  // post detail lands on the same posts in the same DOM positions —
+  // otherwise the initial `posts = []` + async refetch wipes scroll
+  // restoration before the data lands.
+  const cached = readHomeFeed();
+  let posts: Post[] = $state(cached?.posts ?? []);
+  let loading = $state(cached === null);
+  let hasMore = $state(cached?.hasMore ?? true);
+  let cursor: string | null = $state(cached?.cursor ?? null);
+  let feedType: FeedTab = $state(cached?.feedType ?? 'latest');
+
+  function persistFeed() {
+    writeHomeFeed({ posts, cursor, hasMore, feedType });
+  }
 
   async function loadTimeline(reset = false) {
     if (reset) {
@@ -69,6 +79,7 @@
           : lastEntry?.id ?? null;
       cursor = lastPostId;
       hasMore = items.length >= 20;
+      persistFeed();
     } catch {
       // Handle error silently
     } finally {
@@ -88,6 +99,7 @@
       const existingIds = new Set(posts.map(p => p.id));
       const newPosts = queued.filter(p => !existingIds.has(p.id));
       posts = maybeTruncate([...newPosts, ...posts]);
+      persistFeed();
     }
     scrollToTop();
   }
@@ -129,7 +141,13 @@
   }
 
   onMount(() => {
-    loadTimeline(true);
+    // Skip the initial fetch when we hydrated from the cache — the
+    // posts are already in the DOM and refetching would wipe them
+    // and break scroll restoration. Live updates from the streaming
+    // connection keep the cached feed fresh while mounted.
+    if (cached === null) {
+      loadTimeline(true);
+    }
 
     // Connect streaming (auth via httpOnly cookie)
     const apiBase = import.meta.env.VITE_API_URL || '';
@@ -140,6 +158,7 @@
       const post = (e as CustomEvent<Post>).detail;
       if (post && !posts.some(p => p.id === post.id)) {
         posts = maybeTruncate([post, ...posts]);
+        persistFeed();
       }
     }
 
@@ -148,6 +167,7 @@
       const updated = (e as CustomEvent<Post>).detail;
       if (updated) {
         posts = posts.map(p => p.id === updated.id ? updated : p);
+        persistFeed();
       }
     }
 
@@ -161,6 +181,7 @@
       // one is placed. Don't insert twice.
       if (posts.some((p) => p.id === newPost.id)) return;
       posts = [newPost, ...posts];
+      persistFeed();
     }
 
     // Replace optimistic post with real server response.
@@ -182,6 +203,7 @@
       } else {
         posts = posts.map((p) => (p.id === oldId ? post : p));
       }
+      persistFeed();
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true });

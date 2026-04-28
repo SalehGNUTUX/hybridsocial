@@ -120,22 +120,36 @@
     }
   });
 
-  // Build a tiny SVG polyline path from a 7-point history series.
-  // Normalized to fill the viewBox so a flat series still draws a
-  // centered line instead of clipping off-canvas.
+  // Build a smooth SVG path from a 7-point history series using
+  // Catmull-Rom-style cubic bezier control points. Inset vertically
+  // so the rounded stroke doesn't clip at the viewBox edges.
   function sparklinePath(history: number[], w = 56, h = 24): string {
     if (!history || history.length === 0) return '';
+    const pad = 2;
+    const drawH = h - pad * 2;
     const max = Math.max(1, ...history);
     const min = Math.min(...history);
     const range = max - min || 1;
     const step = history.length === 1 ? 0 : w / (history.length - 1);
-    return history
-      .map((v, i) => {
-        const x = i * step;
-        const y = h - ((v - min) / range) * h;
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
+    const pts = history.map((v, i) => ({
+      x: i * step,
+      y: pad + drawH - ((v - min) / range) * drawH
+    }));
+    if (pts.length < 2) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    const tension = 0.4;
+    let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] ?? pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] ?? p2;
+      const c1x = p1.x + (p2.x - p0.x) * tension * 0.5;
+      const c1y = p1.y + (p2.y - p0.y) * tension * 0.5;
+      const c2x = p2.x - (p3.x - p1.x) * tension * 0.5;
+      const c2y = p2.y - (p3.y - p1.y) * tension * 0.5;
+      d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+    }
+    return d;
   }
 
   // Skip the sparkline when there's no variation across the 7-h
@@ -183,7 +197,7 @@
     </header>
     {#if trending.length > 0}
       <ul class="trend-list">
-        {#each trending as item (item.tag)}
+        {#each trending.slice(0, 10) as item (item.tag)}
           <li>
             <a href="/tags/{encodeURIComponent(item.tag)}" class="trend-item">
               <div class="trend-text">
@@ -192,7 +206,7 @@
               </div>
               {#if hasSparklineSignal(item.history)}
                 <svg class="trend-spark" viewBox="0 0 56 24" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline points={sparklinePath(item.history)} fill="none" stroke="var(--color-primary)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d={sparklinePath(item.history)} fill="none" stroke="var(--color-primary)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               {/if}
             </a>

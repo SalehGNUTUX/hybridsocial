@@ -23,6 +23,31 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let onlineListener: (() => void) | null = null;
 
+// EventSource fires `onerror` for any transient blip — including the
+// half-second pauses some browsers impose on long-lived connections
+// during SPA navigation. Without a grace window, the "Connection
+// lost" overlay flashes on every page change. Delay the offline flip
+// long enough that real outages still surface, but routine reconnect
+// noise is invisible.
+const OFFLINE_GRACE_MS = 8000;
+let offlineGraceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function markReachable(): void {
+  if (offlineGraceTimer) {
+    clearTimeout(offlineGraceTimer);
+    offlineGraceTimer = null;
+  }
+  serverReachable.set(true);
+}
+
+function scheduleOfflineFlip(): void {
+  if (offlineGraceTimer) return;
+  offlineGraceTimer = setTimeout(() => {
+    offlineGraceTimer = null;
+    serverReachable.set(false);
+  }, OFFLINE_GRACE_MS);
+}
+
 export function setNotifications(items: Notification[]): void {
   const unread = items.filter((n) => !n.read).length;
   notificationStore.set({ items, unreadCount: unread, loading: false });
@@ -100,11 +125,14 @@ export function connectNotificationStream(apiBase: string): void {
 
     eventSource.onopen = () => {
       reconnectAttempts = 0;
-      serverReachable.set(true);
+      markReachable();
     };
 
     eventSource.onerror = () => {
-      serverReachable.set(false);
+      // Don't flip the banner on the first error — schedule a delayed
+      // flip and let `onopen` of the reconnect cancel it. Only true
+      // outages survive the grace window.
+      scheduleOfflineFlip();
       closeEventSource();
       scheduleReconnect(apiBase);
     };
@@ -142,6 +170,10 @@ function closeEventSource(): void {
 export function disconnectNotificationStream(): void {
   stopReconnectTimer();
   closeEventSource();
+  if (offlineGraceTimer) {
+    clearTimeout(offlineGraceTimer);
+    offlineGraceTimer = null;
+  }
   if (onlineListener) {
     window.removeEventListener('online', onlineListener);
     onlineListener = null;
