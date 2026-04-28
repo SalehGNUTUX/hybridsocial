@@ -363,6 +363,7 @@ defmodule Hybridsocial.Federation.Inbox do
           {:ok, post} ->
             persist_remote_attachments(post, ap_object, remote_identity)
             persist_remote_mentions(post, ap_object)
+            persist_remote_poll(post, post_attrs)
             Posts.broadcast_direct_post_to_participants(post)
             notify_remote_reply(post, parent_id)
             notify_remote_quote(post, ap_object)
@@ -427,6 +428,156 @@ defmodule Hybridsocial.Federation.Inbox do
   end
 
   defp persist_remote_mentions(_post, _object), do: :ok
+
+  # Persist a remote poll's options + cached vote counts so the
+  # serializer can render `oneOf`/`anyOf` Question objects the same
+  # way as locally-created polls. Without this, a `post_type=poll`
+  # row exists with no `polls` row backing it and the post-detail
+  # page renders blank.
+  defp persist_remote_poll(%Post{id: post_id} = _post, %{"post_type" => "poll"} = post_attrs) do
+    options = post_attrs["poll_options"] || []
+    multiple = post_attrs["poll_multiple"] || false
+    expires_at = post_attrs["poll_expires_at"]
+    voters_count = post_attrs["poll_voters_count"] || 0
+
+    # Skip if we somehow ingested a Question with no choices — the
+    # post itself stands; the poll just won't render. Better than
+    # crashing the inbox on a malformed peer object.
+    if options == [] do
+      :ok
+    else
+      multi =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:poll, fn _ ->
+          %Hybridsocial.Social.Poll{}
+          |> Hybridsocial.Social.Poll.changeset(%{
+            post_id: post_id,
+            multiple_choice: multiple,
+            expires_at: parse_poll_expires_at(expires_at),
+            voters_count: voters_count
+          })
+        end)
+        |> Ecto.Multi.run(:options, fn _repo, %{poll: poll} ->
+          insert_remote_poll_options(poll.id, options)
+        end)
+
+      case Repo.transaction(multi) do
+        {:ok, _} -> :ok
+        {:error, _step, reason, _} ->
+          Logger.warning("Failed to persist remote poll for #{post_id}: #{inspect(reason)}")
+          :ok
+      end
+    end
+  end
+
+  defp persist_remote_poll(_post, _attrs), do: :ok
+
+  @doc """
+  One-shot helper: refetches the AP Question for a remote `post_type=poll`
+  row that's missing its poll row (pre-fix data) and persists the poll
+  + options. Safe to call multiple times — bails when a poll already
+  exists. Used via `mix run` / IEx eval after deploy to backfill.
+  """
+  def backfill_remote_poll(post_id) when is_binary(post_id) do
+    case Repo.get(Post, post_id) do
+      nil ->
+        {:error, :not_found}
+
+      post ->
+        cond do
+          post.post_type != "poll" ->
+            {:error, :not_a_poll}
+
+          not is_binary(post.ap_id) or post.ap_id == "" ->
+            {:error, :not_remote}
+
+          Repo.exists?(
+            Ecto.Query.where(Hybridsocial.Social.Poll, [p], p.post_id == ^post.id)
+          ) ->
+            {:ok, :already_persisted}
+
+          true ->
+            with {:ok, ap_object} <- fetch_ap_object(post.ap_id) do
+              attrs = ActivityMapper.to_post(ap_object)
+              persist_remote_poll(post, attrs)
+              {:ok, :backfilled}
+            end
+        end
+    end
+  end
+
+  defp fetch_ap_object(ap_id) do
+    headers = [
+      {"Accept", "application/activity+json"},
+      {"User-Agent", "HybridSocial Federation"}
+    ]
+
+    case HTTPoison.get(ap_id, headers, follow_redirect: true, recv_timeout: 10_000) do
+      {:ok, %{status_code: 200, body: body}} ->
+        case Jason.decode(body) do
+          {:ok, ap} -> {:ok, ap}
+          err -> err
+        end
+
+      {:ok, %{status_code: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp insert_remote_poll_options(poll_id, options) do
+    results =
+      options
+      |> Enum.with_index()
+      |> Enum.map(fn {opt, index} ->
+        attrs = %{
+          poll_id: poll_id,
+          text: opt["name"],
+          position: index
+        }
+
+        %Hybridsocial.Social.PollOption{}
+        |> Hybridsocial.Social.PollOption.changeset(attrs)
+        |> Repo.insert()
+        |> case do
+          {:ok, inserted} ->
+            # Mirror the remote vote count the peer reported. Voting
+            # state is read-only here; the source of truth stays on
+            # the origin instance and we refresh on each Update.
+            count = opt["votes_count"] || 0
+
+            if count > 0 do
+              Hybridsocial.Social.PollOption
+              |> Ecto.Query.where([o], o.id == ^inserted.id)
+              |> Repo.update_all(set: [votes_count: count])
+            end
+
+            {:ok, inserted}
+
+          err ->
+            err
+        end
+      end)
+
+    case Enum.find(results, fn {status, _} -> status == :error end) do
+      nil -> {:ok, Enum.map(results, fn {:ok, opt} -> opt end)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp parse_poll_expires_at(nil), do: nil
+
+  defp parse_poll_expires_at(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, dt, _} -> DateTime.truncate(dt, :microsecond)
+      _ -> nil
+    end
+  end
+
+  defp parse_poll_expires_at(%DateTime{} = dt), do: DateTime.truncate(dt, :microsecond)
+  defp parse_poll_expires_at(_), do: nil
 
   defp notify_remote_reply(_post, nil), do: :ok
 
@@ -641,6 +792,14 @@ defmodule Hybridsocial.Federation.Inbox do
         type when type in ["Note", "Article"] ->
           update_remote_post(object, remote_identity)
 
+        "Question" ->
+          # Mastodon broadcasts an Update on every vote — used to
+          # refresh `replies.totalItems` and `votersCount` on
+          # subscribed peers. We mirror the new counts onto our
+          # cached poll/option rows so remote-poll viewers see
+          # live tallies.
+          update_remote_poll(object, remote_identity)
+
         _ ->
           {:error, :unsupported_object_type}
       end
@@ -648,6 +807,51 @@ defmodule Hybridsocial.Federation.Inbox do
   end
 
   defp handle_update(_), do: {:error, :invalid_update_activity}
+
+  defp update_remote_poll(%{"id" => ap_id} = object, _remote_identity) when is_binary(ap_id) do
+    case get_post_by_ap_id(ap_id) do
+      nil ->
+        {:error, :not_found}
+
+      post ->
+        case Repo.preload(post, poll: :options).poll do
+          nil ->
+            # The Question wasn't ingested as a poll for some reason
+            # — treat the Update as the create signal and persist it.
+            attrs = ActivityMapper.to_post(object)
+            persist_remote_poll(post, attrs)
+
+          poll ->
+            options = object["oneOf"] || object["anyOf"] || []
+            voters_count = (object["votersCount"] || poll.voters_count) |> max(0)
+
+            # Match each incoming option by name (Mastodon convention)
+            # and update the cached vote count. Names are unique per
+            # poll on creation, so duplicates aren't a concern.
+            for opt <- options do
+              name = opt["name"]
+              count = case opt do
+                %{"replies" => %{"totalItems" => n}} when is_integer(n) -> n
+                _ -> 0
+              end
+
+              if is_binary(name) do
+                Hybridsocial.Social.PollOption
+                |> Ecto.Query.where([o], o.poll_id == ^poll.id and o.text == ^name)
+                |> Repo.update_all(set: [votes_count: count])
+              end
+            end
+
+            Hybridsocial.Social.Poll
+            |> Ecto.Query.where([p], p.id == ^poll.id)
+            |> Repo.update_all(set: [voters_count: voters_count])
+
+            :ok
+        end
+    end
+  end
+
+  defp update_remote_poll(_, _), do: {:error, :invalid_question_object}
 
   # --- Block ---
 

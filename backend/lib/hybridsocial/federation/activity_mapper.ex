@@ -27,12 +27,25 @@ defmodule Hybridsocial.Federation.ActivityMapper do
     options = ap_object["oneOf"] || ap_object["anyOf"] || []
     multiple = ap_object["anyOf"] != nil
 
+    # Extract option text + vote count per option. Remote peers
+    # (Mastodon, Pleroma, …) ship votes inside `replies.totalItems`
+    # per option, with the running unique-voter total at the top
+    # level as `votersCount`.
+    poll_options =
+      Enum.map(options, fn opt ->
+        %{
+          "name" => opt["name"],
+          "votes_count" => extract_vote_count(opt)
+        }
+      end)
+
     base
     |> Map.merge(%{
       "post_type" => "poll",
-      "poll_options" => Enum.map(options, fn opt -> opt["name"] end),
+      "poll_options" => poll_options,
       "poll_multiple" => multiple,
-      "poll_expires_at" => ap_object["endTime"]
+      "poll_expires_at" => ap_object["endTime"],
+      "poll_voters_count" => extract_voters_count(ap_object)
     })
     |> Map.reject(fn {_k, v} -> is_nil(v) end)
   end
@@ -41,6 +54,12 @@ defmodule Hybridsocial.Federation.ActivityMapper do
     to_post_base(ap_object)
     |> Map.reject(fn {_k, v} -> is_nil(v) end)
   end
+
+  defp extract_vote_count(%{"replies" => %{"totalItems" => n}}) when is_integer(n), do: n
+  defp extract_vote_count(_), do: 0
+
+  defp extract_voters_count(%{"votersCount" => n}) when is_integer(n), do: n
+  defp extract_voters_count(_), do: 0
 
   defp to_post_base(ap_object) do
     visibility = determine_visibility(ap_object)

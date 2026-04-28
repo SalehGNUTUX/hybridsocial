@@ -134,6 +134,41 @@ defmodule Hybridsocial.Federation.ActivityBuilder do
     }
   end
 
+  # --- Poll vote ---
+  #
+  # Mastodon convention: voting on a remote poll = posting a Note with
+  # `inReplyTo: <Question id>`, `name: <option text>`, addressed to the
+  # poll author. The author's instance tallies votes by name match
+  # (which is why option names are unique within a poll). Each chosen
+  # option ships as its own Create activity — multi-vote polls produce
+  # one activity per choice.
+  def build_poll_vote(identity, post, option) do
+    actor = actor_url(identity)
+    author = actor_ap_url(post.identity)
+    object_url = post_object_url(post)
+
+    note = %{
+      "@context" => @context,
+      "id" => "#{actor}/votes/#{post.id}/#{option.id}",
+      "type" => "Note",
+      "actor" => actor,
+      "to" => [author],
+      "name" => option.text,
+      "inReplyTo" => object_url,
+      "attributedTo" => actor,
+      "published" => format_datetime(DateTime.utc_now())
+    }
+
+    %{
+      "@context" => @context,
+      "id" => "#{actor}/votes/#{post.id}/#{option.id}/activity",
+      "type" => "Create",
+      "actor" => actor,
+      "to" => [author],
+      "object" => note
+    }
+  end
+
   # --- Like ---
 
   def build_like(identity, post) do
