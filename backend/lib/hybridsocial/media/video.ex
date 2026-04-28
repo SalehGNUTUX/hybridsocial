@@ -67,14 +67,12 @@ defmodule Hybridsocial.Media.Video do
 
     case System.cmd("ffprobe", args, stderr_to_stdout: true) do
       {output, 0} ->
-        output
-        |> String.split("\n", trim: true)
-        |> List.last()
-        |> parse_duration()
+        case last_numeric_line(output) do
+          d when d > 0.0 -> d
+          _ -> scan_duration_audio(path)
+        end
 
       _ ->
-        # Last-ditch attempt: same scan but on audio if there's no
-        # video stream (Chrome audio-only recordings).
         scan_duration_audio(path)
     end
   rescue
@@ -95,17 +93,29 @@ defmodule Hybridsocial.Media.Video do
     ]
 
     case System.cmd("ffprobe", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split("\n", trim: true)
-        |> List.last()
-        |> parse_duration()
-
-      _ ->
-        0.0
+      {output, 0} -> last_numeric_line(output)
+      _ -> 0.0
     end
   rescue
     _ -> 0.0
+  end
+
+  # ffprobe with stderr_to_stdout intersperses warning lines (e.g.
+  # `[opus @ …] Error parsing Opus packet header.`) into the packet
+  # output. Filter to lines that parse as floats and take the last
+  # one — that's the timestamp we want.
+  defp last_numeric_line(output) do
+    output
+    |> String.split("\n", trim: true)
+    |> Enum.reverse()
+    |> Enum.find_value(0.0, fn line ->
+      stripped = line |> String.trim() |> String.trim_trailing(",")
+
+      case Float.parse(stripped) do
+        {value, ""} when value > 0 -> value
+        _ -> nil
+      end
+    end)
   end
 
   defp run_ffprobe(path) do
