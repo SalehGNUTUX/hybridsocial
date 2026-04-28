@@ -17,7 +17,21 @@ defmodule Hybridsocial.Media.Video do
   def probe(path) when is_binary(path) do
     case run_ffprobe(path) do
       {:ok, %{"streams" => streams, "format" => format}} ->
-        duration = parse_duration(format["duration"] || duration_from_streams(streams))
+        # Fast-path: header carries the duration (most uploads).
+        duration_from_header = parse_duration(format["duration"] || duration_from_streams(streams))
+
+        # Slow-path: WebM files written by Chrome's MediaRecorder /
+        # streaming muxers commonly omit the duration tag. Fall back
+        # to a full-file scan that computes duration from the last
+        # packet's PTS. Only runs when the fast-path failed (0.0)
+        # so happy-path uploads stay cheap.
+        duration =
+          if duration_from_header > 0.0 do
+            duration_from_header
+          else
+            scan_duration(path)
+          end
+
         video = first_video_stream(streams)
 
         {:ok,
@@ -32,6 +46,66 @@ defmodule Hybridsocial.Media.Video do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  # Full-file scan for containers without a duration header. Reads
+  # every packet, prints `pkt_pts_time` for the last one — that's the
+  # duration. Slow on large files but accurate where the metadata
+  # path is empty.
+  defp scan_duration(path) do
+    args = [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "packet=pts_time",
+      "-of",
+      "csv=p=0",
+      path
+    ]
+
+    case System.cmd("ffprobe", args, stderr_to_stdout: true) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> List.last()
+        |> parse_duration()
+
+      _ ->
+        # Last-ditch attempt: same scan but on audio if there's no
+        # video stream (Chrome audio-only recordings).
+        scan_duration_audio(path)
+    end
+  rescue
+    _ -> 0.0
+  end
+
+  defp scan_duration_audio(path) do
+    args = [
+      "-v",
+      "error",
+      "-select_streams",
+      "a:0",
+      "-show_entries",
+      "packet=pts_time",
+      "-of",
+      "csv=p=0",
+      path
+    ]
+
+    case System.cmd("ffprobe", args, stderr_to_stdout: true) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> List.last()
+        |> parse_duration()
+
+      _ ->
+        0.0
+    end
+  rescue
+    _ -> 0.0
   end
 
   defp run_ffprobe(path) do
