@@ -47,14 +47,18 @@ export interface Identity {
   is_admin: boolean;
   discoverable?: boolean;
   allow_unfurl?: boolean;
+  /** When true, follower/following counts are hidden from other viewers. */
+  hide_follow_counts?: boolean;
   roles: string[];
   permissions: string[];
   two_factor_enabled: boolean;
   verification_tier?: string | null;
   is_verified?: boolean;
   limits?: TierLimits;
-  followers_count: number;
-  following_count: number;
+  /** May be null when the profile owner has opted to hide counts and
+   *  the viewer isn't them. */
+  followers_count: number | null;
+  following_count: number | null;
   post_count: number;
   birthday?: string | null;
   location?: string | null;

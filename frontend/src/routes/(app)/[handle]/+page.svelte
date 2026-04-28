@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
   import type { Identity, Relationship, Post } from '$lib/api/types.js';
@@ -189,10 +190,30 @@
     finally { vouchLoading = false; }
   }
 
+  // After any relationship change (follow / unfollow / block /
+  // unblock / mute / unmute) the profile's counts can shift and the
+  // server may now answer the show endpoint differently (e.g. a
+  // block hides the whole row). Re-pull both the relationship and
+  // the account so the header doesn't desync from server state.
+  async function refreshRelationshipAndAccount() {
+    if (!account) return;
+    try {
+      const [rel, fresh] = await Promise.all([
+        getRelationship(account.id),
+        lookupAccount(handle).catch(() => null),
+      ]);
+      relationship = rel;
+      if (fresh) account = fresh;
+    } catch {
+      /* best-effort refresh */
+    }
+  }
+
   async function handleFollow() {
     if (!account) return;
     try {
       relationship = await follow(account.id);
+      await refreshRelationshipAndAccount();
     } catch { /* handle error */ }
   }
 
@@ -200,6 +221,7 @@
     if (!account) return;
     try {
       relationship = await unfollow(account.id);
+      await refreshRelationshipAndAccount();
     } catch { /* handle error */ }
   }
 
@@ -219,7 +241,12 @@
       switch (confirmAction) {
         case 'block':
           relationship = await block(account.id);
-          break;
+          // Blocking the account: the profile is now hidden from the
+          // viewer per the server gate, so route home rather than
+          // sit on a 404'd profile.
+          confirmAction = null;
+          await goto('/home', { replaceState: true });
+          return;
         case 'unblock':
           relationship = await unblock(account.id);
           break;
@@ -230,6 +257,7 @@
           relationship = await unmute(account.id);
           break;
       }
+      await refreshRelationshipAndAccount();
     } catch { /* handle error */ }
     confirmAction = null;
   }

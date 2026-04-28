@@ -2,6 +2,7 @@ defmodule HybridsocialWeb.Api.V1.PageController do
   use HybridsocialWeb, :controller
 
   alias Hybridsocial.Pages
+  alias Hybridsocial.Social
   import HybridsocialWeb.Helpers.Pagination, only: [clamp_limit: 1]
   import Ecto.Query, only: [where: 3, order_by: 3, limit: 2]
 
@@ -45,8 +46,60 @@ defmodule HybridsocialWeb.Api.V1.PageController do
 
       page ->
         branding = Pages.get_branding(id)
-        json(conn, serialize_page(page, branding))
+        viewer_id = viewer_identity_id(conn)
+        json(conn, serialize_page(page, branding, viewer_id))
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Follow / unfollow — pages are Identity rows, so the same Follow
+  # plumbing that powers /api/v1/accounts/:id/follow works here. We
+  # expose a page-shaped endpoint so the frontend's /api/v1/pages/:id
+  # surface stays self-contained instead of forcing it to know that a
+  # page id is also a follow target.
+  # ---------------------------------------------------------------------------
+
+  @doc "POST /api/v1/pages/:id/follow"
+  def follow(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+
+    case Pages.get_page(id) do
+      nil ->
+        conn |> put_status(:not_found) |> json(%{error: "page.not_found"})
+
+      _page ->
+        case Social.follow(identity.id, id) do
+          {:ok, follow} ->
+            json(conn, %{
+              id: id,
+              following: follow.status == :accepted,
+              requested: follow.status == :pending
+            })
+
+          {:error, :cannot_follow_self} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "social.cannot_follow_self"})
+
+          {:error, :blocked} ->
+            conn |> put_status(:forbidden) |> json(%{error: "social.blocked"})
+
+          {:error, :not_found} ->
+            conn |> put_status(:not_found) |> json(%{error: "page.not_found"})
+
+          {:error, _changeset} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "validation.failed"})
+        end
+    end
+  end
+
+  @doc "POST /api/v1/pages/:id/unfollow"
+  def unfollow(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+    :ok = Social.unfollow(identity.id, id)
+    json(conn, %{id: id, following: false})
   end
 
   @doc """
@@ -347,7 +400,7 @@ defmodule HybridsocialWeb.Api.V1.PageController do
   # Serializers
   # ---------------------------------------------------------------------------
 
-  defp serialize_page(page, branding \\ nil) do
+  defp serialize_page(page, branding \\ nil, viewer_id \\ nil) do
     base = %{
       id: page.id,
       type: page.type,
@@ -360,6 +413,7 @@ defmodule HybridsocialWeb.Api.V1.PageController do
       is_bot: page.is_bot,
       created_at: page.inserted_at,
       followers_count: count_page_followers(page.id),
+      is_following: viewer_follows_page?(viewer_id, page.id),
       organization: serialize_org(page.organization)
     }
 
@@ -374,6 +428,26 @@ defmodule HybridsocialWeb.Api.V1.PageController do
     Hybridsocial.Social.Follow
     |> Ecto.Query.where([f], f.followee_id == ^identity_id and f.status == :accepted)
     |> Hybridsocial.Repo.aggregate(:count)
+  end
+
+  # Anonymous viewers can't follow, so skip the query for them.
+  defp viewer_follows_page?(nil, _page_id), do: false
+
+  defp viewer_follows_page?(viewer_id, page_id) do
+    Hybridsocial.Social.Follow
+    |> Ecto.Query.where(
+      [f],
+      f.follower_id == ^viewer_id and f.followee_id == ^page_id and
+        f.status == :accepted
+    )
+    |> Hybridsocial.Repo.exists?()
+  end
+
+  defp viewer_identity_id(conn) do
+    case conn.assigns[:current_identity] do
+      %{id: id} -> id
+      _ -> nil
+    end
   end
 
   defp serialize_org(nil), do: nil

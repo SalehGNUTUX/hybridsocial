@@ -398,6 +398,11 @@ defmodule HybridsocialWeb.Router do
     delete "/:id/roles/:role_id", PageController, :remove_role
     patch "/:id/branding", PageController, :update_branding
 
+    # Follow / unfollow — pages are Identity rows, so the underlying
+    # plumbing is the same as account follow.
+    post "/:id/follow", PageController, :follow
+    post "/:id/unfollow", PageController, :unfollow
+
     # Manager invites (mirror of /groups/:id/invite flow).
     get "/invites", PageController, :my_invites
     post "/:id/invite", PageController, :invite

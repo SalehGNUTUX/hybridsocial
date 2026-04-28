@@ -17,6 +17,7 @@ export function updateAccount(data: {
   is_locked?: boolean;
   is_bot?: boolean;
   show_badge?: boolean;
+  hide_follow_counts?: boolean;
   default_visibility?: string;
   birthday?: string | null;
   location?: string | null;

@@ -13,9 +13,18 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         |> json(%{error: "account.not_found"})
 
       identity ->
-        conn
-        |> put_status(:ok)
-        |> json(serialize_identity(identity))
+        viewer_id = viewer_identity_id(conn)
+
+        # If either party has blocked the other, the profile is
+        # invisible to the viewer — don't even leak the row's
+        # existence. Behaves the same as a real 404.
+        if viewer_id && either_blocked?(viewer_id, identity.id) do
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+        else
+          conn
+          |> put_status(:ok)
+          |> json(serialize_identity(identity, viewer_id))
+        end
     end
   end
 
@@ -133,9 +142,15 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         |> json(%{error: "account.not_found"})
 
       identity ->
-        conn
-        |> put_status(:ok)
-        |> json(serialize_identity(identity))
+        viewer_id = viewer_identity_id(conn)
+
+        if viewer_id && either_blocked?(viewer_id, identity.id) do
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+        else
+          conn
+          |> put_status(:ok)
+          |> json(serialize_identity(identity, viewer_id))
+        end
     end
   end
 
@@ -145,43 +160,55 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
 
       _identity ->
-        viewer_id =
-          case conn.assigns[:current_identity] do
-            %{id: vid} -> vid
-            _ -> nil
-          end
+        viewer_id = viewer_identity_id(conn)
 
-        only_direct = params["only_direct"] == "true"
+        # If either direction has a block, the profile feed is
+        # invisible to the viewer — same gate as the show endpoint
+        # above. Empty list, not 404, so the UI can render its own
+        # "no posts" state if the profile loaded via a different
+        # path. (The /accounts/:id show endpoint already 404s.)
+        cond do
+          viewer_id && either_blocked?(viewer_id, id) ->
+            conn |> put_status(:ok) |> json([])
 
-        # Direct posts are recipient-scoped — never let another user
-        # pull someone else's direct inbox by forging this query
-        # param. The UI only surfaces this filter on own-profile
-        # anyway, so this is a defense-in-depth check against API
-        # abuse.
-        if only_direct and viewer_id != id do
-          conn |> put_status(:forbidden) |> json(%{error: "direct_tab.forbidden"})
-        else
-          opts = [
-            limit: clamp_limit(params["limit"]),
-            exclude_replies: params["exclude_replies"] == "true",
-            only_media: params["only_media"] == "true",
-            only_direct: only_direct,
-            max_id: params["max_id"]
-          ]
-
-          posts =
-            Hybridsocial.Social.Posts.posts_by_identity(id, opts)
-            |> then(fn p -> if is_list(p), do: p, else: [] end)
-
-          serialized =
-            HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
-              current_identity_id: viewer_id
-            )
-
-          conn
-          |> put_status(:ok)
-          |> json(serialized)
+          true ->
+            do_statuses(conn, id, viewer_id, params)
         end
+    end
+  end
+
+  defp do_statuses(conn, id, viewer_id, params) do
+    only_direct = params["only_direct"] == "true"
+
+    # Direct posts are recipient-scoped — never let another user
+    # pull someone else's direct inbox by forging this query
+    # param. The UI only surfaces this filter on own-profile
+    # anyway, so this is a defense-in-depth check against API
+    # abuse.
+    if only_direct and viewer_id != id do
+      conn |> put_status(:forbidden) |> json(%{error: "direct_tab.forbidden"})
+    else
+      opts = [
+        limit: clamp_limit(params["limit"]),
+        exclude_replies: params["exclude_replies"] == "true",
+        only_media: params["only_media"] == "true",
+        only_direct: only_direct,
+        max_id: params["max_id"],
+        viewer_id: viewer_id
+      ]
+
+      posts =
+        Hybridsocial.Social.Posts.posts_by_identity(id, opts)
+        |> then(fn p -> if is_list(p), do: p, else: [] end)
+
+      serialized =
+        HybridsocialWeb.Serializers.PostSerializer.serialize_many(posts,
+          current_identity_id: viewer_id
+        )
+
+      conn
+      |> put_status(:ok)
+      |> json(serialized)
     end
   end
 
@@ -402,8 +429,17 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     }
   end
 
-  defp serialize_identity(identity) do
+  defp serialize_identity(identity, viewer_id \\ nil) do
     tier = identity.verification_tier
+    own_view = viewer_id != nil and viewer_id == identity.id
+    expose_counts = own_view or not Map.get(identity, :hide_follow_counts, false)
+
+    {followers_count, following_count} =
+      if expose_counts do
+        {Social.followers_count(identity.id), Social.following_count(identity.id)}
+      else
+        {nil, nil}
+      end
 
     %{
       id: identity.id,
@@ -421,6 +457,9 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
       show_badge: identity.show_badge,
       discoverable: identity.discoverable,
       allow_unfurl: identity.allow_unfurl,
+      hide_follow_counts: identity.hide_follow_counts,
+      followers_count: followers_count,
+      following_count: following_count,
       badges: Hybridsocial.Badges.instance_badges(identity),
       verification_tier: tier,
       is_verified: tier in ["verified_starter", "verified_creator", "verified_pro"],
@@ -430,6 +469,21 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
       onboarded_at: identity.onboarded_at,
       created_at: identity.inserted_at
     }
+  end
+
+  defp viewer_identity_id(conn) do
+    case conn.assigns[:current_identity] do
+      %{id: id} -> id
+      _ -> nil
+    end
+  end
+
+  # Either-direction block check, used to gate profile visibility.
+  # `Social.blocked?(a, b)` returns true if `a` has blocked `b`, so we
+  # ask both ways: a viewer can't see anyone they blocked OR anyone
+  # who blocked them.
+  defp either_blocked?(viewer_id, target_id) do
+    Social.blocked?(viewer_id, target_id) or Social.blocked?(target_id, viewer_id)
   end
 
   # Free-form profile metadata pairs (name + value), capped per tier

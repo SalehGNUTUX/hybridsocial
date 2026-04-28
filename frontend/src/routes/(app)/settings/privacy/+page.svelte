@@ -15,6 +15,7 @@
   let isLocked: boolean = $state(false);
   let discoverable: boolean = $state(true);
   let allowUnfurl: boolean = $state(true);
+  let hideFollowCounts: boolean = $state(false);
   let dmPreference: string = $state('everyone');
   let groupDmOptIn: boolean = $state(false);
   type InvitePref = 'anyone' | 'only_follows' | 'nobody';
@@ -40,6 +41,7 @@
       isLocked = state.user.is_locked ?? false;
       discoverable = (state.user as any).discoverable ?? true;
       allowUnfurl = (state.user as any).allow_unfurl ?? true;
+      hideFollowCounts = (state.user as any).hide_follow_counts ?? false;
       allowGroupInvites = ((state.user as any).allow_group_invites ?? 'anyone') as InvitePref;
       allowPageInvites = ((state.user as any).allow_page_invites ?? 'anyone') as InvitePref;
     }
@@ -70,6 +72,7 @@
         is_locked: isLocked,
         discoverable,
         allow_unfurl: allowUnfurl,
+        hide_follow_counts: hideFollowCounts,
         allow_group_invites: allowGroupInvites,
         allow_page_invites: allowPageInvites,
       } as any);
@@ -147,6 +150,19 @@
         </span>
       </div>
       <Toggle bind:checked={discoverable} name="discoverable" />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Hide follower & following counts</span>
+        <span class="setting-description">
+          When on, your follower / following totals are hidden from
+          everyone except you. The lists themselves stay accessible
+          to people you've chosen to share them with — this just
+          removes the headline numbers from your profile.
+        </span>
+      </div>
+      <Toggle bind:checked={hideFollowCounts} name="hide-follow-counts" />
     </div>
 
     <div class="setting-row">

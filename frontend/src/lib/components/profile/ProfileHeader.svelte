@@ -241,16 +241,23 @@
       </span>
     </div>
 
-    <div class="profile-stats">
-      <a href="/@{account.handle}/following" class="stat-link">
-        <strong>{account.following_count}</strong>
-        <span class="stat-label">Following</span>
-      </a>
-      <a href="/@{account.handle}/followers" class="stat-link">
-        <strong>{account.followers_count}</strong>
-        <span class="stat-label">Followers</span>
-      </a>
-    </div>
+    <!-- Counts come back as `null` when the profile owner has opted
+         out of showing them and the viewer isn't them. In that case
+         we drop the whole stats block; the lists themselves remain
+         linkable from the explicit /following and /followers URLs
+         for people who already know them. -->
+    {#if account.following_count !== null && account.followers_count !== null}
+      <div class="profile-stats">
+        <a href="/@{account.handle}/following" class="stat-link">
+          <strong>{account.following_count}</strong>
+          <span class="stat-label">Following</span>
+        </a>
+        <a href="/@{account.handle}/followers" class="stat-link">
+          <strong>{account.followers_count}</strong>
+          <span class="stat-label">Followers</span>
+        </a>
+      </div>
+    {/if}
   </div>
 </div>
 

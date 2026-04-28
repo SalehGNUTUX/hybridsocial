@@ -62,6 +62,12 @@ defmodule Hybridsocial.Accounts.Identity do
     # Default true — opt-out.
     field :allow_unfurl, :boolean, default: true
 
+    # When true, the profile serializer returns nil for
+    # followers_count / following_count to viewers other than the
+    # owner. Counts are still computed for own-profile views and for
+    # admin moderation surfaces.
+    field :hide_follow_counts, :boolean, default: false
+
     # Optional account recovery code. Hashed. See Accounts.RecoveryCode
     # and Accounts.generate_recovery_code/2 / recover_account/4.
     field :recovery_code_hash, :string
@@ -110,7 +116,8 @@ defmodule Hybridsocial.Accounts.Identity do
     :birthday,
     :location,
     :discoverable,
-    :allow_unfurl
+    :allow_unfurl,
+    :hide_follow_counts
   ]
 
   # Subaccounts can also toggle is_bot
