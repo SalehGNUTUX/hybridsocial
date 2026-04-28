@@ -52,6 +52,15 @@ defmodule Hybridsocial.Media.Validator do
   @doc "Canonical list of accepted audio content types."
   def audio_content_types, do: @audio_content_types
 
+  @video_content_types ~w(video/mp4 video/webm video/quicktime video/ogg)
+
+  @doc "Whether `content_type` is in the video allowlist."
+  def video?(content_type) when is_binary(content_type) do
+    content_type in @video_content_types or String.starts_with?(content_type, "video/")
+  end
+
+  def video?(_), do: false
+
   @doc """
   Validates the file size against configurable limits per content type.
   Returns :ok or {:error, :file_too_large}.

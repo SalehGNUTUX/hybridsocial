@@ -6,7 +6,7 @@ defmodule Hybridsocial.Media do
 
   alias Hybridsocial.Antivirus
   alias Hybridsocial.Repo
-  alias Hybridsocial.Media.{MediaFile, Storage, Validator, Hash, Filter, Audio, ImageOptimizer}
+  alias Hybridsocial.Media.{MediaFile, Storage, Validator, Hash, Filter, Audio, Video, ImageOptimizer}
 
   @doc """
   Uploads a file: validates magic bytes, validates size, stores to disk, creates DB record.
@@ -33,23 +33,56 @@ defmodule Hybridsocial.Media do
           {:skip, ^path, ct, size} -> {path, ct, size}
         end
 
+      # Probe video uploads for duration + frame dimensions before
+      # storage. Without this the player can't show a runtime before
+      # the file finishes downloading, which is what surfaced the
+      # "we can't detect the duration" report. Best-effort — if
+      # ffprobe is unavailable or fails we fall through with empty
+      # video meta so the upload itself still succeeds.
+      video_meta =
+        if Validator.video?(final_content_type) do
+          case Video.probe(final_path) do
+            {:ok, probe} -> probe
+            {:error, _} -> nil
+          end
+        end
+
       try do
         with {:ok, storage_path} <-
                Storage.store(
                  %{upload | path: final_path, content_type: final_content_type, filename: filtered.filename},
                  identity_id
                ) do
+          base_metadata = %{
+            "original_filename" => filename,
+            "original_size" => original_size,
+            "optimized" => final_path != path
+          }
+
+          {duration, width, height, metadata} =
+            case video_meta do
+              nil ->
+                {nil, nil, nil, base_metadata}
+
+              %{} = vm ->
+                extra = %{
+                  "framerate" => vm[:framerate],
+                  "streams" => summarize_video_streams(vm[:streams])
+                }
+
+                {vm[:duration_seconds], vm[:width], vm[:height], Map.merge(base_metadata, extra)}
+            end
+
           attrs = %{
             identity_id: identity_id,
             content_type: final_content_type,
             file_size: final_size,
             storage_path: storage_path,
             processing_status: "ready",
-            metadata: %{
-              "original_filename" => filename,
-              "original_size" => original_size,
-              "optimized" => final_path != path
-            }
+            duration: duration,
+            width: width,
+            height: height,
+            metadata: metadata
           }
 
           %MediaFile{}
@@ -164,6 +197,73 @@ defmodule Hybridsocial.Media do
   end
 
   defp summarize_streams(_), do: []
+
+  # Lighter shape for video streams: we want the codec + dimensions
+  # (when ffprobe didn't expose them at the top level) but not the
+  # full color/HDR/disposition payload Mastodon-style players ignore.
+  defp summarize_video_streams(streams) when is_list(streams) do
+    Enum.map(streams, fn s ->
+      %{
+        "codec_name" => s["codec_name"],
+        "codec_type" => s["codec_type"],
+        "width" => s["width"],
+        "height" => s["height"],
+        "bit_rate" => s["bit_rate"]
+      }
+    end)
+  end
+
+  defp summarize_video_streams(_), do: []
+
+  @doc """
+  Backfill duration / dimensions for an existing video media row.
+  One-shot helper for rows uploaded before the upload pipeline started
+  probing video — passes the row's local storage path through ffprobe
+  and updates duration/width/height + metadata in place. Skipped for
+  remote rows (no local file to probe) and audio/image rows.
+  """
+  def backfill_video_metadata(media_id) when is_binary(media_id) do
+    case get_media(media_id) do
+      nil ->
+        {:error, :not_found}
+
+      %MediaFile{remote_url: ru} when is_binary(ru) and ru != "" ->
+        {:error, :remote}
+
+      %MediaFile{content_type: ct} = media when is_binary(ct) ->
+        if Validator.video?(ct) do
+          local_path = Path.join(Storage.uploads_dir(), media.storage_path)
+
+          if File.exists?(local_path) do
+            case Video.probe(local_path) do
+              {:ok, probe} ->
+                base_meta = media.metadata || %{}
+
+                merged_meta =
+                  base_meta
+                  |> Map.put("framerate", probe[:framerate])
+                  |> Map.put("streams", summarize_video_streams(probe[:streams]))
+
+                media
+                |> MediaFile.create_changeset(%{
+                  duration: probe[:duration_seconds],
+                  width: probe[:width],
+                  height: probe[:height],
+                  metadata: merged_meta
+                })
+                |> Repo.update()
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+          else
+            {:error, :file_missing}
+          end
+        else
+          {:error, :not_a_video}
+        end
+    end
+  end
 
   @doc """
   Gets a media record by ID, excluding soft-deleted records.
