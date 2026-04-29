@@ -2,8 +2,17 @@
   import { api } from '$lib/api/client.js';
   import { authStore } from '$lib/stores/auth.js';
   import { get } from 'svelte/store';
-  import type { Identity } from '$lib/api/types.js';
+  import type { Identity, Relationship } from '$lib/api/types.js';
   import AccountTypeIndicator from '$lib/components/ui/AccountTypeIndicator.svelte';
+  import {
+    follow as apiFollow,
+    unfollow as apiUnfollow,
+    mute as apiMute,
+    unmute as apiUnmute,
+    block as apiBlock,
+    unblock as apiUnblock,
+    getRelationship,
+  } from '$lib/api/accounts.js';
 
   let {
     handle,
@@ -15,8 +24,10 @@
 
   let visible = $state(false);
   let account = $state<Identity | null>(null);
+  let relationship = $state<Relationship | null>(null);
   let loading = $state(false);
   let openBelow = $state(false);
+  let busy = $state<'follow' | 'mute' | 'block' | null>(null);
   let hoverTimer: ReturnType<typeof setTimeout> | null = null;
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let cardEl: HTMLDivElement | undefined = $state();
@@ -27,6 +38,15 @@
     loading = true;
     try {
       account = await api.get<Identity>(`/api/v1/accounts/lookup`, { handle });
+      // Fetch the viewer↔account relationship in parallel with what
+      // already loaded so the action buttons reflect actual state
+      // (already-following, muted, blocked) before the user clicks.
+      const me = get(authStore).user;
+      if (account && me && me.id !== account.id) {
+        try {
+          relationship = await getRelationship(account.id);
+        } catch { /* leave relationship null */ }
+      }
     } catch { /* */ }
     finally { loading = false; }
   }
@@ -54,26 +74,61 @@
 
   let isOwnAccount = $derived(account ? get(authStore).user?.id === account.id : false);
 
+  let isFollowing = $derived(relationship?.following ?? false);
+  let isRequested = $derived(relationship?.requested ?? false);
+  let isMuting = $derived(relationship?.muting ?? false);
+  let isBlocking = $derived(relationship?.blocking ?? false);
+
   async function handleFollow() {
-    if (!account || isOwnAccount) return;
+    if (!account || isOwnAccount || busy) return;
+    busy = 'follow';
+    const before = relationship;
     try {
-      await api.post(`/api/v1/accounts/${account.id}/follow`);
-      account = { ...account, followers_count: (account.followers_count ?? 0) + 1 } as any;
-    } catch { /* */ }
+      const next = isFollowing || isRequested
+        ? await apiUnfollow(account.id)
+        : await apiFollow(account.id);
+      relationship = next;
+      // Best-effort follower count update for visual feedback (the
+      // server is the source of truth — if the user reopens the card
+      // the next fetch will reconcile).
+      if (account) {
+        const delta = (next.following ? 1 : 0) - (before?.following ? 1 : 0);
+        if (delta !== 0) {
+          account = { ...account, followers_count: Math.max(0, (account.followers_count ?? 0) + delta) };
+        }
+      }
+    } catch { /* leave state unchanged */ }
+    finally { busy = null; }
   }
 
   async function handleMute() {
-    if (!account || isOwnAccount) return;
+    if (!account || isOwnAccount || busy) return;
+    busy = 'mute';
     try {
-      await api.post(`/api/v1/accounts/${account.id}/mute`);
+      relationship = isMuting ? await apiUnmute(account.id) : await apiMute(account.id);
     } catch { /* */ }
+    finally { busy = null; }
   }
 
   async function handleBlock() {
-    if (!account || isOwnAccount) return;
+    if (!account || isOwnAccount || busy) return;
+    busy = 'block';
     try {
-      await api.post(`/api/v1/accounts/${account.id}/block`);
+      relationship = isBlocking ? await apiUnblock(account.id) : await apiBlock(account.id);
     } catch { /* */ }
+    finally { busy = null; }
+  }
+
+  function followIcon() {
+    if (isFollowing) return 'how_to_reg';
+    if (isRequested) return 'hourglass_empty';
+    return 'person_add';
+  }
+
+  function followLabel() {
+    if (isFollowing) return 'Unfollow';
+    if (isRequested) return 'Cancel follow request';
+    return 'Follow';
   }
 </script>
 
@@ -105,63 +160,82 @@
           </div>
         </div>
       {:else}
+        <!-- The link wraps only the navigable surfaces (header, avatar,
+             name, handle, stats, bio). Action buttons live outside so a
+             toggle click never bubbles to navigate to the profile. -->
         <a href="/@{account.handle}" class="hc-link" onclick={(e) => e.stopPropagation()}>
-          <!-- Header banner -->
           <div class="hc-header" style="background-image: url({account.header_url || '/images/default-cover.svg'})"></div>
-
-          <!-- Avatar row -->
           <div class="hc-avatar-row">
             <div class="hc-avatar-wrap">
               <img src={account.avatar_url || '/images/default-avatar.svg'} alt="" class="hc-avatar" />
             </div>
           </div>
+        </a>
 
-          <!-- Info -->
-          <div class="hc-info">
-            <div class="hc-name-row">
+        <div class="hc-info">
+          <div class="hc-name-row">
+            <a href="/@{account.handle}" class="hc-name-link" onclick={(e) => e.stopPropagation()}>
               <div class="hc-name">{account.display_name || account.handle}</div>
               <AccountTypeIndicator account={account} />
-              {#if !isOwnAccount}
-                <div class="hc-actions">
-                  <button
-                    type="button"
-                    class="hc-action-btn hc-action-follow"
-                    title="Follow"
-                    onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleFollow(); }}
-                  >
-                    <span class="material-symbols-outlined">person_add</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="hc-action-btn hc-action-mute"
-                    title="Mute"
-                    onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleMute(); }}
-                  >
-                    <span class="material-symbols-outlined">volume_off</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="hc-action-btn hc-action-block"
-                    title="Block"
-                    onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleBlock(); }}
-                  >
-                    <span class="material-symbols-outlined">block</span>
-                  </button>
-                </div>
-              {/if}
-            </div>
-            <div class="hc-handle">@{account.acct || account.handle}</div>
-
-            <div class="hc-stats">
-              <span><strong>{account.followers_count ?? 0}</strong> Followers</span>
-              <span><strong>{account.following_count ?? 0}</strong> Following</span>
-            </div>
-
-            {#if account.bio}
-              <div class="hc-bio">{@html account.bio}</div>
+            </a>
+            {#if !isOwnAccount}
+              <div class="hc-actions">
+                <button
+                  type="button"
+                  class="hc-action-btn hc-action-follow"
+                  class:hc-action-active={isFollowing || isRequested}
+                  title={followLabel()}
+                  aria-label={followLabel()}
+                  aria-pressed={isFollowing || isRequested}
+                  disabled={busy !== null}
+                  onclick={handleFollow}
+                >
+                  <span class="material-symbols-outlined">{followIcon()}</span>
+                </button>
+                <button
+                  type="button"
+                  class="hc-action-btn hc-action-mute"
+                  class:hc-action-active={isMuting}
+                  title={isMuting ? 'Unmute' : 'Mute'}
+                  aria-label={isMuting ? 'Unmute' : 'Mute'}
+                  aria-pressed={isMuting}
+                  disabled={busy !== null}
+                  onclick={handleMute}
+                >
+                  <span class="material-symbols-outlined">{isMuting ? 'volume_up' : 'volume_off'}</span>
+                </button>
+                <button
+                  type="button"
+                  class="hc-action-btn hc-action-block"
+                  class:hc-action-active={isBlocking}
+                  title={isBlocking ? 'Unblock' : 'Block'}
+                  aria-label={isBlocking ? 'Unblock' : 'Block'}
+                  aria-pressed={isBlocking}
+                  disabled={busy !== null}
+                  onclick={handleBlock}
+                >
+                  <span class="material-symbols-outlined">block</span>
+                </button>
+              </div>
             {/if}
           </div>
-        </a>
+          <a href="/@{account.handle}" class="hc-handle-link" onclick={(e) => e.stopPropagation()}>
+            <div class="hc-handle">@{account.acct || account.handle}</div>
+          </a>
+
+          <div class="hc-stats">
+            <span><strong>{account.followers_count ?? 0}</strong> Followers</span>
+            <span><strong>{account.following_count ?? 0}</strong> Following</span>
+          </div>
+
+          {#if relationship?.followed_by}
+            <div class="hc-follows-you">Follows you</div>
+          {/if}
+
+          {#if account.bio}
+            <div class="hc-bio">{@html account.bio}</div>
+          {/if}
+        </div>
       {/if}
     </div>
   {/if}
@@ -303,8 +377,52 @@
     border-color: #dc2626;
   }
 
+  /* Active states reflect current relationship — already-following,
+     already-muted, already-blocked render filled instead of outlined,
+     so the user can tell at a glance the action would *undo* the
+     relationship rather than apply it. */
+  .hc-action-follow.hc-action-active {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    border-color: var(--color-primary);
+  }
+  .hc-action-mute.hc-action-active {
+    background: #f59e0b;
+    color: white;
+    border-color: #f59e0b;
+  }
+  .hc-action-block.hc-action-active {
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
+  }
+
+  .hc-action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   .hc-action-btn:active {
     transform: scale(0.9);
+  }
+
+  .hc-name-link,
+  .hc-handle-link {
+    text-decoration: none;
+    color: inherit;
+    display: contents;
+  }
+
+  .hc-follows-you {
+    display: inline-block;
+    align-self: flex-start;
+    margin-block-end: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 600;
   }
 
   /* ---- Info ---- */
