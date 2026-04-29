@@ -30,6 +30,17 @@
   function isActive(href: string): boolean {
     return page.url.pathname === href;
   }
+
+  function handleTabClick(e: MouseEvent, tab: TabItem) {
+    // The compose tab isn't a real route — there's no /compose page.
+    // The composer is a modal that lives on every (app) route and
+    // listens for an `open-composer` window event. Fire that instead
+    // of letting the browser navigate to a 404.
+    if (tab.isCompose) {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('open-composer', { detail: {} }));
+    }
+  }
 </script>
 
 <nav class="bottom-tabs" aria-label="Mobile navigation">
@@ -41,6 +52,7 @@
       class:compose={tab.isCompose}
       aria-label={tab.label}
       aria-current={isActive(tab.href) ? 'page' : undefined}
+      onclick={(e) => handleTabClick(e, tab)}
     >
       {#if tab.isCompose}
         <span class="compose-btn">
