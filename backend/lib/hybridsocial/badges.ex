@@ -86,25 +86,40 @@ defmodule Hybridsocial.Badges do
   Always visible — cannot be hidden.
   """
   def page_badge(identity_id, organization_id) do
+    # `organizations` uses `identity_id` as its primary key (the row
+    # is a 1:1 extension of an identity), so the page's display name
+    # lives on the joined identities row, not on `organizations`.
     row =
       Repo.one(
         from(or_ in "organization_roles",
-          join: org in "organizations",
-          on: org.id == or_.organization_id,
+          join: i in "identities",
+          on: i.id == or_.organization_id,
           where:
             or_.identity_id == type(^identity_id, Ecto.UUID) and
               or_.organization_id == type(^organization_id, Ecto.UUID),
-          select: %{role: or_.role, name: org.name}
+          select: %{role: or_.role, name: i.display_name, handle: i.handle}
         )
       )
 
     case row do
-      %{role: "admin", name: name} -> %{type: "admin", label: "Admin of #{name}"}
-      %{role: "moderator", name: name} -> %{type: "moderator", label: "Mod of #{name}"}
-      %{role: "editor", name: name} -> %{type: "editor", label: "Editor of #{name}"}
-      _ -> nil
+      %{role: role, name: name, handle: handle} when role in ["admin", "moderator", "editor"] ->
+        scope = if name && name != "", do: name, else: handle
+        type = role_to_badge_type(role)
+        label = "#{role_label(role)} of #{scope}"
+        %{type: type, label: label}
+
+      _ ->
+        nil
     end
   end
+
+  defp role_to_badge_type("admin"), do: "admin"
+  defp role_to_badge_type("moderator"), do: "moderator"
+  defp role_to_badge_type("editor"), do: "editor"
+
+  defp role_label("admin"), do: "Admin"
+  defp role_label("moderator"), do: "Mod"
+  defp role_label("editor"), do: "Editor"
 
   @doc """
   Compute all badges for a serialized account on a post.
