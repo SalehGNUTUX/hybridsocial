@@ -9,7 +9,7 @@
 </script>
 
 <span class="verified-badge verified-{size}" title="Verified" aria-label="Verified account">
-  <img src="/badges/BasicBadge.svg" alt="Verified" width={imgSize} height={imgSize} class="verified-img" />
+  <img src="/badges/BasicBadge.svg?v=2" alt="Verified" width={imgSize} height={imgSize} class="verified-img" />
 </span>
 
 <style>

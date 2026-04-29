@@ -9,15 +9,20 @@
     size?: 'sm' | 'md';
   } = $props();
 
+  // Bump `BADGE_VERSION` whenever the SVG assets change so the
+  // browser doesn't keep serving cached old artwork. Caddy doesn't
+  // emit a Cache-Control header for /badges/*, which lets browsers
+  // hold on to the previous bytes via heuristic caching.
+  const BADGE_VERSION = '2';
   const badgeImages: Record<string, string> = {
-    owner: '/badges/OwnerBadg.svg',
-    admin: '/badges/AdminBadge.svg',
-    moderator: '/badges/ModeratorBadge.svg',
-    bot: '/badges/RobotBadge.svg',
-    verified_l0: '/badges/BasicBadge.svg',
-    verified_l1: '/badges/InitBadge.svg',
-    verified_l2: '/badges/ProBadge.svg',
-    verified_l3: '/badges/MaxBadge.svg',
+    owner: `/badges/OwnerBadg.svg?v=${BADGE_VERSION}`,
+    admin: `/badges/AdminBadge.svg?v=${BADGE_VERSION}`,
+    moderator: `/badges/ModeratorBadge.svg?v=${BADGE_VERSION}`,
+    bot: `/badges/RobotBadge.svg?v=${BADGE_VERSION}`,
+    verified_l0: `/badges/BasicBadge.svg?v=${BADGE_VERSION}`,
+    verified_l1: `/badges/InitBadge.svg?v=${BADGE_VERSION}`,
+    verified_l2: `/badges/ProBadge.svg?v=${BADGE_VERSION}`,
+    verified_l3: `/badges/MaxBadge.svg?v=${BADGE_VERSION}`,
   };
 
   const defaultLabels: Record<string, string> = {
