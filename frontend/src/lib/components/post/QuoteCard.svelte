@@ -17,6 +17,10 @@
   let fullDate = $derived(fullDateTime(post.created_at));
   let media = $derived(post.media_attachments || []);
   let mediaCount = $derived(media.length);
+  let poll = $derived(post.poll);
+  let pollVotesTotal = $derived(
+    poll ? (poll.votes_count ?? poll.options.reduce((s, o) => s + (o.votes_count || 0), 0)) : 0
+  );
   // Match PostCard's grid layout (single / two / three / four).
   let mediaGridClass = $derived(
     mediaCount === 1
@@ -80,6 +84,23 @@
           <LazyMedia media={m} isRemote={!!m.remote_url} author={post.account} />
         </div>
       {/each}
+    </div>
+  {/if}
+
+  {#if poll}
+    <div class="quote-poll" aria-label="Quoted poll">
+      {#each poll.options as option, i (i)}
+        {@const pct = pollVotesTotal > 0 ? Math.round(((option.votes_count || 0) / pollVotesTotal) * 100) : 0}
+        <div class="quote-poll-option">
+          <div class="quote-poll-bar" style="width: {pct}%"></div>
+          <span class="quote-poll-label">{option.title}</span>
+          <span class="quote-poll-pct">{pct}%</span>
+        </div>
+      {/each}
+      <div class="quote-poll-meta">
+        {poll.voters_count ?? pollVotesTotal} {(poll.voters_count ?? pollVotesTotal) === 1 ? 'voter' : 'voters'}
+        {#if poll.expired}&middot; closed{/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -218,5 +239,49 @@
   .quote-media-grid-1 .quote-media-item :global(video) {
     object-fit: contain;
     max-height: 320px;
+  }
+
+  .quote-poll {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-block-start: var(--space-2);
+  }
+
+  .quote-poll-option {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    font-size: var(--text-sm);
+  }
+
+  .quote-poll-bar {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    background: var(--color-primary);
+    opacity: 0.18;
+    transition: width 200ms ease;
+  }
+
+  .quote-poll-label,
+  .quote-poll-pct {
+    position: relative;
+    color: var(--color-text);
+  }
+
+  .quote-poll-pct {
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .quote-poll-meta {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-xs);
   }
 </style>
