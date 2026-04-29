@@ -1460,7 +1460,7 @@
   }
 
   .post-content :global(code) {
-    background: var(--color-surface);
+    background: var(--color-surface-container-high);
     padding: 1px 5px;
     border-radius: 4px;
     font-family: var(--font-mono, monospace);
@@ -1468,7 +1468,8 @@
   }
 
   .post-content :global(pre) {
-    background: var(--color-surface);
+    background: var(--color-surface-container-highest);
+    border: 1px solid var(--color-border);
     padding: 10px 12px;
     border-radius: 8px;
     overflow-x: auto;
