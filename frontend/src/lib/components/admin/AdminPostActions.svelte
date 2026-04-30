@@ -294,10 +294,10 @@
     e.stopPropagation();
     showDropdown = false;
     if (!authorId) return;
-    // /admin/users reads ?id= and pins the list to exactly that
-    // identity (vs ?search= which matches substrings and would
-    // also return any handle that happens to share a prefix).
-    window.location.href = `/admin/users?id=${encodeURIComponent(authorId)}`;
+    // /admin/user-management/users reads ?id= and pins the list to
+    // exactly that identity (vs ?search= which matches substrings and
+    // would also return any handle that happens to share a prefix).
+    window.location.href = `/admin/user-management/users?id=${encodeURIComponent(authorId)}`;
   }
 
   async function handleRefetch(e: MouseEvent) {

@@ -163,15 +163,17 @@
 </script>
 
 <svelte:head>
-  <title>Invite Codes - Admin</title>
+  <title>Registration - Admin</title>
 </svelte:head>
 
 <div class="invites-page">
   <div class="page-header">
-    <h1 class="page-title">Invite Codes</h1>
-    <button class="btn btn-primary" type="button" onclick={openCreateModal}>
-      Create Invite
-    </button>
+    <h1 class="page-title">Registration</h1>
+    {#if registrationMode === 'invite_only'}
+      <button class="btn btn-primary" type="button" onclick={openCreateModal}>
+        Create invite code
+      </button>
+    {/if}
   </div>
 
   <section class="reg-mode card">
@@ -203,7 +205,18 @@
     {/if}
   </section>
 
-  {#if loading}
+  {#if registrationMode !== 'invite_only'}
+    <!-- Invite codes are only meaningful when registration is gated by
+         them. In open / approval / closed modes the list is hidden and
+         a one-line note explains why, instead of showing a dead UI. -->
+    <section class="card invite-mode-note">
+      <p>
+        Invite codes are only used when registration mode is set to
+        <strong>Invite only</strong>. Switch the mode above to enable
+        code generation.
+      </p>
+    </section>
+  {:else if loading}
     <div class="loading-area">
       <div class="skeleton" style="height: 60px"></div>
       <div class="skeleton" style="height: 60px"></div>
@@ -307,6 +320,17 @@
   .page-title {
     font-size: var(--text-2xl);
     font-weight: 700;
+  }
+
+  .invite-mode-note {
+    padding: var(--space-4);
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+
+  .invite-mode-note p {
+    margin: 0;
   }
 
   .loading-area {

@@ -11,6 +11,7 @@
   let stats: AdminDashboardStats | null = $state(null);
   let pendingVerifications: VerificationRequest[] = $state([]);
   let pendingApprovalsCount = $state(0);
+  let pendingAppealsCount = $state(0);
   let loading = $state(true);
 
   // Historical service metrics (1h sparklines + latest values).
@@ -88,21 +89,27 @@
 
   onMount(async () => {
     try {
-      const [s, v, pa] = await Promise.all([
+      const [s, v, pa, ap] = await Promise.all([
         getDashboardStats(),
         getVerifications({ status: 'pending', limit: '10' }).catch(() => []),
         // Account-registration approvals are surfaced as a stats card
-        // and link to /admin/approvals. We only need the count, but the
-        // endpoint returns the full pending list — the page is the
-        // authoritative actor view.
+        // and link to /admin/user-management/approvals. We only need
+        // the count, but the endpoint returns the full pending list —
+        // the page is the authoritative actor view.
         api
           .get<{ data: { id: string }[] }>('/api/v1/admin/pending_accounts')
+          .then((res) => (res.data || []).length)
+          .catch(() => 0),
+        // Pending suspension appeals — same dashboard pattern.
+        api
+          .get<{ data: { id: string }[] }>('/api/v1/admin/appeals', { status: 'pending' })
           .then((res) => (res.data || []).length)
           .catch(() => 0),
       ]);
       stats = s;
       pendingVerifications = v;
       pendingApprovalsCount = pa;
+      pendingAppealsCount = ap;
     } catch (e) {
       addToast('Failed to load dashboard data', 'error');
     } finally {
@@ -196,9 +203,17 @@
         label="Approvals"
         value={pendingApprovalsCount.toLocaleString()}
         icon="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-        href="/admin/approvals"
+        href="/admin/user-management/approvals"
         alert={pendingApprovalsCount > 0}
         alertLabel={`${pendingApprovalsCount} pending approvals — needs attention`}
+      />
+      <StatsCard
+        label="Appeals"
+        value={pendingAppealsCount.toLocaleString()}
+        icon="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"
+        href="/admin/user-management/appeals"
+        alert={pendingAppealsCount > 0}
+        alertLabel={`${pendingAppealsCount} pending appeals — needs attention`}
       />
     {/if}
   </div>
@@ -207,7 +222,7 @@
     <h2 class="section-heading">Quick actions</h2>
     <div class="quick-actions-grid">
       {#each [
-        { href: '/admin/users', icon: 'group', label: 'Manage users' },
+        { href: '/admin/user-management', icon: 'group', label: 'User management' },
         { href: '/admin/moderation', icon: 'gavel', label: 'Review reports' },
         { href: '/admin/federation', icon: 'hub', label: 'Federation' },
         { href: '/admin/theme', icon: 'palette', label: 'Theme & branding' },

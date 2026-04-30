@@ -339,7 +339,7 @@
               </strong>
             </p>
             <p class="author-stat">
-              <a href="/admin/users?id={post.identity.id}">Manage user →</a>
+              <a href="/admin/user-management/users?id={post.identity.id}">Manage user →</a>
             </p>
           </section>
         {/if}
