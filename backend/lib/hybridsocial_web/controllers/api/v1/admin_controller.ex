@@ -3195,10 +3195,15 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     with :ok <- require_permission(conn, "users.manage") do
       admin_id = conn.assigns.current_identity.id
 
-      case Accounts.disable_invite(id) do
+      # The handler used to call Accounts.disable_invite/1 (soft-flag
+      # `disabled: true`), but list_invites/0 didn't filter disabled
+      # rows so the deleted code reappeared after a page refresh.
+      # Hard-delete is what the UI promises and what the audit log
+      # needs to reflect.
+      case Accounts.delete_invite(id) do
         {:ok, invite} ->
-          Moderation.log(admin_id, "invite.disabled", "invite", invite.id, %{code: invite.code})
-          conn |> put_status(:ok) |> json(%{message: "invite.disabled"})
+          Moderation.log(admin_id, "invite.deleted", "invite", invite.id, %{code: invite.code})
+          conn |> put_status(:ok) |> json(%{message: "invite.deleted"})
 
         {:error, :not_found} ->
           conn |> put_status(:not_found) |> json(%{error: "invite.not_found"})
