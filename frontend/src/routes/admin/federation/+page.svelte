@@ -715,12 +715,18 @@
     padding: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    /* Comfortable air between the sparkline and the type chips —
+       the previous space-3 had a tall spike kissing the chip row.
+       Sparkline.svelte uses `overflow: visible` so a near-edge peak
+       can render above its nominal box; clipping it would cut off
+       data, padding the gap is the right answer. */
+    gap: var(--space-5);
+    margin-block-start: var(--space-2);
   }
 
   .throughput-chart {
     width: 100%;
-    overflow: hidden;
+    padding-block: var(--space-2);
   }
 
   .throughput-types {
