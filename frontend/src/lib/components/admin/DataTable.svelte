@@ -147,9 +147,6 @@
 
   .data-table th {
     text-align: start;
-    /* Bumped horizontal padding to space-6 — space-5 still left the
-       leftmost avatar visually touching the rounded wrapper border on
-       the user-management table. */
     padding: var(--space-3) var(--space-6);
     background: var(--color-surface);
     color: var(--color-text-secondary);
@@ -161,31 +158,37 @@
     white-space: nowrap;
   }
 
-  .data-table td {
+  /* The <td> elements come from each consumer's `rowContent` snippet,
+     not from DataTable's own template, so Svelte's per-component CSS
+     scoping silently drops a plain `.data-table td` rule — three
+     padding bumps in a row had no visible effect for exactly this
+     reason. `:global(.data-table td)` is what actually reaches the
+     rendered cells. Same goes for the row striping/hover rules. */
+  :global(.data-table td) {
     padding: var(--space-4) var(--space-6);
     border-block-end: 1px solid var(--color-border);
     color: var(--color-text);
     vertical-align: middle;
   }
 
-  .data-table tbody tr:nth-child(even) {
+  :global(.data-table tbody tr:nth-child(even)) {
     background: var(--color-surface, #f9fafb);
   }
 
-  .data-table tbody tr:hover {
+  :global(.data-table tbody tr:hover) {
     background: var(--color-surface-container-low, #f0f2f3);
   }
 
-  .data-table tbody tr:last-child td {
+  :global(.data-table tbody tr:last-child td) {
     border-block-end: none;
   }
 
-  .data-table tbody tr.clickable {
+  :global(.data-table tbody tr.clickable) {
     cursor: pointer;
     transition: background var(--transition-fast);
   }
 
-  .data-table tbody tr.clickable:hover {
+  :global(.data-table tbody tr.clickable:hover) {
     background: var(--color-surface);
   }
 
