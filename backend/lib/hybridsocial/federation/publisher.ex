@@ -28,6 +28,7 @@ defmodule Hybridsocial.Federation.Publisher do
         |> Delivery.changeset(%{
           activity_id: activity["id"],
           activity_type: activity["type"],
+          activity_body: activity,
           actor_id: identity.id,
           target_inbox: inbox_url,
           status: "pending"

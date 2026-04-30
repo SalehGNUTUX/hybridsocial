@@ -77,6 +77,128 @@
   let deliveryStats: FederationDelivery | null = $state(null);
   let deliveryLoading = $state(false);
 
+  // Dead-letter queue: rows with status=failed. The Delivery Queue tab
+  // grows a section below the throughput/failures cards listing them
+  // with per-row Retry / Drop buttons and a per-domain Retry-all
+  // bulk action.
+  type DeadLetter = {
+    id: string;
+    activity_id: string;
+    activity_type: string | null;
+    actor_id: string | null;
+    target_inbox: string;
+    domain: string | null;
+    attempts: number;
+    last_attempt_at: string | null;
+    inserted_at: string;
+    error: string | null;
+    body_available: boolean;
+  };
+  let deadLetters: DeadLetter[] = $state([]);
+  let deadLettersTotal = $state(0);
+  let deadLettersLoading = $state(false);
+  let deadLettersBusy = $state<string | null>(null);
+
+  async function loadDeadLetters() {
+    deadLettersLoading = true;
+    try {
+      const res = await api.get<{ data: DeadLetter[]; total: number }>(
+        '/api/v1/admin/federation/dead_letters',
+        { limit: '50' },
+      );
+      deadLetters = res.data || [];
+      deadLettersTotal = res.total || 0;
+    } catch {
+      addToast('Failed to load dead-letter queue', 'error');
+    } finally {
+      deadLettersLoading = false;
+    }
+  }
+
+  async function retryDeadLetter(item: DeadLetter) {
+    if (deadLettersBusy) return;
+    deadLettersBusy = item.id;
+    try {
+      const res = await api.post<{ status: string }>(
+        `/api/v1/admin/federation/dead_letters/${item.id}/retry`,
+      );
+      if (res.status === 'delivered') {
+        addToast('Delivered', 'success');
+        deadLetters = deadLetters.filter((d) => d.id !== item.id);
+        deadLettersTotal = Math.max(0, deadLettersTotal - 1);
+      } else {
+        addToast('Retry failed — error updated on the row', 'warning');
+        await loadDeadLetters();
+      }
+      await loadDelivery();
+    } catch (e) {
+      const apiErr = e as { body?: { error?: string } };
+      const code = apiErr?.body?.error;
+      if (code === 'dead_letter.body_not_available') {
+        addToast('Cannot retry — activity body was not stored on this row', 'error');
+      } else if (code === 'dead_letter.actor_not_found') {
+        addToast('Cannot retry — original actor no longer exists', 'error');
+      } else {
+        addToast('Retry failed', 'error');
+      }
+    } finally {
+      deadLettersBusy = null;
+    }
+  }
+
+  async function dropDeadLetter(item: DeadLetter) {
+    if (deadLettersBusy) return;
+    if (!confirm(`Permanently drop this delivery to ${item.domain ?? item.target_inbox}? This can't be undone.`)) return;
+    deadLettersBusy = item.id;
+    try {
+      await api.delete(`/api/v1/admin/federation/dead_letters/${item.id}`);
+      deadLetters = deadLetters.filter((d) => d.id !== item.id);
+      deadLettersTotal = Math.max(0, deadLettersTotal - 1);
+      addToast('Dropped', 'success');
+      await loadDelivery();
+    } catch {
+      addToast('Failed to drop', 'error');
+    } finally {
+      deadLettersBusy = null;
+    }
+  }
+
+  async function retryAllForDomain(domain: string) {
+    if (deadLettersBusy) return;
+    if (!confirm(`Retry every failed delivery for ${domain}?`)) return;
+    deadLettersBusy = `domain:${domain}`;
+    try {
+      const res = await api.post<{ delivered: number; failed: number }>(
+        '/api/v1/admin/federation/dead_letters/retry_domain',
+        { domain },
+      );
+      addToast(
+        `${domain}: ${res.delivered} delivered · ${res.failed} still failing`,
+        res.failed === 0 ? 'success' : 'warning',
+      );
+      await loadDeadLetters();
+      await loadDelivery();
+    } catch {
+      addToast('Bulk retry failed', 'error');
+    } finally {
+      deadLettersBusy = null;
+    }
+  }
+
+  // Group dead letters by domain so the per-domain bulk action button
+  // surfaces naturally next to its rows.
+  let deadLettersByDomain = $derived.by(() => {
+    const groups: Record<string, DeadLetter[]> = {};
+    for (const dl of deadLetters) {
+      const key = dl.domain ?? 'unknown';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(dl);
+    }
+    return Object.entries(groups)
+      .map(([domain, items]) => ({ domain, items }))
+      .sort((a, b) => b.items.length - a.items.length);
+  });
+
   // Purge
   let purgeModalOpen = $state(false);
   let purgeDomain = $state('');
@@ -178,6 +300,7 @@
       loadPolicies();
     } else if (activeTab === 'delivery' && !deliveryLoaded && !deliveryLoading) {
       loadDelivery();
+      loadDeadLetters();
     }
   });
 
@@ -465,8 +588,82 @@
           {/if}
         </section>
 
+        <!-- Dead-letter queue: deliveries that exhausted their retries.
+             Lists them grouped by domain so the per-domain bulk
+             retry sits next to its rows; per-row retry/drop fall
+             back if the body wasn't stored (pre-feature rows). -->
+        <section class="delivery-section">
+          <div class="delivery-section-head">
+            <h3 class="delivery-section-title">Dead-letter queue</h3>
+            <span class="delivery-section-meta">
+              {deadLettersTotal.toLocaleString()} total
+            </span>
+          </div>
+          {#if deadLettersLoading}
+            <div class="skeleton" style="height: 96px"></div>
+          {:else if deadLetters.length === 0}
+            <p class="empty-text">No dead letters. Federation is clean.</p>
+          {:else}
+            <div class="dead-letter-groups">
+              {#each deadLettersByDomain as group (group.domain)}
+                <div class="dead-letter-group card">
+                  <header class="dl-group-head">
+                    <span class="failing-domain">{group.domain}</span>
+                    <span class="dl-group-meta">
+                      {group.items.length} failed
+                    </span>
+                    {#if group.items.length > 1}
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline"
+                        onclick={() => retryAllForDomain(group.domain)}
+                        disabled={deadLettersBusy === `domain:${group.domain}`}
+                      >
+                        {deadLettersBusy === `domain:${group.domain}` ? 'Retrying…' : 'Retry all'}
+                      </button>
+                    {/if}
+                  </header>
+                  <ul class="dl-list">
+                    {#each group.items as item (item.id)}
+                      <li class="dl-row">
+                        <div class="dl-row-main">
+                          <span class="dl-type">{item.activity_type ?? 'Activity'}</span>
+                          <span class="dl-attempts">{item.attempts} attempt{item.attempts === 1 ? '' : 's'}</span>
+                          <span class="dl-when">{formatRelative(item.last_attempt_at)}</span>
+                        </div>
+                        {#if item.error}
+                          <div class="dl-error" title={item.error}>{item.error}</div>
+                        {/if}
+                        <div class="dl-row-actions">
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-primary"
+                            onclick={() => retryDeadLetter(item)}
+                            disabled={!item.body_available || deadLettersBusy === item.id}
+                            title={item.body_available ? '' : 'Body not stored on this row'}
+                          >
+                            {deadLettersBusy === item.id ? 'Retrying…' : 'Retry'}
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-danger"
+                            onclick={() => dropDeadLetter(item)}
+                            disabled={deadLettersBusy === item.id}
+                          >
+                            Drop
+                          </button>
+                        </div>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </section>
+
         <div class="delivery-actions">
-          <button class="btn btn-outline" type="button" onclick={loadDelivery}>
+          <button class="btn btn-outline" type="button" onclick={() => { loadDelivery(); loadDeadLetters(); }}>
             Refresh
           </button>
         </div>
@@ -814,6 +1011,84 @@
 
   .delivery-loading {
     padding: var(--space-4) 0;
+  }
+
+  .dead-letter-groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .dead-letter-group {
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .dl-group-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .dl-group-meta {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    flex: 1;
+  }
+
+  .dl-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: var(--space-2);
+  }
+
+  .dl-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px var(--space-3);
+    align-items: center;
+  }
+
+  .dl-row-main {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+  }
+
+  .dl-type {
+    font-weight: 600;
+  }
+
+  .dl-attempts,
+  .dl-when {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+
+  .dl-error {
+    grid-column: 1;
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dl-row-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .purge-warning {

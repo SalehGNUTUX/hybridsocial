@@ -768,6 +768,12 @@ defmodule HybridsocialWeb.Router do
     # top failing peers. Powers the Delivery Queue tab.
     get "/federation/delivery", AdminController, :federation_delivery
 
+    # Dead-letter queue: failed deliveries with retry/drop actions.
+    get "/federation/dead_letters", AdminController, :federation_dead_letters
+    post "/federation/dead_letters/:id/retry", AdminController, :federation_retry_dead_letter
+    post "/federation/dead_letters/retry_domain", AdminController, :federation_retry_dead_letters_for_domain
+    delete "/federation/dead_letters/:id", AdminController, :federation_drop_dead_letter
+
     # Promotions management
     get "/promotions", AdminController, :list_promotions
     post "/promotions", AdminController, :admin_create_promotion

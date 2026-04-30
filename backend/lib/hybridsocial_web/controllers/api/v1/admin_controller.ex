@@ -3729,6 +3729,89 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     end
   end
 
+  @doc """
+  List failed federation deliveries (the dead-letter queue). Each row
+  carries enough metadata for the admin UI to present a retry/drop
+  decision: target domain, activity type, error, attempt count, and
+  whether the activity body is still on the row (older rows from
+  before the body column was added can't be retried).
+  """
+  def federation_dead_letters(conn, params) do
+    with :ok <- require_permission(conn, "federation.view") do
+      limit = clamp_limit(params["limit"])
+      offset = parse_int(params["offset"], 0)
+
+      json(conn, %{
+        data: Hybridsocial.Federation.DeadLetters.list(limit: limit, offset: offset),
+        total: Hybridsocial.Federation.DeadLetters.count()
+      })
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc """
+  Retry a single dead-letter delivery. Replays the stored activity
+  body to the original inbox; updates the row's status to delivered
+  on success or back to failed on failure.
+  """
+  def federation_retry_dead_letter(conn, %{"id" => id}) do
+    with :ok <- require_permission(conn, "federation.manage") do
+      case Hybridsocial.Federation.DeadLetters.retry(id) do
+        {:ok, :delivered} ->
+          json(conn, %{status: "delivered"})
+
+        {:ok, :failed} ->
+          conn |> put_status(:ok) |> json(%{status: "failed"})
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "dead_letter.not_found"})
+
+        {:error, :body_not_available} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "dead_letter.body_not_available"})
+
+        {:error, :actor_not_found} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "dead_letter.actor_not_found"})
+
+        {:error, reason} ->
+          conn |> put_status(:internal_server_error) |> json(%{error: to_string(reason)})
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc """
+  Bulk-retry every failed delivery for a given destination domain.
+  Useful when a peer comes back online after an outage — one click
+  flushes everything queued behind it.
+  """
+  def federation_retry_dead_letters_for_domain(conn, %{"domain" => domain}) do
+    with :ok <- require_permission(conn, "federation.manage") do
+      {ok, fail} = Hybridsocial.Federation.DeadLetters.retry_domain(domain)
+      json(conn, %{delivered: ok, failed: fail})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc "Permanently drop a dead-letter row without retrying."
+  def federation_drop_dead_letter(conn, %{"id" => id}) do
+    with :ok <- require_permission(conn, "federation.manage") do
+      case Hybridsocial.Federation.DeadLetters.drop(id) do
+        {:ok, _} -> json(conn, %{status: "dropped"})
+        {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "dead_letter.not_found"})
+        {:error, _} -> conn |> put_status(:internal_server_error) |> json(%{error: "dead_letter.drop_failed"})
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   # --- Ads Management ---
 
   def list_ads(conn, params) do

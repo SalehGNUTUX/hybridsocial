@@ -11,6 +11,10 @@ defmodule Hybridsocial.Federation.Delivery do
     # Captured at insert time so the admin dashboard can chart
     # throughput by type without re-fetching the activity body.
     field :activity_type, :string
+    # The exact payload that would be POSTed to the peer. Used by the
+    # admin Dead-Letter Queue to retry a failed delivery without
+    # rebuilding the activity from the originating post.
+    field :activity_body, :map
     field :actor_id, :binary_id
     field :target_inbox, :string
     field :status, :string, default: "pending"
@@ -26,6 +30,7 @@ defmodule Hybridsocial.Federation.Delivery do
     |> cast(attrs, [
       :activity_id,
       :activity_type,
+      :activity_body,
       :actor_id,
       :target_inbox,
       :status,
