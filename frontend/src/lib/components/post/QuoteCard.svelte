@@ -113,8 +113,8 @@
         </div>
       {/each}
       <div class="quote-poll-meta">
-        {poll.voters_count ?? pollVotesTotal} {(poll.voters_count ?? pollVotesTotal) === 1 ? 'voter' : 'voters'}
-        {#if poll.expired}&middot; closed{/if}
+        {pollVotesTotal} {pollVotesTotal === 1 ? 'vote' : 'votes'}
+        {#if poll.expired}&middot; Ended{/if}
       </div>
     </div>
   {/if}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Post } from '$lib/api/types.js';
   import { goto } from '$app/navigation';
-  import { relativeTime, fullDateTime } from '$lib/utils/time.js';
+  import { relativeTime, relativeTimeFuture, fullDateTime } from '$lib/utils/time.js';
   import { editPost, getPost } from '$lib/api/statuses.js';
   import { uploadMedia } from '$lib/api/media.js';
   import { currentUser } from '$lib/stores/auth.js';
@@ -717,20 +717,23 @@
           {/if}
 
           {#if post.poll && !compact}
-            <div class="post-poll">
+            <div class="post-poll" class:post-poll-expired={pollExpired}>
               {#each pollOptions as option, i (i)}
+                {@const pct = pollVotesCount > 0 ? Math.round(option.votes_count / pollVotesCount * 100) : 0}
                 {#if showPollResults}
-                  <div class="poll-option poll-result">
-                    <div class="poll-bar" style="width: {pollVotesCount > 0 ? (option.votes_count / pollVotesCount * 100) : 0}%"></div>
-                    <span class="poll-label">
-                      {#if pollOwnVotes.includes(i)}
-                        <span class="poll-voted-check" aria-label="Your vote">&#10003;</span>
-                      {/if}
-                      {option.title}
-                    </span>
-                    <span class="poll-pct">
-                      {pollVotesCount > 0 ? Math.round(option.votes_count / pollVotesCount * 100) : 0}%
-                    </span>
+                  <div class="poll-result-row" class:poll-result-mine={pollOwnVotes.includes(i)}>
+                    <div class="poll-result-header">
+                      <span class="poll-result-title">
+                        {#if pollOwnVotes.includes(i)}
+                          <span class="poll-voted-check" aria-label="Your vote">&#10003;</span>
+                        {/if}
+                        {option.title}
+                      </span>
+                      <span class="poll-result-pct">{pct}%</span>
+                    </div>
+                    <div class="poll-result-track" aria-hidden="true">
+                      <div class="poll-result-fill" style="width: {pct}%"></div>
+                    </div>
                   </div>
                 {:else}
                   <button
@@ -770,16 +773,15 @@
                     onclick={openVoters}
                     aria-label="View voters"
                   >
-                    {pollVotersCount} {pollVotersCount === 1 ? 'voter' : 'voters'}
+                    {pollVotesCount} {pollVotesCount === 1 ? 'vote' : 'votes'}
                   </button>
                 {:else}
-                  {pollVotersCount} {pollVotersCount === 1 ? 'voter' : 'voters'}
+                  {pollVotesCount} {pollVotesCount === 1 ? 'vote' : 'votes'}
                 {/if}
-                &middot; {pollVotesCount} {pollVotesCount === 1 ? 'vote' : 'votes'}
-                {#if post.poll.expires_at && !pollExpired}
-                  &middot; ends {relativeTime(post.poll.expires_at)}
-                {:else if pollExpired}
-                  &middot; closed
+                {#if pollExpired}
+                  &middot; Ended
+                {:else if post.poll.expires_at}
+                  &middot; ends {relativeTimeFuture(post.poll.expires_at)}
                 {/if}
               </div>
             </div>
@@ -2252,29 +2254,89 @@
     margin-block-start: 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 14px;
+    padding: 16px 18px;
+    border: 2px solid var(--color-primary);
+    border-radius: 14px;
+    background: var(--color-surface-raised);
   }
 
+  .post-poll-expired {
+    border-color: var(--color-border);
+  }
+
+  /* --- Result rows: title + % above a thin track --- */
+  .poll-result-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .poll-result-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .poll-result-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  .poll-result-mine .poll-result-title {
+    color: var(--color-text);
+  }
+
+  .poll-result-pct {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .poll-result-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-surface-container-high, rgba(0, 0, 0, 0.08));
+    overflow: hidden;
+  }
+
+  .poll-result-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: inherit;
+    transition: width 350ms ease;
+  }
+
+  .poll-voted-check {
+    color: var(--color-primary);
+    font-weight: 700;
+    margin-inline-end: 4px;
+  }
+
+  /* --- Vote-mode option pills (unchanged behaviour, scoped class) --- */
   .poll-option {
     position: relative;
     padding: 10px 14px;
-    background: var(--color-surface);
     border-radius: 10px;
     overflow: hidden;
     display: flex;
     align-items: center;
+    gap: 8px;
     font-size: 0.875rem;
-  }
-
-  .poll-result {
-    justify-content: space-between;
   }
 
   .poll-votable {
     border: 1px solid var(--color-border);
     background: transparent;
     cursor: pointer;
-    gap: 8px;
     width: 100%;
     text-align: start;
     font-family: inherit;
@@ -2299,32 +2361,9 @@
     line-height: 1;
   }
 
-  .poll-voted-check {
-    color: var(--color-primary);
-    font-weight: 700;
-    margin-inline-end: 4px;
-  }
-
-  .poll-bar {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    height: 100%;
-    background: var(--color-primary-soft);
-    transition: width 300ms ease;
-    z-index: 0;
-  }
-
   .poll-label {
     position: relative;
     z-index: 1;
-  }
-
-  .poll-pct {
-    position: relative;
-    z-index: 1;
-    font-weight: 600;
-    color: var(--color-text-secondary);
   }
 
   .poll-vote-btn {
