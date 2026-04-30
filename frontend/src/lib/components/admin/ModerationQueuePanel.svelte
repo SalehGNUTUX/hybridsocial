@@ -12,7 +12,6 @@
   let stats: ModerationQueueStats | null = $state(null);
   let loading = $state(true);
 
-  // Filters
   let statusFilter = $state('pending');
   let typeFilter = $state('all');
   let severityFilter = $state('all');
@@ -26,7 +25,6 @@
     })
   );
 
-  // Reject modal
   let rejectModalOpen = $state(false);
   let rejectTarget: ModerationQueueItem | null = $state(null);
   let rejectReason = $state('');
@@ -50,7 +48,7 @@
     try {
       stats = await getModerationQueueStats();
     } catch {
-      // Stats are non-critical
+      // Stats are non-critical.
     }
   }
 
@@ -115,13 +113,7 @@
   }
 </script>
 
-<svelte:head>
-  <title>Moderation Queue - Admin</title>
-</svelte:head>
-
-<div class="queue-page">
-  <h1 class="page-title">Moderation Queue</h1>
-
+<div class="queue-panel">
   {#if stats}
     <div class="stats-bar">
       <div class="stat-item card">
@@ -237,21 +229,16 @@
 </Modal>
 
 <style>
-  .queue-page {
-    max-width: 1100px;
-  }
-
-  .page-title {
-    font-size: var(--text-2xl);
-    font-weight: 700;
-    margin-block-end: var(--space-6);
+  .queue-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
   }
 
   .stats-bar {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: var(--space-4);
-    margin-block-end: var(--space-6);
   }
 
   .stat-item {
@@ -277,7 +264,6 @@
   .toolbar {
     display: flex;
     gap: var(--space-2);
-    margin-block-end: var(--space-4);
     flex-wrap: wrap;
   }
 
@@ -313,9 +299,7 @@
     gap: var(--space-2);
   }
 
-  .queue-item-date {
-    font-size: var(--text-xs);
-  }
+  .queue-item-date { font-size: var(--text-xs); }
 
   .queue-item-content {
     display: flex;
@@ -329,9 +313,7 @@
     line-height: 1.5;
   }
 
-  .queue-item-source {
-    font-size: var(--text-xs);
-  }
+  .queue-item-source { font-size: var(--text-xs); }
 
   .queue-item-reason {
     font-size: var(--text-xs);
@@ -356,25 +338,10 @@
     text-transform: capitalize;
   }
 
-  .severity-critical {
-    background: var(--color-danger-soft);
-    color: #991b1b;
-  }
-
-  .severity-high {
-    background: var(--color-warning-soft);
-    color: #92400e;
-  }
-
-  .severity-medium {
-    background: var(--color-info-soft);
-    color: #1e40af;
-  }
-
-  .severity-low {
-    background: var(--color-surface);
-    color: var(--color-text-secondary);
-  }
+  .severity-critical { background: var(--color-danger-soft); color: #991b1b; }
+  .severity-high     { background: var(--color-warning-soft); color: #92400e; }
+  .severity-medium   { background: var(--color-info-soft); color: #1e40af; }
+  .severity-low      { background: var(--color-surface); color: var(--color-text-secondary); }
 
   .status-badge {
     font-size: var(--text-xs);
@@ -384,34 +351,17 @@
     text-transform: capitalize;
   }
 
-  .status-pending {
-    background: var(--color-warning-soft);
-    color: #92400e;
-  }
-
-  .status-approved {
-    background: var(--color-success-soft);
-    color: #166534;
-  }
-
-  .status-rejected {
-    background: var(--color-danger-soft);
-    color: #991b1b;
-  }
-
-  .status-escalated {
-    background: var(--color-info-soft);
-    color: #1e40af;
-  }
+  .status-pending   { background: var(--color-warning-soft); color: #92400e; }
+  .status-approved  { background: var(--color-success-soft); color: #166534; }
+  .status-rejected  { background: var(--color-danger-soft); color: #991b1b; }
+  .status-escalated { background: var(--color-info-soft); color: #1e40af; }
 
   .action-buttons {
     display: flex;
     gap: var(--space-2);
   }
 
-  .form-group {
-    margin-block-end: var(--space-4);
-  }
+  .form-group { margin-block-end: var(--space-4); }
 
   .form-label {
     display: block;
@@ -441,16 +391,8 @@
   }
 
   @media (max-width: 768px) {
-    .stats-bar {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
-    .toolbar {
-      flex-direction: column;
-    }
-
-    .toolbar .input {
-      width: 100% !important;
-    }
+    .stats-bar { grid-template-columns: repeat(2, 1fr); }
+    .toolbar { flex-direction: column; }
+    .toolbar .input { width: 100% !important; }
   }
 </style>

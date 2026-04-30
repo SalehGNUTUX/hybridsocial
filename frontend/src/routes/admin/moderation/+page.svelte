@@ -13,6 +13,7 @@
     getEmailDomainBans, createEmailDomainBan, deleteEmailDomainBan,
     getMediaHashBans, createMediaHashBan, deleteMediaHashBan,
   } from '$lib/api/admin.js';
+  import ModerationQueuePanel from '$lib/components/admin/ModerationQueuePanel.svelte';
   import type {
     AdminReport, ContentFilter, BannedDomain, IpBlock,
     EmailDomainBan, MediaHashBan,
@@ -20,6 +21,7 @@
 
   const tabs = [
     { id: 'reports', label: 'Reports' },
+    { id: 'queue', label: 'Queue' },
     { id: 'filters', label: 'Content Filters' },
     { id: 'domains', label: 'Banned Domains' },
     { id: 'ipblocks', label: 'IP Blocks' },
@@ -506,6 +508,13 @@
           </td>
         {/snippet}
       </DataTable>
+
+    {:else if activeTab === 'queue'}
+      <!-- Auto-flagged content (NSFW heuristics, link-shortener bursts,
+           etc.) — formerly its own /admin/moderation-queue route. The
+           panel manages its own load + filter state so opening the
+           Queue tab triggers the fetch lazily. -->
+      <ModerationQueuePanel />
 
     {:else if activeTab === 'filters'}
       <form class="add-form" onsubmit={(e) => { e.preventDefault(); handleAddFilter(); }}>
