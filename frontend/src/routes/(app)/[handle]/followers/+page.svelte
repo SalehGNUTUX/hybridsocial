@@ -125,11 +125,14 @@
     <div class="account-list">
       {#each followers as acct (acct.id)}
         <div class="account-card">
-          <a href="/@{acct.handle}" class="account-info-link">
+          <a href="/@{acct.acct || acct.handle}" class="account-info-link">
             <Avatar src={acct.avatar_url} name={acct.display_name || acct.handle} size="md" />
             <div class="account-info">
               <span class="account-name">{acct.display_name || acct.handle}</span>
-              <span class="account-handle">@{acct.handle}</span>
+              <!-- Prefer the webfinger-form acct ("user@domain") so
+                   remote rows show their real instance instead of the
+                   munged local-part stored in the `handle` column. -->
+              <span class="account-handle">@{acct.acct || acct.handle}</span>
             </div>
           </a>
           {#if !isOwnAccount(acct.id)}

@@ -423,11 +423,16 @@
 
 {#snippet accountRow(acct: Identity)}
   <li class="account-card">
-    <a href="/@{acct.handle}" class="account-info-link">
+    <a href="/@{acct.acct || acct.handle}" class="account-info-link">
       <Avatar src={acct.avatar_url} name={acct.display_name || acct.handle} size="md" />
       <div class="account-info">
         <span class="account-name">{acct.display_name || acct.handle}</span>
-        <span class="account-handle">@{acct.handle}</span>
+        <!-- `acct` is the webfinger-form handle ("user@domain"); fall
+             back to the bare local handle when not present. The DB
+             `handle` column stores a munged local-part for remote
+             identities, which made every row read like
+             `@user_otherinstance_e2c8` instead of `@user@otherinstance`. -->
+        <span class="account-handle">@{acct.acct || acct.handle}</span>
       </div>
     </a>
     {#if isSelf}
