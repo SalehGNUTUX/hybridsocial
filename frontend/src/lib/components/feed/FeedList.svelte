@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { Post, FeedEntry, BoostEntry } from '$lib/api/types.js';
   import PostCard from '$lib/components/post/PostCard.svelte';
   import SkeletonPost from './SkeletonPost.svelte';
   import { matchFilters } from '$lib/stores/content-filters.js';
+  import { setFeedPosts, clearFeedPosts } from '$lib/stores/focused-post.js';
 
   function isBoostEntry(entry: FeedEntry): entry is BoostEntry {
     return entry.type === 'boost';
@@ -150,6 +151,23 @@
     window.dispatchEvent(new CustomEvent('feed-refresh'));
     newPostsCount = 0;
   }
+
+  // Publish the rendered post ids to the focused-post store so j/k
+  // shortcuts can walk the feed in render order. Boost rows surface
+  // the original post's id, matching what the keyboard cursor would
+  // navigate to.
+  $effect(() => {
+    const ids: string[] = [];
+    for (const entry of visiblePosts) {
+      const post = isBoostEntry(entry) ? entry.post : (entry as Post);
+      if (post?.id) ids.push(post.id);
+    }
+    setFeedPosts(ids);
+  });
+
+  onDestroy(() => {
+    clearFeedPosts();
+  });
 </script>
 
 <div class="feed-list" role="feed" aria-label="Post feed">

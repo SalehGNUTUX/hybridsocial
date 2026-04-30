@@ -326,6 +326,15 @@
       <a href="/legal/privacy" class="footer-link">Privacy</a>
       <span class="footer-dot" aria-hidden="true">&middot;</span>
       <a href="/legal/terms" class="footer-link">Terms</a>
+      <span class="footer-dot" aria-hidden="true">&middot;</span>
+      <button
+        type="button"
+        class="footer-link footer-link-button"
+        onclick={() => window.dispatchEvent(new CustomEvent('open-shortcuts-help'))}
+        title="Show keyboard shortcuts (?)"
+      >
+        Shortcuts
+      </button>
     </nav>
     <p class="footer-text">
       <a href={instanceSourceUrl} target="_blank" rel="noopener noreferrer" class="footer-link">
@@ -926,6 +935,14 @@
   .footer-link:hover {
     color: var(--color-primary);
     text-decoration: underline;
+  }
+
+  .footer-link-button {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
   }
 
   .footer-dot {

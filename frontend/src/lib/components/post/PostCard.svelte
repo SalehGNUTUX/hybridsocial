@@ -68,6 +68,8 @@
   import YouTubeEmbed from '$lib/components/post/YouTubeEmbed.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import { parseYouTubeUrl, findYouTubeInContent } from '$lib/utils/youtube.js';
+  import { focusedPostId } from '$lib/stores/focused-post.js';
+  import { onMount } from 'svelte';
 
   let {
     post,
@@ -84,6 +86,27 @@
   let filterMatch: FilterResult | null = $derived(matchFilters(post.content, post.spoiler_text, filterContext));
   let filterRevealed = $state(false);
   let showSensitive = $state(false);
+
+  let isFocused = $derived($focusedPostId === post.id);
+
+  // The `x` shortcut maps to "toggle CW reveal" — handled here because
+  // `showSensitive` is local card state. Other actions (reply / boost /
+  // react) live in PostActions which has the relevant counters.
+  onMount(() => {
+    function handleShortcutAction(e: Event) {
+      const detail = (e as CustomEvent<{ id: string; action: string }>).detail;
+      if (!detail || detail.id !== post.id) return;
+      if (detail.action === 'toggle-cw') {
+        if (post.sensitive && post.spoiler_text) {
+          showSensitive = !showSensitive;
+        } else if (filterMatch?.action === 'warn') {
+          filterRevealed = !filterRevealed;
+        }
+      }
+    }
+    window.addEventListener('post-shortcut-action', handleShortcutAction);
+    return () => window.removeEventListener('post-shortcut-action', handleShortcutAction);
+  });
   // Hide the link-card image once the network reports it's bad. OG
   // `og:image` URLs go stale (404, hot-link blocked, deleted asset)
   // and the default <img> behaviour leaves a broken-image glyph in a
@@ -502,6 +525,8 @@
   class:compact
   class:detail
   class:post-card-pending={post.pending}
+  class:post-card-focused={isFocused && !detail}
+  data-post-anchor={post.id}
   aria-busy={post.pending ? 'true' : undefined}
   role="article"
   tabindex={detail ? -1 : 0}
@@ -1094,6 +1119,12 @@
     opacity: 0.55;
     animation: post-pending-pulse 1.4s ease-in-out infinite;
     pointer-events: none;
+  }
+
+  /* Keyboard cursor highlight: a left-side accent so j/k position is
+     unmistakable but the rest of the card stays visually unchanged. */
+  .post-card-focused {
+    box-shadow: inset 3px 0 0 var(--color-primary);
   }
 
   @keyframes post-pending-pulse {

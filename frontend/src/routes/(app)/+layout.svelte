@@ -15,6 +15,8 @@
   import { loadFilters } from '$lib/stores/content-filters.js';
   import PostComposer from '$lib/components/post/PostComposer.svelte';
   import SudoModal from '$lib/components/admin/SudoModal.svelte';
+  import KeyboardShortcutsModal from '$lib/components/ui/KeyboardShortcutsModal.svelte';
+  import { installShortcuts } from '$lib/utils/shortcuts.js';
   import { onDestroy } from 'svelte';
   import { page } from '$app/state';
 
@@ -61,6 +63,7 @@
       initDmUnread();
       subscribeToPush();
       loadFilters();
+      uninstallShortcuts = installShortcuts();
 
       if (!authState.user.onboarded_at) {
         showOnboarding = true;
@@ -68,10 +71,13 @@
     }
   });
 
+  let uninstallShortcuts: (() => void) | null = null;
+
   onDestroy(() => {
     disconnectNotificationStream();
     disconnectChatStream();
     unsubAuth();
+    uninstallShortcuts?.();
   });
 </script>
 
@@ -96,6 +102,8 @@
        auth.sudo_required lands here so the user can unlock without
        detouring through the admin dashboard. -->
   <SudoModal />
+  <!-- `?` cheat sheet for the global keyboard shortcuts. -->
+  <KeyboardShortcutsModal />
   {#if showOnboarding}
     <OnboardingModal onclose={() => { showOnboarding = false; }} />
   {/if}

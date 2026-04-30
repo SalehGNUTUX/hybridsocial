@@ -96,8 +96,35 @@
         replyCount = Math.max(0, replyCount + delta);
       }
     }
+
+    // Keyboard-shortcut bridge: the global handler dispatches an
+    // action against the focused post id; we route it to the same
+    // function the click would call so behavior (toasts, optimistic
+    // counters, tier limits) stays identical.
+    function handleShortcutAction(e: Event) {
+      const detail = (e as CustomEvent<{ id: string; action: string }>).detail;
+      if (!detail || detail.id !== post.id) return;
+      const synthetic = new MouseEvent('click');
+      switch (detail.action) {
+        case 'reply':
+          handleReply(synthetic);
+          break;
+        case 'boost':
+          handleBoost(synthetic);
+          break;
+        case 'react':
+          // `f` mirrors Mastodon's favourite — leave a 👍 by default.
+          handleReaction('like');
+          break;
+      }
+    }
+
     window.addEventListener('reply-count-update', handleReplyCount);
-    return () => window.removeEventListener('reply-count-update', handleReplyCount);
+    window.addEventListener('post-shortcut-action', handleShortcutAction);
+    return () => {
+      window.removeEventListener('reply-count-update', handleReplyCount);
+      window.removeEventListener('post-shortcut-action', handleShortcutAction);
+    };
   });
 
   let isOwnPost = $derived(() => {

@@ -311,6 +311,10 @@
   function openComposer() {
     isOpen = true;
     hasOpened = false;
+    // Tag the body so the global keyboard-shortcut handler swallows
+    // single-key keys (n, j, k, …) while the composer is open. Esc
+    // still passes through (the composer wires its own close handler).
+    document.body.dataset.composerOpen = 'true';
     // Mark opened after pop-in animation completes
     setTimeout(() => { hasOpened = true; }, 250);
     // Focus textarea on next tick
@@ -363,6 +367,7 @@
     setTimeout(() => {
       isClosing = false;
       isOpen = false;
+      delete document.body.dataset.composerOpen;
     }, 200);
     content = '';
     spoilerText = '';
