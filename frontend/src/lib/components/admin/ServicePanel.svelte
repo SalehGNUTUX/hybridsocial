@@ -10,12 +10,22 @@
     sparkline: SeriesPoint[];
   };
 
+  type ServiceHealth = {
+    status?: string;
+    version?: string;
+    uptime_seconds?: number;
+    error?: string;
+    cluster_health?: string;
+    backend?: string;
+  };
+
   let {
     title,
     icon,
     service,
     metrics,
     rows,
+    health,
   }: {
     title: string;
     icon: string;
@@ -23,7 +33,18 @@
     /** Display rows: which metric keys to show, in what order, and how to format. */
     metrics: { key: string; label: string; format: (v: number) => string }[];
     rows: SummaryRow[];
+    health?: ServiceHealth | null;
   } = $props();
+
+  function formatUptime(seconds: number | undefined): string {
+    if (!seconds) return '';
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  }
 
   let byMetric = $derived.by(() => {
     const m: Record<string, SummaryRow> = {};
@@ -37,6 +58,30 @@
   // for this service is missing. Probes that intentionally skip (e.g.
   // OpenSearch on a Postgres-search instance) hit this path.
   let hasAnyData = $derived(metrics.some((m) => byMetric[m.key]));
+
+  // Headline status, derived from the live dashboard probe + presence
+  // of collector samples. The dashboard probe is authoritative for
+  // up/down — the collector lags it by up to one tick — so a freshly
+  // dead service stays correct without waiting for the next sweep.
+  type StatusKind = 'operational' | 'degraded' | 'offline' | 'not_configured' | 'no_data';
+  let statusKind = $derived.by<StatusKind>(() => {
+    const s = health?.status;
+    if (s === 'not_configured') return 'not_configured';
+    if (s === 'down') return 'offline';
+    if (s === 'degraded') return 'degraded';
+    if (hasAnyData) return 'operational';
+    return 'no_data';
+  });
+
+  let statusLabel = $derived(
+    {
+      operational: 'operational',
+      degraded: 'degraded',
+      offline: 'offline',
+      not_configured: 'not configured',
+      no_data: 'collecting',
+    }[statusKind],
+  );
 
   let expanded = $state<{ key: string; label: string } | null>(null);
   let expandedSeries = $state<SeriesPoint[] | null>(null);
@@ -82,10 +127,30 @@
   <header class="service-panel-header">
     <span class="material-symbols-outlined service-panel-icon" aria-hidden="true">{icon}</span>
     <h3 class="service-panel-title">{title}</h3>
-    <span class="service-panel-status" class:status-up={hasAnyData} class:status-stale={!hasAnyData}>
-      {hasAnyData ? 'collecting' : 'no data'}
+    <span
+      class="service-panel-status"
+      class:status-up={statusKind === 'operational'}
+      class:status-degraded={statusKind === 'degraded'}
+      class:status-down={statusKind === 'offline'}
+      class:status-stale={statusKind === 'no_data' || statusKind === 'not_configured'}
+    >
+      {statusLabel}
     </span>
   </header>
+  {#if health?.version || health?.uptime_seconds}
+    <div class="service-panel-meta">
+      {#if health.version}<span class="service-panel-version">v{health.version}</span>{/if}
+      {#if health.uptime_seconds}<span class="service-panel-uptime">up {formatUptime(health.uptime_seconds)}</span>{/if}
+    </div>
+  {/if}
+  {#if health?.error && statusKind !== 'operational'}
+    <div class="service-panel-error">{health.error}</div>
+  {/if}
+  {#if statusKind === 'not_configured'}
+    <p class="service-panel-note">
+      Not running on this instance. Search currently uses PostgreSQL.
+    </p>
+  {/if}
   <div class="service-panel-rows">
     {#each metrics as m (m.key)}
       {@const row = byMetric[m.key]}
@@ -185,9 +250,47 @@
     color: var(--color-success, #16a34a);
   }
 
+  .status-degraded {
+    background: rgba(234, 179, 8, 0.15);
+    color: #b45309;
+  }
+
+  .status-down {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-danger, #dc2626);
+  }
+
   .status-stale {
     background: var(--color-surface-container-high, rgba(0, 0, 0, 0.06));
     color: var(--color-text-tertiary);
+  }
+
+  .service-panel-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: var(--color-text-tertiary);
+    margin-block-start: -4px;
+  }
+
+  .service-panel-version,
+  .service-panel-uptime {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .service-panel-error {
+    font-size: 0.75rem;
+    color: var(--color-danger, #dc2626);
+    background: rgba(239, 68, 68, 0.08);
+    padding: 6px 10px;
+    border-radius: 8px;
+  }
+
+  .service-panel-note {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+    line-height: 1.4;
   }
 
   .service-panel-rows {

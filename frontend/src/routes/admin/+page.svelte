@@ -5,7 +5,7 @@
   import { addToast } from '$lib/stores/toast.js';
   import { api } from '$lib/api/client.js';
   import { getDashboardStats, getRecentReports, getVerifications, approveVerification, rejectVerification } from '$lib/api/admin.js';
-  import type { AdminDashboardStats, AdminReport, ServiceHealth } from '$lib/api/types.js';
+  import type { AdminDashboardStats, AdminReport } from '$lib/api/types.js';
   import type { VerificationRequest } from '$lib/api/admin.js';
 
   let stats: AdminDashboardStats | null = $state(null);
@@ -74,18 +74,6 @@
     { key: 'index_size_bytes', label: 'Index size', format: fmtBytes },
     { key: 'unassigned_shards', label: 'Unassigned', format: fmtInt },
   ];
-
-  let hasOpensearchData = $derived(metricRows.some((r) => r.service === 'opensearch'));
-
-  function formatUptime(seconds: number | undefined): string {
-    if (!seconds) return '';
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${mins}m`;
-    return `${mins}m`;
-  }
 
   async function loadMetrics() {
     try {
@@ -206,139 +194,6 @@
     {/if}
   </div>
 
-  {#if stats?.services}
-    {@const db = stats.services.database}
-    {@const vk = stats.services.valkey}
-    {@const ns = stats.services.nats}
-    {@const os = stats.services.opensearch}
-    {@const infraWorst = [db, vk, ns].some(s => s.status === 'down') ? 'down' : [db, vk, ns].some(s => s.status === 'degraded') ? 'degraded' : 'up'}
-    <section class="services-section">
-      <h2 class="section-heading">Services</h2>
-      <div class="services-grid services-grid-2">
-
-        <!-- Infrastructure (merged: PostgreSQL + Valkey + NATS) -->
-        <div class="service-card" class:service-up={infraWorst === 'up'} class:service-down={infraWorst === 'down'} class:service-degraded={infraWorst === 'degraded'}>
-          <div class="service-header">
-            <div class="service-name-row">
-              <span class="material-symbols-outlined service-icon-mat">dns</span>
-              <span class="service-name">Infrastructure</span>
-            </div>
-            <div class="service-status-dot"></div>
-          </div>
-
-          <div class="infra-services">
-            {#each [
-              { label: 'PostgreSQL', health: db },
-              { label: 'Valkey', health: vk },
-              { label: 'NATS', health: ns },
-            ] as svc (svc.label)}
-              <div class="infra-row">
-                <div class="infra-label">
-                  <div class="infra-dot" class:dot-up={svc.health.status === 'up'} class:dot-down={svc.health.status === 'down'} class:dot-degraded={svc.health.status === 'degraded'}></div>
-                  {svc.label}
-                </div>
-                <div class="infra-meta">
-                  {#if svc.health.version}
-                    <span class="infra-version">v{svc.health.version}</span>
-                  {/if}
-                  {#if svc.health.uptime_seconds}
-                    <span class="infra-uptime">{formatUptime(svc.health.uptime_seconds)}</span>
-                  {/if}
-                  {#if svc.health.status !== 'up'}
-                    <span class="infra-status-label" class:text-danger={svc.health.status === 'down'} class:text-warning={svc.health.status === 'degraded'}>
-                      {svc.health.status === 'down' ? 'Offline' : 'Degraded'}
-                    </span>
-                  {/if}
-                </div>
-              </div>
-              {#if svc.health.error}
-                <div class="service-error" style="margin-inline-start: 20px">{svc.health.error}</div>
-              {/if}
-            {/each}
-          </div>
-
-          <!-- Valkey details -->
-          {#if vk.status === 'up'}
-            <div class="service-details-grid" style="margin-block-start: var(--space-2); padding-block-start: var(--space-2); border-block-start: 1px solid var(--color-border)">
-              <div class="detail-item">
-                <span class="detail-label">Cache Memory</span>
-                <span class="detail-value">{vk.memory || '?'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">Cache Keys</span>
-                <span class="detail-value">{vk.total_keys?.toLocaleString() || '0'}</span>
-              </div>
-              {#if ns.connections !== undefined}
-                <div class="detail-item">
-                  <span class="detail-label">NATS Conns</span>
-                  <span class="detail-value">{ns.connections}</span>
-                </div>
-              {/if}
-              {#if ns.total_messages !== undefined}
-                <div class="detail-item">
-                  <span class="detail-label">Messages</span>
-                  <span class="detail-value">{ns.total_messages?.toLocaleString()}</span>
-                </div>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <!-- OpenSearch (own card) -->
-        <div class="service-card" class:service-up={os.status === 'up'} class:service-down={os.status === 'down'} class:service-degraded={os.status === 'degraded'} class:service-inactive={os.status === 'not_configured'}>
-          <div class="service-header">
-            <div class="service-name-row">
-              <span class="material-symbols-outlined service-icon-mat">search</span>
-              <span class="service-name">OpenSearch</span>
-            </div>
-            <div class="service-status-dot"></div>
-          </div>
-
-          <div class="service-status-text">
-            {#if os.status === 'up'}Operational
-            {:else if os.status === 'degraded'}Degraded
-            {:else if os.status === 'not_configured'}Not configured
-            {:else}Offline{/if}
-          </div>
-
-          {#if os.status === 'not_configured'}
-            <div class="service-detail">
-              Search is running on PostgreSQL. Set the <code>search_backend</code> config key to <code>opensearch</code> to switch to a dedicated cluster.
-            </div>
-          {:else if os.version}
-            <div class="service-detail">v{os.version}</div>
-          {/if}
-
-          {#if os.status === 'up' || os.status === 'degraded'}
-            <div class="service-details-grid">
-              <div class="detail-item">
-                <span class="detail-label">Cluster</span>
-                <span class="detail-value">{os.cluster_name || '?'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">Health</span>
-                <span class="detail-value" class:text-success={os.cluster_health === 'green'} class:text-warning={os.cluster_health === 'yellow'} class:text-danger={os.cluster_health === 'red'}>{os.cluster_health || '?'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">Nodes</span>
-                <span class="detail-value">{os.node_count || '0'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">Shards</span>
-                <span class="detail-value">{os.active_shards || '0'}</span>
-              </div>
-            </div>
-          {/if}
-
-          {#if os.error && os.status === 'down'}
-            <div class="service-error">{os.error}</div>
-          {/if}
-        </div>
-
-      </div>
-    </section>
-  {/if}
-
   <section class="services-section metrics-section">
     <h2 class="section-heading">Service metrics</h2>
     <div class="metrics-grid">
@@ -348,6 +203,7 @@
         service="postgres"
         metrics={pgMetrics}
         rows={metricRows}
+        health={stats?.services?.database ?? null}
       />
       <ServicePanel
         title="Valkey"
@@ -355,6 +211,7 @@
         service="valkey"
         metrics={valkeyMetrics}
         rows={metricRows}
+        health={stats?.services?.valkey ?? null}
       />
       <ServicePanel
         title="NATS"
@@ -362,16 +219,16 @@
         service="nats"
         metrics={natsMetrics}
         rows={metricRows}
+        health={stats?.services?.nats ?? null}
       />
-      {#if hasOpensearchData}
-        <ServicePanel
-          title="OpenSearch"
-          icon="search"
-          service="opensearch"
-          metrics={opensearchMetrics}
-          rows={metricRows}
-        />
-      {/if}
+      <ServicePanel
+        title="OpenSearch"
+        icon="search"
+        service="opensearch"
+        metrics={opensearchMetrics}
+        rows={metricRows}
+        health={stats?.services?.opensearch ?? null}
+      />
     </div>
   </section>
 
@@ -722,241 +579,6 @@
     gap: var(--space-3);
   }
 
-  .services-grid-2 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .service-card {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
-    padding: var(--space-4);
-  }
-
-  .service-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-block-end: var(--space-3);
-  }
-
-  .service-name-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .service-icon-mat {
-    font-size: 20px;
-    color: var(--color-text-secondary);
-  }
-
-  .service-icon {
-    color: var(--color-text-secondary);
-  }
-
-  /* Infrastructure merged card */
-  .infra-services {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .infra-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 8px;
-    background: var(--color-surface);
-    border-radius: var(--radius-md);
-  }
-
-  .infra-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--color-text);
-  }
-
-  .infra-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--color-text-tertiary);
-  }
-
-  .dot-up {
-    background: var(--color-success);
-    box-shadow: 0 0 4px var(--color-success);
-  }
-
-  .dot-down {
-    background: var(--color-danger);
-    box-shadow: 0 0 4px var(--color-danger);
-  }
-
-  .dot-degraded {
-    background: var(--color-warning);
-    box-shadow: 0 0 4px var(--color-warning);
-  }
-
-  .infra-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .infra-version,
-  .infra-uptime {
-    font-size: var(--text-xs);
-    color: var(--color-text-tertiary);
-  }
-
-  .infra-status-label {
-    font-size: var(--text-xs);
-    font-weight: 600;
-  }
-
-  .service-status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: var(--radius-full);
-    background: var(--color-text-tertiary);
-  }
-
-  .service-up .service-status-dot {
-    background: var(--color-success);
-    box-shadow: 0 0 6px var(--color-success);
-  }
-
-  .service-down .service-status-dot {
-    background: var(--color-danger);
-    box-shadow: 0 0 6px var(--color-danger);
-  }
-
-  .service-degraded .service-status-dot {
-    background: var(--color-warning);
-    box-shadow: 0 0 6px var(--color-warning);
-  }
-
-  .service-name {
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin-block-end: 2px;
-  }
-
-  .service-status-text {
-    font-size: var(--text-xs);
-    font-weight: 500;
-    margin-block-end: var(--space-2);
-  }
-
-  .service-up .service-status-text {
-    color: var(--color-success);
-  }
-
-  .service-down .service-status-text {
-    color: var(--color-danger);
-  }
-
-  .service-degraded .service-status-text {
-    color: var(--color-warning);
-  }
-
-  .service-inactive .service-status-dot {
-    background: var(--color-text-tertiary);
-    box-shadow: none;
-  }
-
-  .service-inactive .service-status-text {
-    color: var(--color-text-tertiary);
-  }
-
-  .service-detail {
-    font-size: var(--text-xs);
-    color: var(--color-text-tertiary);
-    line-height: 1.5;
-  }
-
-  .service-error {
-    font-size: var(--text-xs);
-    color: var(--color-danger);
-    margin-block-start: var(--space-1);
-  }
-
-  .service-details-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2px var(--space-3);
-    margin-block-start: var(--space-2);
-    padding-block-start: var(--space-2);
-    border-block-start: 1px solid var(--color-border);
-  }
-
-  .detail-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 2px 0;
-  }
-
-  .detail-label {
-    font-size: 0.65rem;
-    color: var(--color-text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-
-  .detail-value {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    color: var(--color-text);
-  }
-
-  .text-success { color: var(--color-success); }
-  .text-warning { color: var(--color-warning); }
-  .text-danger { color: var(--color-danger); }
-
-  .service-indices {
-    margin-block-start: var(--space-2);
-    padding-block-start: var(--space-2);
-    border-block-start: 1px solid var(--color-border);
-  }
-
-  .indices-title {
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--color-text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-block-end: var(--space-1);
-  }
-
-  .index-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xs);
-    padding: 2px 0;
-  }
-
-  .index-name {
-    font-weight: 500;
-    color: var(--color-text);
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .index-docs,
-  .index-size {
-    color: var(--color-text-tertiary);
-    white-space: nowrap;
-  }
 
   .integration-note {
     font-style: italic;
