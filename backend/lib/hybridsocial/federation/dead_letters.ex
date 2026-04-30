@@ -92,6 +92,7 @@ defmodule Hybridsocial.Federation.DeadLetters do
         |> Repo.update()
 
       result = Publisher.deliver(body, delivery.target_inbox, identity)
+      duration_ms = Publisher.last_delivery_duration_ms()
 
       case result do
         {:ok, _status} ->
@@ -100,6 +101,7 @@ defmodule Hybridsocial.Federation.DeadLetters do
             status: "delivered",
             attempts: delivery.attempts + 1,
             last_attempt_at: DateTime.utc_now(),
+            duration_ms: duration_ms,
             error: nil
           })
           |> Repo.update()
@@ -112,6 +114,7 @@ defmodule Hybridsocial.Federation.DeadLetters do
             status: "failed",
             attempts: delivery.attempts + 1,
             last_attempt_at: DateTime.utc_now(),
+            duration_ms: duration_ms,
             error: to_string(reason)
           })
           |> Repo.update()

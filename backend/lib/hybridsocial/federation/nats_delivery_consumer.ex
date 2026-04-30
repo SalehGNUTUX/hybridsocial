@@ -131,6 +131,15 @@ defmodule Hybridsocial.Federation.NatsDeliveryConsumer do
     updates = [status: status, last_attempt_at: DateTime.utc_now()]
     updates = if error, do: [{:error, to_string(error)} | updates], else: updates
 
+    # Stamp the timing the Publisher just measured. nil-guarded so a
+    # path that didn't actually call deliver/3 (shouldn't happen, but
+    # rescue blocks etc.) doesn't clobber a prior value with nil.
+    updates =
+      case Hybridsocial.Federation.Publisher.last_delivery_duration_ms() do
+        nil -> updates
+        ms -> [{:duration_ms, ms} | updates]
+      end
+
     from(d in "federation_deliveries", where: d.id == type(^delivery_id, Ecto.UUID))
     |> Repo.update_all(set: updates)
   rescue

@@ -20,6 +20,9 @@ defmodule Hybridsocial.Federation.Delivery do
     field :status, :string, default: "pending"
     field :attempts, :integer, default: 0
     field :last_attempt_at, :utc_datetime_usec
+    # Wall-clock duration of the HTTP POST in milliseconds; populated
+    # by Publisher.deliver/3 on every attempt.
+    field :duration_ms, :integer
     field :error, :string
 
     timestamps(type: :utc_datetime_usec)
@@ -36,6 +39,7 @@ defmodule Hybridsocial.Federation.Delivery do
       :status,
       :attempts,
       :last_attempt_at,
+      :duration_ms,
       :error
     ])
     |> validate_required([:activity_id, :target_inbox])

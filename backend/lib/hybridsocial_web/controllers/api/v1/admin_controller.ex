@@ -3722,7 +3722,8 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       json(conn, %{
         queue: Hybridsocial.Federation.DeliveryStats.queue(),
         throughput: Hybridsocial.Federation.DeliveryStats.throughput(),
-        top_failing: Hybridsocial.Federation.DeliveryStats.top_failing_destinations(10)
+        top_failing: Hybridsocial.Federation.DeliveryStats.top_failing_destinations(10),
+        latency: Hybridsocial.Federation.DeliveryStats.latency_per_peer(10)
       })
     else
       {:error, perm} -> deny(conn, perm)

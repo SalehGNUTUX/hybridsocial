@@ -73,6 +73,13 @@
       last_attempt_at: string | null;
       max_attempts: number;
     }[];
+    latency: {
+      domain: string;
+      samples: number;
+      p50_ms: number | null;
+      p95_ms: number | null;
+      max_ms: number | null;
+    }[];
   };
   let deliveryStats: FederationDelivery | null = $state(null);
   let deliveryLoading = $state(false);
@@ -588,6 +595,35 @@
           {/if}
         </section>
 
+        <!-- Per-peer delivery latency: p50/p95 ms over the last hour
+             for the top destinations by sample count. Spots a slow
+             peer dragging the queue without needing per-row data. -->
+        <section class="delivery-section">
+          <h3 class="delivery-section-title">Per-peer latency · last hour</h3>
+          {#if deliveryStats.latency.length === 0}
+            <p class="empty-text">Not enough delivered samples in the last hour to compute percentiles.</p>
+          {:else}
+            <div class="latency-grid card">
+              <div class="latency-row latency-head">
+                <span>Domain</span>
+                <span class="latency-num">p50</span>
+                <span class="latency-num">p95</span>
+                <span class="latency-num">max</span>
+                <span class="latency-num">samples</span>
+              </div>
+              {#each deliveryStats.latency as l (l.domain)}
+                <div class="latency-row">
+                  <span class="latency-domain">{l.domain}</span>
+                  <span class="latency-num">{l.p50_ms ?? '—'} ms</span>
+                  <span class="latency-num" class:latency-warn={(l.p95_ms ?? 0) > 1000} class:latency-bad={(l.p95_ms ?? 0) > 5000}>{l.p95_ms ?? '—'} ms</span>
+                  <span class="latency-num">{l.max_ms ?? '—'} ms</span>
+                  <span class="latency-num">{l.samples.toLocaleString()}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </section>
+
         <!-- Dead-letter queue: deliveries that exhausted their retries.
              Lists them grouped by domain so the per-domain bulk
              retry sits next to its rows; per-row retry/drop fall
@@ -1012,6 +1048,52 @@
   .delivery-loading {
     padding: var(--space-4) 0;
   }
+
+  /* Per-peer latency table — five columns, monospace numbers so the
+     three timing columns line up regardless of magnitude. */
+  .latency-grid {
+    padding: var(--space-2) var(--space-4);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .latency-row {
+    display: grid;
+    grid-template-columns: 1.5fr repeat(4, 1fr);
+    gap: var(--space-3);
+    align-items: center;
+    padding: 8px 0;
+    font-size: var(--text-sm);
+  }
+
+  .latency-row + .latency-row {
+    border-block-start: 1px solid var(--color-border);
+  }
+
+  .latency-head {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+  }
+
+  .latency-domain {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .latency-num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary);
+  }
+
+  .latency-warn { color: #b45309; font-weight: 600; }
+  .latency-bad { color: var(--color-danger); font-weight: 700; }
 
   .dead-letter-groups {
     display: flex;

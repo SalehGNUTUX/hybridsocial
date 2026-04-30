@@ -211,6 +211,58 @@ defmodule Hybridsocial.Federation.DeliveryStats do
     |> Enum.take(limit)
   end
 
+  @doc """
+  Per-peer delivery latency over the last hour. Computes p50 and p95
+  request duration in milliseconds for the top N domains by sample
+  count. Useful for spotting a slow peer that's dragging the queue.
+
+  Only delivered rows are sampled — failed rows often time out at
+  the 15s ceiling, which would skew the percentiles toward the
+  retry budget rather than the real distribution. Requires at least
+  three samples per domain so a single outlier isn't reported as a
+  trend.
+  """
+  def latency_per_peer(limit \\ 10) do
+    cutoff = DateTime.utc_now() |> DateTime.add(-3600, :second)
+
+    rows =
+      Repo.all(
+        from d in "federation_deliveries",
+          where:
+            d.status == "delivered" and
+              not is_nil(d.duration_ms) and
+              d.last_attempt_at >= ^cutoff,
+          group_by: fragment("split_part(split_part(?, '/', 3), ':', 1)", d.target_inbox),
+          having: count(d.id) >= 3,
+          order_by: [desc: count(d.id)],
+          limit: ^limit,
+          select: %{
+            domain: fragment("split_part(split_part(?, '/', 3), ':', 1)", d.target_inbox),
+            samples: count(d.id),
+            p50_ms: fragment("percentile_cont(0.5) within group (order by ?)", d.duration_ms),
+            p95_ms: fragment("percentile_cont(0.95) within group (order by ?)", d.duration_ms),
+            max_ms: max(d.duration_ms)
+          }
+      )
+
+    Enum.map(rows, fn row ->
+      %{
+        domain: row.domain,
+        samples: row.samples,
+        # `percentile_cont` returns float; round so the dashboard
+        # doesn't render "12.3333333 ms".
+        p50_ms: round_or_nil(row.p50_ms),
+        p95_ms: round_or_nil(row.p95_ms),
+        max_ms: row.max_ms
+      }
+    end)
+  end
+
+  defp round_or_nil(nil), do: nil
+  defp round_or_nil(n) when is_number(n), do: round(n)
+  defp round_or_nil(%Decimal{} = d), do: d |> Decimal.to_float() |> round()
+  defp round_or_nil(_), do: nil
+
   defp domain_of(%{target_inbox: inbox}) when is_binary(inbox) do
     case URI.parse(inbox) do
       %URI{host: host} when is_binary(host) -> host

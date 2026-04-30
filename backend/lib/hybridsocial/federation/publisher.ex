@@ -119,16 +119,38 @@ defmodule Hybridsocial.Federation.Publisher do
         ]
       end
 
-    case HTTPoison.post(inbox_url, body, headers, recv_timeout: 15_000, timeout: 15_000) do
-      {:ok, %{status_code: status}} when status in 200..299 ->
-        {:ok, status}
+    # Time the network call so the admin Delivery Queue tab can chart
+    # p50/p95 latency per destination. Wall-clock includes DNS,
+    # connect, TLS handshake, request, and read — same thing a real
+    # client would experience.
+    started_at_ns = System.monotonic_time(:nanosecond)
 
-      {:ok, %{status_code: status, body: resp_body}} ->
-        {:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}
+    result =
+      case HTTPoison.post(inbox_url, body, headers, recv_timeout: 15_000, timeout: 15_000) do
+        {:ok, %{status_code: status}} when status in 200..299 ->
+          {:ok, status}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, "Connection error: #{inspect(reason)}"}
-    end
+        {:ok, %{status_code: status, body: resp_body}} ->
+          {:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}
+
+        {:error, %HTTPoison.Error{reason: reason}} ->
+          {:error, "Connection error: #{inspect(reason)}"}
+      end
+
+    duration_ms = div(System.monotonic_time(:nanosecond) - started_at_ns, 1_000_000)
+    Process.put(:hs_last_delivery_ms, duration_ms)
+    result
+  end
+
+  @doc """
+  Returns the duration in milliseconds of the most recent
+  `deliver/3` or `deliver_as_instance/2` call on this process. Lets
+  callers stamp the timing on their delivery row without changing
+  the existing return contract (which the NATS consumer also
+  depends on).
+  """
+  def last_delivery_duration_ms do
+    Process.get(:hs_last_delivery_ms)
   end
 
   @doc """
@@ -242,7 +264,8 @@ defmodule Hybridsocial.Federation.Publisher do
         |> Delivery.changeset(%{
           status: "delivered",
           attempts: delivery.attempts + 1,
-          last_attempt_at: DateTime.utc_now()
+          last_attempt_at: DateTime.utc_now(),
+          duration_ms: last_delivery_duration_ms()
         })
         |> Repo.update()
 
@@ -254,7 +277,8 @@ defmodule Hybridsocial.Federation.Publisher do
           status: "failed",
           error: to_string(error),
           attempts: delivery.attempts + 1,
-          last_attempt_at: DateTime.utc_now()
+          last_attempt_at: DateTime.utc_now(),
+          duration_ms: last_delivery_duration_ms()
         })
         |> Repo.update()
     end
