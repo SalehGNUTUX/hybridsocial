@@ -65,8 +65,22 @@
       // crash backend's String.split because it received a list.
       const text = await importFile.text();
 
-      await api.post('/api/v1/import', { type: importType, data: text });
-      addToast('Import completed successfully', 'success');
+      const res = await api.post<{ queued?: number; started?: boolean }>(
+        '/api/v1/import',
+        { type: importType, data: text },
+      );
+      // Imports run async on the server because each remote handle
+      // triggers a webfinger + actor fetch the first time. Tell the
+      // user up-front so they don't refresh a minute later thinking
+      // it failed.
+      const n = res?.queued ?? 0;
+      addToast(
+        n > 0
+          ? `Import started — ${n} accounts queued. They'll appear over the next few minutes.`
+          : 'Import started. Check back shortly.',
+        'success',
+        7000,
+      );
       importFile = null;
       if (fileInput) fileInput.value = '';
     } catch {

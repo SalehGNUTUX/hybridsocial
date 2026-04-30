@@ -117,47 +117,69 @@ defmodule Hybridsocial.Portability do
   # --- Data Import ---
 
   def import_follows(identity_id, data),
-    do: import_handles(data, fn handle -> apply_follow(identity_id, handle) end)
+    do: import_handles_async(data, identity_id, :follow)
 
   def import_blocks(identity_id, data),
-    do: import_handles(data, fn handle -> apply_block(identity_id, handle) end)
+    do: import_handles_async(data, identity_id, :block)
 
   def import_mutes(identity_id, data),
-    do: import_handles(data, fn handle -> apply_mute(identity_id, handle) end)
+    do: import_handles_async(data, identity_id, :mute)
 
-  defp apply_follow(identity_id, handle) do
-    with %{} = target <- Accounts.get_identity_by_handle(handle),
-         {:ok, _} <- Hybridsocial.Social.follow(identity_id, target.id) do
-      :ok
-    else
-      _ -> :error
+  # Resolves a Mastodon-style `username@domain` (or bare local handle)
+  # to a local Identity row, fetching and creating the row from the
+  # remote actor when we've never seen them before. Returns `nil` if
+  # the handle is unresolvable (DNS failure, defederated host,
+  # malformed entry).
+  defp resolve_handle_for_import(raw) do
+    handle = raw |> String.trim() |> String.trim_leading("@")
+
+    case String.split(handle, "@", parts: 2) do
+      [user, domain] when domain != "" ->
+        if local_domain?(domain) do
+          Accounts.get_identity_by_handle(user)
+        else
+          resolve_remote(user, domain)
+        end
+
+      [user] ->
+        Accounts.get_identity_by_handle(user)
+
+      _ ->
+        nil
     end
   end
 
-  defp apply_block(identity_id, handle) do
-    with %{} = target <- Accounts.get_identity_by_handle(handle),
-         {:ok, _} <- Hybridsocial.Social.block(identity_id, target.id) do
-      :ok
-    else
-      _ -> :error
+  defp local_domain?(domain) do
+    case URI.parse(Hybridsocial.Federation.LocalUrl.base_url()) do
+      %URI{host: host} when is_binary(host) ->
+        String.downcase(domain) == String.downcase(host)
+
+      _ ->
+        false
     end
   end
 
-  defp apply_mute(identity_id, handle) do
-    with %{} = target <- Accounts.get_identity_by_handle(handle),
-         {:ok, _} <- Hybridsocial.Social.mute(identity_id, target.id) do
-      :ok
+  defp resolve_remote(user, domain) do
+    acct = "#{user}@#{domain}"
+
+    with {:ok, %{ap_id: ap_id}} when is_binary(ap_id) <-
+           Hybridsocial.Federation.WebFinger.finger(acct),
+         {:ok, identity} <-
+           Hybridsocial.Federation.Inbox.resolve_or_create_remote_identity(ap_id) do
+      identity
     else
-      _ -> :error
+      _ -> nil
     end
   end
 
-  # Shared CSV parser. Accepts either a single string blob or a
-  # pre-split list of lines (the frontend used to do its own split,
-  # which crashed String.split here). Strips Mastodon's "Account
-  # address,Show boosts" header when present, then takes the first
-  # CSV cell of each remaining row as the handle.
-  defp import_handles(data, action_fn) do
+  # The follow/block/mute path can take several seconds per entry
+  # because remote actors trigger a Webfinger call and an actor JSON
+  # fetch the first time we see them. A 269-row import would blow
+  # the HTTP request timeout, so the controller calls into here and
+  # we kick the work off in a supervised Task. The response counts
+  # parsed handles; actual completion is observable via the user's
+  # following/blocks/mutes lists growing as the worker progresses.
+  defp import_handles_async(data, identity_id, action) do
     handles =
       data
       |> normalize_to_lines()
@@ -167,17 +189,57 @@ defmodule Hybridsocial.Portability do
       |> Enum.map(&first_csv_cell/1)
       |> Enum.reject(&(&1 == ""))
 
-    {success, failed} =
-      Enum.reduce(handles, {0, 0}, fn handle, {ok, fail} ->
-        case action_fn.(handle) do
-          :ok -> {ok + 1, fail}
-          _ -> {ok, fail + 1}
-        end
-      end)
+    Task.Supervisor.start_child(Hybridsocial.TaskSupervisor, fn ->
+      run_import(identity_id, action, handles)
+    end)
 
-    {:ok, %{imported: success, failed: failed}}
+    {:ok, %{queued: length(handles), started: true}}
   end
 
+  defp run_import(identity_id, action, handles) do
+    handles
+    |> Task.async_stream(
+      fn handle -> apply_action(identity_id, action, handle) end,
+      max_concurrency: 5,
+      timeout: 30_000,
+      on_timeout: :kill_task,
+      ordered: false
+    )
+    |> Stream.run()
+  end
+
+  defp apply_action(identity_id, :follow, handle) do
+    with %{} = target <- resolve_handle_for_import(handle),
+         {:ok, _} <- Hybridsocial.Social.follow(identity_id, target.id) do
+      :ok
+    else
+      _ -> :error
+    end
+  end
+
+  defp apply_action(identity_id, :block, handle) do
+    with %{} = target <- resolve_handle_for_import(handle),
+         {:ok, _} <- Hybridsocial.Social.block(identity_id, target.id) do
+      :ok
+    else
+      _ -> :error
+    end
+  end
+
+  defp apply_action(identity_id, :mute, handle) do
+    with %{} = target <- resolve_handle_for_import(handle),
+         {:ok, _} <- Hybridsocial.Social.mute(identity_id, target.id) do
+      :ok
+    else
+      _ -> :error
+    end
+  end
+
+  # Shared CSV parser used by import_handles_async/3. Accepts either
+  # a single string blob or a pre-split list of lines (the frontend
+  # used to do its own split, which crashed String.split here).
+  # Strips Mastodon's "Account address,Show boosts" header when
+  # present and takes the first CSV cell of each remaining row.
   defp normalize_to_lines(s) when is_binary(s), do: String.split(s, ~r/\r?\n/, trim: true)
   defp normalize_to_lines(list) when is_list(list), do: list
   defp normalize_to_lines(_), do: []
