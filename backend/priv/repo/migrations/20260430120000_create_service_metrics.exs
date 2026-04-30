@@ -11,17 +11,11 @@ defmodule Hybridsocial.Repo.Migrations.CreateServiceMetrics do
     end
 
     # Hot path: dashboard reads "last N hours of (service, metric)".
+    # The composite index covers both the per-(service, metric) series
+    # query and the summary's "all rows in last hour" scan via index-only
+    # scan over the leading column. We tried adding a partial index
+    # WHERE inserted_at > now() - interval '2 hours' to make the summary
+    # cheaper, but Postgres rejects it because now() isn't IMMUTABLE.
     create index(:service_metrics, [:service, :metric, :inserted_at])
-
-    # Partial index for the dashboard summary, which always wants the
-    # last hour. Far cheaper than the full index for that lookup.
-    execute(
-      """
-      CREATE INDEX service_metrics_recent_idx
-        ON service_metrics (service, metric, inserted_at DESC)
-        WHERE inserted_at > now() - interval '2 hours'
-      """,
-      "DROP INDEX IF EXISTS service_metrics_recent_idx"
-    )
   end
 end
