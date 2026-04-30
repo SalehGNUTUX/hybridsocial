@@ -717,7 +717,7 @@
           {/if}
 
           {#if post.poll && !compact}
-            <div class="post-poll" class:post-poll-expired={pollExpired}>
+            <div class="post-poll">
               {#each pollOptions as option, i (i)}
                 {@const pct = pollVotesCount > 0 ? Math.round(option.votes_count / pollVotesCount * 100) : 0}
                 {#if showPollResults}
@@ -2256,13 +2256,9 @@
     flex-direction: column;
     gap: 14px;
     padding: 16px 18px;
-    border: 2px solid var(--color-primary);
+    border: 1px solid var(--color-border);
     border-radius: 14px;
     background: var(--color-surface-raised);
-  }
-
-  .post-poll-expired {
-    border-color: var(--color-border);
   }
 
   /* --- Result rows: title + % above a thin track --- */
