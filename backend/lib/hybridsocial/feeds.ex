@@ -118,7 +118,7 @@ defmodule Hybridsocial.Feeds do
         desc: p.id
       )
       |> limit(^limit)
-      |> preload(:identity)
+      |> preload([:identity, :quote])
 
     Repo.all(query)
   end
@@ -183,7 +183,7 @@ defmodule Hybridsocial.Feeds do
         |> apply_cursor_filters(opts)
         |> order_by([p], desc: p.inserted_at)
         |> limit(^limit)
-        |> preload(:identity)
+        |> preload([:identity, :quote])
 
       posts = Repo.all(query)
 
@@ -201,7 +201,7 @@ defmodule Hybridsocial.Feeds do
           |> apply_boost_cursor_filters(opts)
           |> order_by([b], desc: b.inserted_at)
           |> limit(^limit)
-          |> preload([b, p], post: {p, :identity})
+          |> preload([b, p], post: {p, [:identity, :quote]})
           |> preload(:identity)
           |> Repo.all()
 
@@ -242,7 +242,7 @@ defmodule Hybridsocial.Feeds do
       |> Visibility.apply_shadow_ban_filter(viewer_id)
       |> order_by([p], desc: p.inserted_at)
       |> limit(^limit)
-      |> preload(:identity)
+      |> preload([:identity, :quote])
 
     Repo.all(query)
   end
@@ -289,7 +289,7 @@ defmodule Hybridsocial.Feeds do
           |> Visibility.apply_mute_filter(viewer_id)
           |> order_by([p], desc: p.inserted_at)
           |> limit(^limit)
-          |> preload(:identity)
+          |> preload([:identity, :quote])
 
         {:ok, Repo.all(query)}
     end
@@ -339,7 +339,7 @@ defmodule Hybridsocial.Feeds do
         desc: p.id
       )
       |> limit(^limit)
-      |> preload(:identity)
+      |> preload([:identity, :quote])
 
     Repo.all(query)
   end
@@ -379,7 +379,7 @@ defmodule Hybridsocial.Feeds do
             |> apply_cursor_filters(opts)
             |> order_by([p], desc: p.inserted_at)
             |> limit(^limit)
-            |> preload(:identity)
+            |> preload([:identity, :quote])
 
           {:ok, Repo.all(query)}
         end

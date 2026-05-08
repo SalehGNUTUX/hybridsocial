@@ -19,7 +19,13 @@
   });
 
   let selectedId = $derived(page.params.id ?? null);
-  let hasSelection = $derived(!!selectedId);
+  // `hasSelection` drives the mobile panel-swap CSS. Treat `/messages/new`
+  // as a selection too — it renders inside `content-panel`, and without
+  // this it stayed hidden on mobile so the new-conversation search UI
+  // was unreachable.
+  let hasSelection = $derived(
+    !!selectedId || page.url.pathname.startsWith('/messages/new')
+  );
 
   // When the URL points at a conversation that isn't in the sidebar
   // yet — typically right after /messages/new creates one, before
@@ -293,11 +299,42 @@
      thread when on a detail route. */
   @media (max-width: 768px) {
     .messages-layout {
-      grid-template-columns: 1fr;
+      /* Drop the desktop two-column grid entirely on mobile.
+         A 340px first column on a 360–414px viewport leaves
+         the content panel ~50px wide, so the conversation
+         detail (and especially MessageInput) collapses into
+         an unusable sliver. */
+      display: flex;
+      flex-direction: column;
+
+      /* The desktop -16px claw-back compensates for AppLayout's
+         desktop padding-inline. On mobile AppLayout uses padding
+         space-3 which doesn't need clawing back, and the negative
+         margin pushes the layout past the viewport's right edge,
+         where it gets clipped by `overflow-x: clip` further up. */
+      margin: 0;
+
+      /* 100dvh tracks the dynamic viewport on mobile — `100vh`
+         on iOS Safari includes the address bar, so the bottom
+         row would slide under it. dvh is the modern fix. The
+         subtractions match AppLayout's mobile padding: top
+         (header + space-4) and bottom (BottomTabs + safe-area
+         + space-2). */
       height: calc(
-        100vh - var(--header-height) - var(--space-4) - var(--header-height) -
-          var(--space-2)
+        100dvh - var(--header-height) - var(--space-4) -
+          var(--header-height) - var(--space-2) -
+          env(safe-area-inset-bottom, 0px)
       );
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .conversations-panel,
+    .content-panel {
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+      border-inline-end: none;
     }
 
     .messages-layout.has-selection .conversations-panel {

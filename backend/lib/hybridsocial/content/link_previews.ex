@@ -4,10 +4,33 @@ defmodule Hybridsocial.Content.LinkPreviews do
   """
   alias Hybridsocial.Repo
   alias Hybridsocial.Content.LinkPreview
+  alias Hybridsocial.Social.Post
+  alias Hybridsocial.Accounts
+  alias Hybridsocial.SitePages
+  alias Hybridsocial.Config
+  alias Hybridsocial.Media.MediaFile
 
-  @user_agent "HybridSocial/1.0 (LinkPreview)"
+  @default_user_agent "HybridSocial/1.0 (LinkPreview)"
   @fetch_timeout 5_000
   @max_response_size 1_048_576
+
+  # Crawler UAs we identify as for hosts that gate OG metadata behind a JS
+  # login wall for generic bots but serve real tags to their own crawler.
+  @meta_crawler_ua "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+  @twitter_crawler_ua "Twitterbot/1.0"
+  @linkedin_crawler_ua "LinkedInBot/1.0 (compatible; Mozilla/5.0; +http://www.linkedin.com)"
+
+  # Match is host-suffix based: "m.facebook.com" matches "facebook.com".
+  @spoofed_user_agents %{
+    "facebook.com" => @meta_crawler_ua,
+    "fb.com" => @meta_crawler_ua,
+    "instagram.com" => @meta_crawler_ua,
+    "threads.net" => @meta_crawler_ua,
+    "twitter.com" => @twitter_crawler_ua,
+    "x.com" => @twitter_crawler_ua,
+    "t.co" => @twitter_crawler_ua,
+    "linkedin.com" => @linkedin_crawler_ua
+  }
 
   @doc """
   Checks cache for a preview by URL hash. Fetches if missing or expired.
@@ -39,13 +62,35 @@ defmodule Hybridsocial.Content.LinkPreviews do
   - Custom User-Agent
   """
   def fetch_preview(url) do
-    with {:ok, _url} <- validate_url(url) do
-      headers = [{"User-Agent", @user_agent}]
+    case classify_local_url(url) do
+      {:local, kind, key} ->
+        # Short-circuit own-host URLs to a DB lookup. Going over HTTP
+        # lands at the SvelteKit SPA shell which has no server-rendered
+        # OG tags, so the cached preview ends up with empty title /
+        # description / image and no card renders. Building the
+        # preview straight from the source row mirrors what the
+        # CrawlerController serves to other instances' bots.
+        local_preview(kind, key)
 
+      :remote ->
+        fetch_remote(url)
+    end
+  end
+
+  defp fetch_remote(url) do
+    with {:ok, _url} <- validate_url(url) do
+      headers = [{"User-Agent", user_agent_for(url)}]
+
+      # follow_redirect: Facebook share/p/* URLs 302 to the canonical post URL,
+      # so without this we error out with {:http_error, 302} and never see the
+      # OG tags. max_redirect caps the chain so a redirect loop can't burn our
+      # 5-second timeout budget.
       options = [
         recv_timeout: @fetch_timeout,
         timeout: @fetch_timeout,
-        max_body_length: @max_response_size
+        max_body_length: @max_response_size,
+        follow_redirect: true,
+        max_redirect: 3
       ]
 
       case HTTPoison.get(url, headers, options) do
@@ -115,6 +160,26 @@ defmodule Hybridsocial.Content.LinkPreviews do
   def extract_urls(_), do: []
 
   @doc """
+  Picks the User-Agent header to send when fetching `url`. Most hosts get the
+  default, but a handful of walled-garden platforms (Facebook, X, LinkedIn …)
+  return empty OG tags to generic bots and only serve real metadata to their
+  own crawler UA — so we identify as that crawler for those hosts.
+  """
+  def user_agent_for(url) do
+    case URI.parse(url) do
+      %URI{host: host} when is_binary(host) ->
+        normalized = String.replace_prefix(String.downcase(host), "www.", "")
+
+        Enum.find_value(@spoofed_user_agents, @default_user_agent, fn {suffix, ua} ->
+          if normalized == suffix or String.ends_with?(normalized, "." <> suffix), do: ua
+        end)
+
+      _ ->
+        @default_user_agent
+    end
+  end
+
+  @doc """
   Extracts the first URL from a post's content and fetches its preview.
   """
   def preview_for_post(post) do
@@ -123,6 +188,210 @@ defmodule Hybridsocial.Content.LinkPreviews do
       [] -> {:error, :no_urls}
     end
   end
+
+  # --- Local-host short-circuit ---
+
+  # Returns {:local, :post, id} | {:local, :profile, handle} |
+  # {:local, :legal, slug} | {:local, :generic, nil} for own-host URLs;
+  # :remote otherwise. Generic catches arab.place homepage / unknown
+  # paths so a cookie banner / index URL still gets a sensible card
+  # instead of an HTTP fetch that returns the SPA shell.
+  defp classify_local_url(url) do
+    uri = URI.parse(url)
+    host = uri.host && String.downcase(uri.host)
+    own = own_host()
+
+    if is_binary(host) and is_binary(own) and host == own do
+      classify_local_path(uri.path || "/")
+    else
+      :remote
+    end
+  end
+
+  defp classify_local_path(path) do
+    case path do
+      "/post/" <> rest -> {:local, :post, String.split(rest, "/") |> List.first()}
+      "/posts/" <> rest -> {:local, :post, String.split(rest, "/") |> List.first()}
+      "/@" <> rest -> {:local, :profile, String.split(rest, "/") |> List.first()}
+      "/legal/" <> rest -> {:local, :legal, String.split(rest, "/") |> List.first()}
+      _ -> {:local, :generic, nil}
+    end
+  end
+
+  defp own_host do
+    case URI.parse(HybridsocialWeb.Endpoint.url()) do
+      %URI{host: host} when is_binary(host) -> String.downcase(host)
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp local_preview(:post, id) when is_binary(id) and id != "" do
+    case Repo.get(Post, id) do
+      %Post{deleted_at: nil, visibility: "public"} = post ->
+        post = Repo.preload(post, [:identity, :media_attachments])
+        {:ok, post_meta(post)}
+
+      _ ->
+        {:ok, generic_meta()}
+    end
+  rescue
+    _ -> {:ok, generic_meta()}
+  end
+
+  defp local_preview(:profile, handle) when is_binary(handle) and handle != "" do
+    case Accounts.get_identity_by_handle(handle) do
+      %{allow_unfurl: true, deleted_at: nil, is_suspended: false} = identity ->
+        {:ok, profile_meta(identity)}
+
+      _ ->
+        {:ok, generic_meta()}
+    end
+  rescue
+    _ -> {:ok, generic_meta()}
+  end
+
+  defp local_preview(:legal, slug) when is_binary(slug) and slug != "" do
+    case SitePages.get_published_page(slug) do
+      %{title: title, body_markdown: markdown} ->
+        {:ok, legal_meta(title, markdown)}
+
+      _ ->
+        {:ok, generic_meta()}
+    end
+  rescue
+    _ -> {:ok, generic_meta()}
+  end
+
+  defp local_preview(_, _), do: {:ok, generic_meta()}
+
+  defp post_meta(%Post{} = post) do
+    instance = instance_name()
+    author = post.identity.display_name || post.identity.handle
+
+    description =
+      post.content
+      |> strip_tags()
+      |> truncate(300)
+      |> blank_to(nil)
+
+    %{
+      title: "#{author} on #{instance}",
+      description: description,
+      image: post_image_url(post) || default_image(),
+      site_name: instance
+    }
+  end
+
+  defp profile_meta(identity) do
+    instance = instance_name()
+    name = identity.display_name || identity.handle
+
+    description =
+      identity.bio
+      |> strip_tags()
+      |> truncate(300)
+      |> blank_to(nil)
+
+    %{
+      title: "#{name} (@#{identity.handle}) on #{instance}",
+      description: description,
+      image: identity.avatar_url || default_image(),
+      site_name: instance
+    }
+  end
+
+  defp legal_meta(title, markdown) do
+    instance = instance_name()
+
+    description =
+      markdown
+      |> strip_tags()
+      |> truncate(300)
+      |> blank_to(nil)
+
+    %{
+      title: "#{title} — #{instance}",
+      description: description,
+      image: default_image(),
+      site_name: instance
+    }
+  end
+
+  defp generic_meta do
+    instance = instance_name()
+
+    %{
+      title: instance,
+      description: nil,
+      image: default_image(),
+      site_name: instance
+    }
+  end
+
+  defp instance_name do
+    Config.get("instance_name", "HybridSocial")
+  end
+
+  defp default_image do
+    base = HybridsocialWeb.Endpoint.url()
+
+    case Config.get("instance_og_image") do
+      url when is_binary(url) and url != "" ->
+        if String.starts_with?(url, "http"), do: url, else: base <> ensure_leading_slash(url)
+
+      _ ->
+        base <> "/icons/icon.svg"
+    end
+  end
+
+  defp ensure_leading_slash("/" <> _ = p), do: p
+  defp ensure_leading_slash(p), do: "/" <> p
+
+  defp post_image_url(%Post{} = post) do
+    case post.media_attachments do
+      list when is_list(list) ->
+        list
+        |> Enum.filter(&(is_nil(&1.deleted_at) and image_attachment?(&1)))
+        |> case do
+          [m | _] -> Hybridsocial.Media.media_url(m)
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp image_attachment?(%MediaFile{content_type: "image/" <> _}), do: true
+  defp image_attachment?(_), do: false
+
+  defp strip_tags(nil), do: ""
+
+  defp strip_tags(text) when is_binary(text) do
+    text
+    |> String.replace(~r/<[^>]+>/u, " ")
+    |> String.replace(~r/\s+/u, " ")
+    |> String.trim()
+  end
+
+  defp truncate(text, max) when is_binary(text) do
+    if String.length(text) <= max do
+      text
+    else
+      text
+      |> String.slice(0, max - 1)
+      |> String.trim_trailing()
+      |> Kernel.<>("…")
+    end
+  end
+
+  defp truncate(_, _), do: ""
+
+  defp blank_to("", fallback), do: fallback
+  defp blank_to(text, _fallback) when is_binary(text), do: text
+  defp blank_to(_, fallback), do: fallback
 
   # --- Private helpers ---
 
@@ -209,18 +478,22 @@ defmodule Hybridsocial.Content.LinkPreviews do
     # decimal regex would otherwise consume `&#` and leave a stray
     # `xNNN;` behind.
     str
-    |> then(&Regex.replace(~r/&#x([0-9a-fA-F]+);/, &1, fn _full, hex ->
-      case Integer.parse(hex, 16) do
-        {code, _} when code in 0..0x10FFFF -> <<code::utf8>>
-        _ -> ""
-      end
-    end))
-    |> then(&Regex.replace(~r/&#(\d+);/, &1, fn _full, dec ->
-      case Integer.parse(dec) do
-        {code, _} when code in 0..0x10FFFF -> <<code::utf8>>
-        _ -> ""
-      end
-    end))
+    |> then(
+      &Regex.replace(~r/&#x([0-9a-fA-F]+);/, &1, fn _full, hex ->
+        case Integer.parse(hex, 16) do
+          {code, _} when code in 0..0x10FFFF -> <<code::utf8>>
+          _ -> ""
+        end
+      end)
+    )
+    |> then(
+      &Regex.replace(~r/&#(\d+);/, &1, fn _full, dec ->
+        case Integer.parse(dec) do
+          {code, _} when code in 0..0x10FFFF -> <<code::utf8>>
+          _ -> ""
+        end
+      end)
+    )
   end
 
   # `&amp;` last so we don't double-decode something like `&amp;lt;` into `<`.

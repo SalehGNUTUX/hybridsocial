@@ -14,6 +14,28 @@
 
 {
 	email {$ACME_EMAIL}
+
+	# Disable HTTP/3. Mobile Chrome upgrades to QUIC after seeing
+	# alt-svc but on this network the streams reset
+	# (`H3_REQUEST_CANCELLED` showed up repeatedly for users on
+	# arab.place). Chrome reports those resets as ERR_ABORTED with
+	# a synthetic 500 status, which trips SvelteKit's preloadCss
+	# helper and renders +error.svelte instead of the real route.
+	# HTTP/2 is fine for this site.
+	servers {
+		protocols h1 h2
+	}
+}
+
+# `alt-svc: clear` revokes any HTTP/3 advertisement the browser
+# already cached (Caddy was previously sending `h3=":443"; ma=2592000`
+# which sticks for 30 days). Without this, browsers keep trying QUIC
+# first even though the server no longer listens on UDP 443; the
+# failed QUIC handshake shows up in DevTools as `ERR_ABORTED 500` for
+# preloads. Once a browser sees `alt-svc: clear` it drops the cached
+# h3 endpoint and goes straight to HTTP/2.
+(no-h3-altsvc) {
+	header Alt-Svc clear
 }
 
 # ----- HybridSocial main domain -----
@@ -41,10 +63,67 @@ arab.place {
 		reverse_proxy hs_backend:4000
 	}
 
+	# Server-rendered OG/Twitter Card shells for social-sharing
+	# crawlers. These bots don't run JS, so the SPA shell that
+	# SvelteKit serves has no OG metadata and they can't unfurl
+	# our /post/:id, /@:handle, /legal/:slug URLs into rich
+	# previews. Phoenix's CrawlerController fills that in — but
+	# only sees the request when Caddy routes it to the backend.
+	# Match on User-Agent so real browsers stay on the SPA bundle
+	# (CrawlerController's `send_spa_handoff` redirect would add
+	# a visible flash for them). Sitemap + robots paths go to
+	# backend unconditionally since the SPA has no business
+	# serving them.
+	@bot_unfurl {
+		path /post/* /@* /legal/*
+		header_regexp User-Agent (?i)(facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|whatsapp|telegrambot|telegram|discordbot|skypeuripreview|redditbot|pinterest|bingbot|googlebot|google-structured-data-testing-tool|yandexbot|duckduckbot|applebot|baiduspider|archive\.org_bot|bitlybot|mastodon|pleroma|misskey|akkoma|iframely|embedly|lightbot|signal|xing-contenttabreceiver|vkshare|w3c_validator|hybridsocial)
+	}
+	handle @bot_unfurl {
+		reverse_proxy hs_backend:4000
+	}
+
+	@seo path /robots.txt /sitemap.xml /sitemap/*
+	handle @seo {
+		reverse_proxy hs_backend:4000
+	}
+
 	# Everything else → SvelteKit
 	handle {
 		reverse_proxy hs_frontend:3000
 	}
+
+	# SvelteKit HTML pages (everything that's not a hashed asset) must
+	# NEVER be cached by browsers. The HTML embeds the current build's
+	# asset hashes, so a cached HTML from a previous deploy points to
+	# chunks that no longer exist and the page silently breaks (DevTools
+	# shows a wave of 404s on /_app/immutable/chunks/<old-hash>.js and
+	# the SvelteKit error page rendering at status 500 because preload
+	# links fail). The /_app/immutable/* assets are content-hashed so
+	# they stay cacheable forever (SvelteKit already sets
+	# `cache-control: public, max-age=31536000, immutable` on them).
+	@html_pages {
+		not path /_app/immutable/*
+		not path /uploads/*
+		not path /icons/*
+		not path /sounds/*
+		not path /badges/*
+		not path /images/*
+		not path /manifest.json
+		not path /sw.js
+		not path /favicon*
+	}
+	header @html_pages Cache-Control "no-store, must-revalidate"
+
+	# Strip SvelteKit's `Link: <...>; rel=preload` early-hint header.
+	# SvelteKit's JS bundle ALSO calls a runtime preload helper that
+	# adds `<link rel=preload>` for the same URLs at hydration time.
+	# The duplicate triggers Chrome's de-dup optimisation: the second
+	# preload is aborted, the link's `error` event fires, SvelteKit
+	# treats that as a fatal navigation error and renders the 500
+	# +error.svelte page (the "Unable to preload CSS" message). The
+	# JS-side preload is sufficient on its own — strip the header
+	# version so only one preload exists per asset.
+	header @html_pages -Link
 
 	header {
 		X-Content-Type-Options nosniff
