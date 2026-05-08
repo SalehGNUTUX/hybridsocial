@@ -157,6 +157,10 @@ defmodule Hybridsocial.Pages do
         granted_by: admin_id
       })
       |> Repo.insert()
+      |> case do
+        {:ok, role} -> {:ok, Repo.preload(role, :identity)}
+        other -> other
+      end
     else
       false -> {:error, :forbidden}
       {:error, reason} -> {:error, reason}
@@ -213,6 +217,42 @@ defmodule Hybridsocial.Pages do
         page_identity.parent_identity_id == identity_id or
           page_identity.organization.owner_id == identity_id or
           has_role?(page_identity_id, identity_id, ["admin", "editor"])
+    end
+  end
+
+  @doc """
+  True when the identity may take moderate-tier actions on the page:
+  pin/unpin posts, lock replies, hide content. Anyone who `can_edit?`
+  also qualifies (admins / editors edit content so they implicitly
+  moderate it), plus the explicit moderator role for users who should
+  moderate without having edit authority.
+  """
+  def can_moderate?(page_identity_id, identity_id) do
+    case get_page(page_identity_id) do
+      nil ->
+        false
+
+      page_identity ->
+        page_identity.parent_identity_id == identity_id or
+          page_identity.organization.owner_id == identity_id or
+          has_role?(page_identity_id, identity_id, ["admin", "editor", "moderator"])
+    end
+  end
+
+  @doc """
+  True when the identity may grant / revoke roles or change page-wide
+  settings. Stricter than `can_edit?` so editors / moderators can't
+  silently elevate themselves or peers.
+  """
+  def can_manage?(page_identity_id, identity_id) do
+    case get_page(page_identity_id) do
+      nil ->
+        false
+
+      page_identity ->
+        page_identity.parent_identity_id == identity_id or
+          page_identity.organization.owner_id == identity_id or
+          has_role?(page_identity_id, identity_id, ["admin"])
     end
   end
 

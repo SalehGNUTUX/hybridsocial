@@ -415,13 +415,40 @@ defmodule HybridsocialWeb.Api.V1.PageController do
       created_at: page.inserted_at,
       followers_count: count_page_followers(page.id),
       is_following: viewer_follows_page?(viewer_id, page.id),
-      organization: serialize_org(page.organization)
+      organization: serialize_org(page.organization),
+      # Viewer's role on this page — "owner" / "admin" / "editor" /
+      # "moderator" / null. Drives the settings entry-gate on the
+      # frontend so we don't have to re-query roles from there.
+      viewer_role: viewer_role_for(page, viewer_id)
     }
 
     if branding do
       Map.put(base, :branding, serialize_branding(branding))
     else
       base
+    end
+  end
+
+  defp viewer_role_for(_page, nil), do: nil
+
+  defp viewer_role_for(%{organization: %{owner_id: owner_id}}, viewer_id)
+       when owner_id == viewer_id,
+       do: "owner"
+
+  defp viewer_role_for(%{parent_identity_id: parent_id}, viewer_id)
+       when not is_nil(parent_id) and parent_id == viewer_id,
+       do: "owner"
+
+  defp viewer_role_for(page, viewer_id) do
+    case Hybridsocial.Repo.one(
+           Ecto.Query.from(r in Hybridsocial.Pages.OrganizationRole,
+             where: r.organization_id == ^page.id and r.identity_id == ^viewer_id,
+             select: r.role,
+             limit: 1
+           )
+         ) do
+      nil -> nil
+      role -> role
     end
   end
 
@@ -468,7 +495,24 @@ defmodule HybridsocialWeb.Api.V1.PageController do
       identity_id: role.identity_id,
       role: role.role,
       granted_by: role.granted_by,
-      created_at: role.inserted_at
+      created_at: role.inserted_at,
+      # The roles list page needs name + avatar to render a human row;
+      # `Pages.get_roles/1` already preloads :identity so this is a
+      # cheap lookup. `add_role/4` doesn't preload, so guard against
+      # NotLoaded for the freshly-created path too.
+      identity: serialize_role_identity(role.identity)
+    }
+  end
+
+  defp serialize_role_identity(%Ecto.Association.NotLoaded{}), do: nil
+  defp serialize_role_identity(nil), do: nil
+
+  defp serialize_role_identity(identity) do
+    %{
+      id: identity.id,
+      handle: identity.handle,
+      display_name: identity.display_name,
+      avatar_url: identity.avatar_url
     }
   end
 

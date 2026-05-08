@@ -1469,7 +1469,10 @@ defmodule Hybridsocial.Social.Posts do
         Hybridsocial.Groups.can_moderate?(group_id, actor_identity_id)
 
       {:page, page_id} ->
-        Hybridsocial.Pages.can_edit?(page_id, actor_identity_id)
+        # Use the moderate-tier predicate so the explicit moderator
+        # role can pin without having broader edit authority. Editors
+        # and admins still pass since `can_moderate?` is a superset.
+        Hybridsocial.Pages.can_moderate?(page_id, actor_identity_id)
 
       {:profile, owner_id} ->
         owner_id == actor_identity_id

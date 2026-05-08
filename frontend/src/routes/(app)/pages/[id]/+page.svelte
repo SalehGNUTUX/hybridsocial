@@ -204,12 +204,30 @@
               <button type="button" class="btn btn-outline" onclick={openEditDialog}>
                 Edit page
               </button>
+              <a class="btn btn-outline" href={`/pages/${pageId}/settings`}>
+                Manage
+              </a>
               <button
                 type="button"
                 class="btn btn-outline btn-danger-outline"
                 onclick={() => (showDeleteConfirm = true)}
               >
                 Delete
+              </button>
+            {:else if pageData?.viewer_role && pageData.viewer_role !== null}
+              <!-- Non-owners with admin/editor/moderator role on the
+                   page see the Manage button (no Edit/Delete which
+                   only the org owner can do). -->
+              <a class="btn btn-outline" href={`/pages/${pageId}/settings`}>
+                Manage
+              </a>
+              <button
+                type="button"
+                class="btn {isFollowing ? 'btn-outline' : 'btn-primary'}"
+                onclick={toggleFollow}
+                disabled={followLoading}
+              >
+                {isFollowing ? 'Following' : 'Follow'}
               </button>
             {:else}
               <button
