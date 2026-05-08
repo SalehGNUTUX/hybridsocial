@@ -63,22 +63,32 @@ arab.place {
 		reverse_proxy hs_backend:4000
 	}
 
-	# Server-rendered OG/Twitter Card shells for social-sharing
-	# crawlers. These bots don't run JS, so the SPA shell that
-	# SvelteKit serves has no OG metadata and they can't unfurl
-	# our /post/:id, /@:handle, /legal/:slug URLs into rich
-	# previews. Phoenix's CrawlerController fills that in — but
-	# only sees the request when Caddy routes it to the backend.
-	# Match on User-Agent so real browsers stay on the SPA bundle
-	# (CrawlerController's `send_spa_handoff` redirect would add
-	# a visible flash for them). Sitemap + robots paths go to
-	# backend unconditionally since the SPA has no business
-	# serving them.
+	# Server-rendered OG / Twitter Card shells for social-sharing
+	# crawlers. Bots without JS see the SPA shell with no OG
+	# metadata and cannot unfurl /post/:id, /@:handle, /legal/:slug
+	# URLs. Phoenix CrawlerController fills that in, but only when
+	# Caddy routes the request to the backend. Match on User-Agent
+	# so real browsers stay on the SPA bundle (the controller would
+	# otherwise emit an SPA-handoff redirect that flashes a blank
+	# page for humans). Sitemap + robots are unconditional since
+	# the SPA has no business serving them.
 	@bot_unfurl {
-		path /post/* /@* /legal/*
-		header_regexp User-Agent (?i)(facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|whatsapp|telegrambot|telegram|discordbot|skypeuripreview|redditbot|pinterest|bingbot|googlebot|google-structured-data-testing-tool|yandexbot|duckduckbot|applebot|baiduspider|archive\.org_bot|bitlybot|mastodon|pleroma|misskey|akkoma|iframely|embedly|lightbot|signal|xing-contenttabreceiver|vkshare|w3c_validator|hybridsocial)
+		path /post/* /legal/*
+		header_regexp User-Agent "(?i)(facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|whatsapp|telegrambot|telegram|discordbot|skypeuripreview|redditbot|pinterest|bingbot|googlebot|google-structured-data-testing-tool|yandexbot|duckduckbot|applebot|baiduspider|archive\.org_bot|bitlybot|mastodon|pleroma|misskey|akkoma|iframely|embedly|lightbot|signal|xing-contenttabreceiver|vkshare|w3c_validator|hybridsocial)"
 	}
 	handle @bot_unfurl {
+		reverse_proxy hs_backend:4000
+	}
+
+	# `/@<handle>` is its own block — Caddy treats `@x` tokens as
+	# named-matcher references, so listing `/@*` alongside other
+	# paths in a `path` directive trips the parser. path_regexp
+	# sidesteps that by passing the literal `@` through unambiguously.
+	@bot_unfurl_profile {
+		path_regexp ^/@[^/]+
+		header_regexp User-Agent "(?i)(facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|whatsapp|telegrambot|telegram|discordbot|skypeuripreview|redditbot|pinterest|bingbot|googlebot|google-structured-data-testing-tool|yandexbot|duckduckbot|applebot|baiduspider|archive\.org_bot|bitlybot|mastodon|pleroma|misskey|akkoma|iframely|embedly|lightbot|signal|xing-contenttabreceiver|vkshare|w3c_validator|hybridsocial)"
+	}
+	handle @bot_unfurl_profile {
 		reverse_proxy hs_backend:4000
 	}
 
