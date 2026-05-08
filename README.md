@@ -201,6 +201,27 @@ mix test --cover      # With coverage report
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+### Host tuning (HTTP/3 / QUIC)
+
+Caddy serves traffic over HTTP/3, and the `quic-go` library wants ~7 MiB of kernel UDP buffer per socket. Linux defaults to ~208 KiB, which causes packet drops under media load and tanks throughput — small images can take 30+ s to load even though the backend itself is fast. Bump the buffers on the **host** (containers share the host kernel):
+
+```bash
+sudo tee /etc/sysctl.d/99-quic-buffers.conf > /dev/null <<EOF
+net.core.rmem_max=7500000
+net.core.wmem_max=7500000
+EOF
+sudo sysctl --system
+sudo docker restart <caddy-container>
+```
+
+Verify in Caddy's logs that the warning is gone:
+
+```bash
+docker logs <caddy-container> 2>&1 | grep -i "buffer size"
+```
+
+If you still see `failed to sufficiently increase receive buffer size`, the sysctl didn't take. See the [quic-go UDP buffer guide](https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes) for platform-specific notes.
+
 ### Cluster
 
 HybridSocial scales horizontally via BEAM clustering:

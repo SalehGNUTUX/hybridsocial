@@ -51,28 +51,29 @@
 
   let tree = $derived(buildTree(descendants, rootPostId));
 
-  let expandedChildren = $state<Record<string, boolean>>({});
+  const EXPAND_STEP = 5;
 
-  function toggleChildren(postId: string) {
-    expandedChildren[postId] = !expandedChildren[postId];
-  }
+  let expandedExtra = $state<Record<string, number>>({});
 
-  function countAllChildren(node: ReplyNode): number {
-    let count = node.children.length;
-    for (const child of node.children) count += countAllChildren(child);
-    return count;
+  function expandMore(postId: string) {
+    expandedExtra[postId] = (expandedExtra[postId] ?? 0) + EXPAND_STEP;
   }
 </script>
 
 <div class="threaded-replies">
   {#each tree as node, i (node.post.id)}
-    {@render replyNode(node, i < tree.length - 1)}
+    {@render replyNode(node, i < tree.length - 1, maxDepth)}
   {/each}
 </div>
 
-{#snippet replyNode(node: ReplyNode, hasSiblingsBelow: boolean)}
-  {@const hasVisibleChildren = node.children.length > 0 && (node.depth < maxDepth || expandedChildren[node.post.id])}
-  <div class="reply-node" style="--indent: {node.depth}">
+{#snippet replyNode(node: ReplyNode, hasSiblingsBelow: boolean, budget: number)}
+  {@const localBudget = Math.max(budget, node.depth + (expandedExtra[node.post.id] ?? 0))}
+  {@const hasVisibleChildren = node.children.length > 0 && node.depth < localBudget}
+  {@const isClamped = node.depth > maxDepth}
+  <div
+    class="reply-node"
+    class:reply-node--clamped={isClamped}
+  >
     <!-- Connector gutter -->
     <div class="reply-gutter">
       <!-- Vertical line from parent, curving into this reply (L-shape) -->
@@ -92,10 +93,10 @@
     <div class="reply-content">
       <PostCard post={node.post} />
 
-      <!-- Collapsed children -->
-      {#if node.children.length > 0 && node.depth >= maxDepth && !expandedChildren[node.post.id]}
-        <button type="button" class="view-replies-btn" onclick={() => toggleChildren(node.post.id)}>
-          View {countAllChildren(node)} {countAllChildren(node) === 1 ? 'reply' : 'replies'}
+      <!-- Expand-by-5 button when we've hit the visible-depth budget -->
+      {#if node.children.length > 0 && node.depth >= localBudget}
+        <button type="button" class="view-replies-btn" onclick={() => expandMore(node.post.id)}>
+          View next {EXPAND_STEP} replies
         </button>
       {/if}
 
@@ -103,7 +104,7 @@
       {#if hasVisibleChildren}
         <div class="reply-children">
           {#each node.children as child, i (child.post.id)}
-            {@render replyNode(child, i < node.children.length - 1)}
+            {@render replyNode(child, i < node.children.length - 1, localBudget)}
           {/each}
         </div>
       {/if}
@@ -127,16 +128,21 @@
   /* ---- Gutter (connector lines) ---- */
   .reply-gutter {
     flex-shrink: 0;
-    width: 24px;
+    width: 18px;
     position: relative;
+  }
+
+  /* Beyond maxDepth, drop the gutter so replies render flush with the maxDepth column. */
+  .reply-node--clamped > .reply-gutter {
+    display: none;
   }
 
   /* L-shaped connector: vertical part comes down from parent, horizontal goes right to card */
   .connector-l {
     position: absolute;
-    inset-inline-start: 11px;
+    inset-inline-start: 8px;
     top: 0;
-    width: 13px;
+    width: 10px;
     height: 24px;
   }
 
@@ -164,7 +170,7 @@
   /* Vertical pass-through line for siblings below */
   .connector-pass {
     position: absolute;
-    inset-inline-start: 11px;
+    inset-inline-start: 8px;
     top: 0;
     bottom: 0;
     width: 2px;
@@ -232,23 +238,12 @@
     font-size: 0.6875rem;
   }
 
-  /* ---- Children ---- */
+  /* ---- Children ---- Indent lives entirely in each node's .reply-gutter. */
   .reply-children {
     display: flex;
     flex-direction: column;
-    padding-inline-start: 16px;
+    padding-inline-start: 0;
     position: relative;
-  }
-
-  /* Vertical line running alongside all children */
-  .reply-children::before {
-    content: '';
-    position: absolute;
-    inset-inline-start: -1px;
-    top: 0;
-    bottom: 24px;
-    width: 2px;
-    background: var(--color-border);
   }
 
   /* ---- View replies link ---- */

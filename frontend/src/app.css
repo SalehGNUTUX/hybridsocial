@@ -154,10 +154,24 @@ html {
   background: var(--color-background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Set on <html> *and* body — when only body has overflow-x set,
+     the browser propagates the value to the viewport rather than
+     applying it locally, which on some mobile browsers leaves the
+     body itself wider than the viewport (visible as content cut
+     off on the right). Setting it on <html> too pins the clip to
+     the root element. `clip` over `hidden` so descendants can still
+     use `position: sticky`. */
+  overflow-x: clip;
 }
 
 body {
   min-height: 100vh;
+  overflow-x: clip;
+  /* Hard-pin body width to the visual viewport so a wide child
+     can't push the body itself wider than the screen. Combined
+     with the clip above this means the page can't scroll
+     horizontally and laid-out content is forced to fit. */
+  max-width: 100vw;
   /* Soft wash radiating from the lower-center of the viewport so the
      page doesn't read as pure white. The radial centre sits at y=90%
      (near the bottom) with the gradient fading to transparent by

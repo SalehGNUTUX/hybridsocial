@@ -144,6 +144,12 @@
 
     .cookie-banner {
       border-radius: var(--radius-xl);
+      /* Cache-buster v2: dummy custom property forces a new content
+         hash on the emitted CSS chunk so browsers with a poisoned
+         500 cached for the previous URL hash get a fresh URL on
+         next visit. Custom properties survive Vite's CSS optimiser
+         where unused selectors do not. */
+      --cb-build: 2;
     }
   }
 </style>

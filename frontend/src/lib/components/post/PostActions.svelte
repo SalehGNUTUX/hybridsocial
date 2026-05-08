@@ -300,6 +300,12 @@
   }
 
   let menuOpenUpward = $state(false);
+  // Cap the menu so it never extends past the visible content area
+  // — the bottom tab bar on mobile (64px) was clipping the lower
+  // items (Mute/Block/Report) since the menu uses --z-dropdown (10)
+  // which sits below --z-sticky (20). Set as inline style when we
+  // toggle so the cap reflects the actual trigger position.
+  let menuMaxHeight = $state<string>('');
 
   // A unique tag per PostActions instance so the global `openMenuId`
   // store can identify which menu is currently expanded across the
@@ -365,10 +371,24 @@
     }
 
     // Check if the button is near the bottom of the viewport.
+    // On mobile (<=768px) the BottomTabs bar takes the bottom 64px,
+    // so subtract that from the downward budget — otherwise we'd
+    // happily open downward into the tab bar and clip the lower menu
+    // items behind it.
     const btn = e.currentTarget as HTMLElement;
     const rect = btn.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    menuOpenUpward = spaceBelow < 280;
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const bottomReserved = isMobile ? 64 : 0;
+    const headerReserved = 64;
+    const padding = 12;
+    const spaceBelow = window.innerHeight - rect.bottom - bottomReserved - padding;
+    const spaceAbove = rect.top - headerReserved - padding;
+    // Open upward when there's notably more room above. Either way,
+    // bound the menu height to whatever space we actually have so
+    // long lists scroll inside the menu instead of overflowing.
+    menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
+    const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
+    menuMaxHeight = `${Math.min(available, 360)}px`;
 
     // Claim the global slot — every other PostActions instance sees
     // the change via $openMenuId and closes its own menu.
@@ -811,7 +831,7 @@
     </button>
 
     {#if showMoreMenu}
-      <div class="more-menu" class:more-menu-upward={menuOpenUpward} role="menu">
+      <div class="more-menu" class:more-menu-upward={menuOpenUpward} role="menu" style:max-height={menuMaxHeight}>
         {#if isRemotePost()}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleDisplayOnInstance}>
             <span class="material-symbols-outlined menu-icon">open_in_new</span>
@@ -1641,7 +1661,12 @@
     border-radius: 14px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
     padding: 6px;
-    z-index: var(--z-dropdown);
+    /* Above --z-sticky (20) so the menu paints over the BottomTabs
+       bar on mobile instead of behind it — the runtime cap on
+       max-height keeps the menu from running into the bar visually. */
+    z-index: 25;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     animation: menu-roll-down 0.2s ease;
     transform-origin: top right;
   }

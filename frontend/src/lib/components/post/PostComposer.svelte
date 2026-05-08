@@ -13,6 +13,43 @@
 
   type ComposerVisibility = 'public' | 'followers' | 'direct';
 
+  // Mirrors what the backend's media validator accepts
+  // (backend/lib/hybridsocial/media/validator.ex). Anything outside this set
+  // is rejected at the picker / drag / paste boundary so we never start an
+  // upload that the server will refuse, which is what produced the
+  // "Processing…" tile that hung forever.
+  const ACCEPTED_MIME_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'video/mp4',
+    'video/webm',
+    'audio/mpeg',
+    'audio/wav',
+    'audio/x-wav',
+    'audio/ogg',
+    'audio/flac',
+    'audio/aac',
+    'audio/mp4',
+    'audio/webm',
+  ]);
+  // Extension fallback for browsers / drag sources that hand us a blank
+  // or wrong MIME type (common with copy-from-Finder on macOS).
+  const ACCEPTED_EXTENSIONS = new Set([
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.mp4', '.webm',
+    '.mp3', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.m4a', '.weba',
+  ]);
+  const ACCEPT_ATTR = [...ACCEPTED_MIME_TYPES, ...ACCEPTED_EXTENSIONS].join(',');
+
+  function isAcceptedFile(f: File): boolean {
+    if (f.type && ACCEPTED_MIME_TYPES.has(f.type)) return true;
+    const dot = f.name.lastIndexOf('.');
+    if (dot < 0) return false;
+    return ACCEPTED_EXTENSIONS.has(f.name.slice(dot).toLowerCase());
+  }
+
   // The user's saved default — set in /settings/privacy and persisted
   // both to localStorage (preferencesStore) and to the server
   // (users.default_visibility, returned from /auth/me). Falls back to
@@ -39,6 +76,11 @@
   let loading = $state(false);
   let error = $state('');
   let replyTo = $state<Post | null>(null);
+  // Set true when the parent post is edited while the composer is
+  // open. Surfaces a "Post edited" indicator next to the
+  // 'Replying to @user' line so the user knows the conversation
+  // they're typing into has changed.
+  let parentEdited = $state(false);
   // When the reply was opened from the lightbox of a multi-image
   // post, this holds the index (1-based) and id of the targeted
   // media so the composer can both display "Replying to image N"
@@ -179,6 +221,32 @@
     hasDraft = !!localStorage.getItem('hs_post_draft');
 
     return () => window.removeEventListener('open-composer', handleOpenComposer);
+  });
+
+  // Live "Post edited" indicator: while a reply context is set,
+  // open an SSE stream to /api/v1/streaming/post/:id and flip
+  // `parentEdited` if the author edits the parent. The effect
+  // tears the EventSource down whenever replyTo changes (or the
+  // composer unmounts), so we never leak streams across reply
+  // sessions.
+  $effect(() => {
+    const parent = replyTo;
+    if (!parent?.id) return;
+
+    parentEdited = false;
+    const es = new EventSource(`/api/v1/streaming/post/${parent.id}`, {
+      withCredentials: true,
+    });
+
+    const onEdit = () => {
+      parentEdited = true;
+    };
+    es.addEventListener('edit', onEdit);
+
+    return () => {
+      es.removeEventListener('edit', onEdit);
+      es.close();
+    };
   });
 
   function resumeDraft() {
@@ -377,6 +445,7 @@
     // become sticky after the post is sent.
     visibility = defaultVisibility();
     replyTo = null;
+    parentEdited = false;
     targetMediaId = null;
     targetMediaIndex = null;
     quotePost = null;
@@ -467,10 +536,25 @@
   }
 
   // Shared upload path so the file-picker, drag-drop, and paste-image
-  // entry points all enforce the same per-post cap, the same error
-  // mapping, and append into the same uploadedMedia list.
+  // entry points all enforce the same accepted-types gate, the same
+  // per-post cap, the same error mapping, and append into the same
+  // uploadedMedia list.
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
+
+    // Reject unsupported types up front. The backend's magic-byte check
+    // would refuse them anyway, but the user previously saw the tile sit
+    // on "Processing…" until the server replied — gate at the boundary.
+    const accepted = files.filter(isAcceptedFile);
+    const unsupported = files.length - accepted.length;
+    if (accepted.length === 0) {
+      error =
+        unsupported === 1
+          ? 'That file type isn’t supported. Use an image, video, or audio file.'
+          : `${unsupported} files weren’t supported. Use images, video, or audio.`;
+      return;
+    }
+    files = accepted;
 
     const remaining = maxMedia - uploadedMedia.length;
     if (remaining <= 0) {
@@ -539,12 +623,15 @@
       uploadingProgress = uploadingProgress.filter((p) => !ids.has(p.id));
     }
 
-    if (failures > 0 || dropped > 0) {
+    if (failures > 0 || dropped > 0 || unsupported > 0) {
       const parts: string[] = [];
       if (firstErrorMsg) {
         parts.push(firstErrorMsg);
       } else if (failures > 0) {
         parts.push(`${failures} upload${failures === 1 ? '' : 's'} failed`);
+      }
+      if (unsupported > 0) {
+        parts.push(`${unsupported} unsupported file${unsupported === 1 ? '' : 's'}`);
       }
       if (dropped > 0) parts.push(`${dropped} skipped (max ${maxMedia})`);
       error = parts.join(' · ');
@@ -687,8 +774,8 @@
   function collectPastedImages(cd: DataTransfer | null): File[] {
     if (!cd) return [];
 
-    const fromFiles = Array.from(cd.files ?? []).filter((f) =>
-      f.type.startsWith('image/'),
+    const fromFiles = Array.from(cd.files ?? []).filter(
+      (f) => f.type.startsWith('image/') && isAcceptedFile(f),
     );
     if (fromFiles.length > 0) return fromFiles;
 
@@ -696,7 +783,7 @@
     for (const item of Array.from(cd.items ?? [])) {
       if (item.kind === 'file' && item.type.startsWith('image/')) {
         const f = item.getAsFile();
-        if (f) fromItems.push(f);
+        if (f && isAcceptedFile(f)) fromItems.push(f);
       }
     }
     return fromItems;
@@ -1147,6 +1234,12 @@
     {#if replyTo}
       <div class="composer-reply-context">
         Replying to <strong>@{replyTo.account.acct || replyTo.account.handle}</strong>
+        {#if parentEdited}
+          <span class="composer-parent-edited" title="The post you're replying to was edited">
+            <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+            edited
+          </span>
+        {/if}
         {#if targetMediaId}
           {@const targetMedia = replyTo.media_attachments?.find((m) => m.id === targetMediaId)}
           {#if targetMedia}
@@ -1396,7 +1489,7 @@
     <input
       bind:this={fileInputEl}
       type="file"
-      accept="image/*,video/*,audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/flac,audio/aac,audio/mp4,audio/webm,.mp3,.wav,.ogg,.oga,.opus,.flac,.aac,.m4a,.weba"
+      accept={ACCEPT_ATTR}
       multiple
       class="visually-hidden"
       onchange={handleFileSelected}
@@ -1905,6 +1998,21 @@
     color: var(--color-text);
   }
 
+  .composer-parent-edited {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--color-warning, #b45309);
+    background: var(--color-warning-soft, rgba(245, 158, 11, 0.1));
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .composer-parent-edited .material-symbols-outlined {
+    font-size: 14px;
+  }
+
   .composer-target-thumb {
     width: 28px;
     height: 28px;
@@ -2127,12 +2235,15 @@
     justify-content: center;
   }
 
-  /* Per-file upload progress card. Sized to match the other preview
-     tiles in the grid so the layout doesn't jump as files complete. */
+  /* Per-file upload progress card. Wider than image thumbnails because
+     it has to hold the file name, status text, progress bar, and size
+     stacked vertically — at the 80px square width inherited from
+     .media-preview-item, "Processing…" overflowed and got clipped. */
   .media-preview-uploading {
     display: flex;
     align-items: stretch;
     justify-content: center;
+    width: 160px;
     background: var(--color-surface);
     border: 1px dashed var(--color-border);
     padding: 10px;
@@ -2164,6 +2275,7 @@
   }
 
   .upload-progress-pct {
+    flex-shrink: 0;
     color: var(--color-text-secondary);
     font-variant-numeric: tabular-nums;
   }
