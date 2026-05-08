@@ -19,6 +19,16 @@ defmodule Hybridsocial.Groups do
 
   @default_page_size 20
 
+  # Permission ladder. The role enum already had `:moderator` baked
+  # in, but every previous `require_role` call only accepted
+  # `[:admin, :owner]`, so the moderator slot was a UX-only label
+  # with zero teeth. Tier-aligning the call sites (vs. inlining lists
+  # everywhere) keeps the policy in one obvious place — change the
+  # tuple, change the rule.
+  @moderate_roles [:moderator, :admin, :owner]
+  @manage_roles [:admin, :owner]
+  @destroy_roles [:owner]
+
   # ---------------------------------------------------------------------------
   # Group CRUD
   # ---------------------------------------------------------------------------
@@ -99,7 +109,7 @@ defmodule Hybridsocial.Groups do
 
   def update_group(group_id, identity_id, attrs) do
     with {:ok, group} <- get_existing_group(group_id),
-         {:ok, _role} <- require_role(group_id, identity_id, [:admin, :owner]) do
+         {:ok, _role} <- require_role(group_id, identity_id, @manage_roles) do
       case group |> Group.update_changeset(attrs) |> Repo.update() do
         {:ok, updated} ->
           Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "groups", {:group_updated, updated})
@@ -113,7 +123,7 @@ defmodule Hybridsocial.Groups do
 
   def delete_group(group_id, identity_id) do
     with {:ok, group} <- get_existing_group(group_id),
-         {:ok, _role} <- require_role(group_id, identity_id, [:owner]) do
+         {:ok, _role} <- require_role(group_id, identity_id, @destroy_roles) do
       Ecto.Multi.new()
       |> Ecto.Multi.update(:group, Group.soft_delete_changeset(group))
       |> Ecto.Multi.run(:soft_delete_identity, fn _repo, _ ->
@@ -264,7 +274,7 @@ defmodule Hybridsocial.Groups do
   end
 
   def update_member_role(group_id, admin_id, member_id, role) do
-    with {:ok, _role} <- require_role(group_id, admin_id, [:admin, :owner]),
+    with {:ok, _role} <- require_role(group_id, admin_id, @manage_roles),
          member when not is_nil(member) <- get_member_by_id(member_id, group_id) do
       member
       |> GroupMember.changeset(%{role: role})
@@ -276,7 +286,7 @@ defmodule Hybridsocial.Groups do
   end
 
   def ban_member(group_id, admin_id, member_id) do
-    with {:ok, _role} <- require_role(group_id, admin_id, [:admin, :owner]),
+    with {:ok, _role} <- require_role(group_id, admin_id, @moderate_roles),
          member when not is_nil(member) <- get_member_by_id(member_id, group_id) do
       member
       |> GroupMember.changeset(%{status: :banned})
@@ -313,6 +323,28 @@ defmodule Hybridsocial.Groups do
     |> Repo.one()
   end
 
+  @doc """
+  True when the identity may take moderator-tier actions in the group:
+  pin/unpin posts, ban members, approve / reject join applications.
+  Owners and admins are always considered moderators; instance staff
+  ride the same path as `require_role/3` so site staff retain
+  override authority.
+  """
+  def can_moderate?(group_id, identity_id) do
+    case require_role(group_id, identity_id, @moderate_roles) do
+      {:ok, _} -> true
+      _ -> false
+    end
+  end
+
+  @doc "True when the identity may take admin-tier actions (settings, role grants)."
+  def can_manage?(group_id, identity_id) do
+    case require_role(group_id, identity_id, @manage_roles) do
+      {:ok, _} -> true
+      _ -> false
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Screening
   # ---------------------------------------------------------------------------
@@ -322,7 +354,7 @@ defmodule Hybridsocial.Groups do
   end
 
   def update_screening_config(group_id, admin_id, attrs) do
-    with {:ok, _role} <- require_role(group_id, admin_id, [:admin, :owner]) do
+    with {:ok, _role} <- require_role(group_id, admin_id, @manage_roles) do
       case get_screening_config(group_id) do
         nil ->
           %GroupScreeningConfig{}
@@ -380,7 +412,7 @@ defmodule Hybridsocial.Groups do
 
   def approve_application(application_id, admin_id) do
     with {:ok, application} <- get_application(application_id),
-         {:ok, _role} <- require_role(application.group_id, admin_id, [:admin, :owner]) do
+         {:ok, _role} <- require_role(application.group_id, admin_id, @moderate_roles) do
       Ecto.Multi.new()
       |> Ecto.Multi.update(:application, fn _ ->
         GroupApplication.review_changeset(application, %{
@@ -414,7 +446,7 @@ defmodule Hybridsocial.Groups do
 
   def reject_application(application_id, admin_id) do
     with {:ok, application} <- get_application(application_id),
-         {:ok, _role} <- require_role(application.group_id, admin_id, [:admin, :owner]) do
+         {:ok, _role} <- require_role(application.group_id, admin_id, @moderate_roles) do
       application
       |> GroupApplication.review_changeset(%{
         status: :rejected,

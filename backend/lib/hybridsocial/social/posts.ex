@@ -1462,7 +1462,11 @@ defmodule Hybridsocial.Social.Posts do
   defp can_pin?(%Post{} = post, actor_identity_id) do
     case pin_scope(post) do
       {:group, group_id} ->
-        Hybridsocial.Groups.member_role(group_id, actor_identity_id) in [:owner, :admin]
+        # Pin/unpin is a moderate-tier action — moderators, admins, and
+        # owners all qualify. `can_moderate?/2` also lets instance
+        # staff through, matching the rest of the group permission
+        # ladder.
+        Hybridsocial.Groups.can_moderate?(group_id, actor_identity_id)
 
       {:page, page_id} ->
         Hybridsocial.Pages.can_edit?(page_id, actor_identity_id)

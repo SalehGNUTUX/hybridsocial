@@ -55,13 +55,30 @@
 
   let groupId = $derived(page.params.id!);
 
-  const tabs = [
-    { id: 'general', label: 'General' },
-    { id: 'screening', label: 'Screening' },
-    { id: 'applications', label: 'Applications' },
-    { id: 'members', label: 'Members' },
-    { id: 'invite', label: 'Invite' }
-  ];
+  // Role tiers — match the backend's @moderate_roles / @manage_roles
+  // ladder. Moderators get the moderate-tier tabs (applications,
+  // members for ban/unban) but not General, Screening, or role
+  // changes. Admins/owners get everything.
+  const MANAGE_ROLES = ['admin', 'owner'];
+  const MODERATE_ROLES = ['moderator', 'admin', 'owner'];
+
+  let canManage = $derived(MANAGE_ROLES.includes(group?.role ?? ''));
+  let canModerate = $derived(MODERATE_ROLES.includes(group?.role ?? ''));
+
+  // Tabs are filtered by the role tier the user holds — moderators
+  // open the page straight on the Applications tab since General /
+  // Screening are hidden from them. Tabs render via the filtered
+  // list; the on-page state checks below also gate the per-tab
+  // bodies in case the user types a tab id into the URL.
+  let tabs = $derived(
+    [
+      canManage ? { id: 'general', label: 'General' } : null,
+      canManage ? { id: 'screening', label: 'Screening' } : null,
+      canModerate ? { id: 'applications', label: 'Applications' } : null,
+      canModerate ? { id: 'members', label: 'Members' } : null,
+      canManage ? { id: 'invite', label: 'Invite' } : null
+    ].filter((t) => t !== null) as { id: string; label: string }[]
+  );
 
   onMount(async () => {
     try {
@@ -72,9 +89,16 @@
       visibility = g.visibility;
       joinPolicy = g.join_policy;
 
-      // Redirect if not admin
-      if (g.role !== 'owner' && g.role !== 'admin') {
+      // Redirect if the viewer has no moderation privileges at all.
+      // Members and non-members go back to the group profile;
+      // moderators land on the Applications tab (the first tab they
+      // can see).
+      if (!MODERATE_ROLES.includes(g.role ?? '')) {
         goto(`/groups/${groupId}`);
+        return;
+      }
+      if (!canManage && activeTab === 'general') {
+        activeTab = 'applications';
       }
     } catch {
       goto(`/groups/${groupId}`);
@@ -384,15 +408,23 @@
                 </div>
                 {#if member.role !== 'owner'}
                   <div class="member-actions">
-                    <select
-                      class="input role-select"
-                      value={member.role}
-                      onchange={(e) => handleRoleChange(member.account.id, (e.target as HTMLSelectElement).value)}
-                    >
-                      <option value="member">Member</option>
-                      <option value="moderator">Moderator</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                    {#if canManage}
+                      <select
+                        class="input role-select"
+                        value={member.role}
+                        onchange={(e) => handleRoleChange(member.account.id, (e.target as HTMLSelectElement).value)}
+                      >
+                        <option value="member">Member</option>
+                        <option value="moderator">Moderator</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    {:else}
+                      <!-- Mods see the role label but can't change it.
+                           Promotions and demotions stay an admin-tier
+                           action (lifting moderators above their own
+                           rank would let them silently elevate). -->
+                      <span class="role-badge">{member.role}</span>
+                    {/if}
                     <button type="button" class="btn btn-danger btn-sm" onclick={() => handleBan(member.account.id)}>
                       Ban
                     </button>
@@ -667,6 +699,18 @@
     min-width: 120px;
     padding: var(--space-1) var(--space-2);
     font-size: var(--text-xs);
+  }
+
+  .role-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-container, var(--color-surface));
+    color: var(--color-text-secondary);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: capitalize;
   }
 
   .invite-section {
