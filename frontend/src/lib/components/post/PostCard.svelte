@@ -16,6 +16,7 @@
   import ProfileHoverCard from '$lib/components/ui/ProfileHoverCard.svelte';
   import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
   import { stripTrailingHashtags } from '$lib/utils/hashtag-footer.js';
+  import { renderCustomEmojis } from '$lib/utils/custom-emoji.js';
   import { filterBadges, type Badge } from '$lib/utils/badges.js';
 
   // Seeded PRNG from post ID for deterministic wave patterns
@@ -76,12 +77,34 @@
     compact = false,
     detail = false,
     filterContext = 'home',
+    viewerContext = null,
   }: {
     post: Post;
     compact?: boolean;
     detail?: boolean;
     filterContext?: string;
+    // Tells the card which feed it's being rendered into so it can
+    // suppress the "Pinned" badge / Unpin menu entry when the post's
+    // pin lives in a different scope. Subaccount profiles (groups,
+    // pages, the parent user) are treated as separate profiles: a
+    // group-pin should not read as a profile-pin on the parent
+    // timeline, and vice versa. Leave null to keep the legacy
+    // behaviour (badge shows wherever is_pinned is true) — only
+    // pages that know their viewing context need to set this.
+    viewerContext?: 'profile' | 'group' | 'page' | null;
   } = $props();
+
+  // `is_pinned` is true on the post row; `pin_scope` (added in the
+  // serializer) says where the pin actually applies. Treat the post
+  // as "pinned here" only when the viewer is looking at the same
+  // scope, otherwise the visual leak is exactly what made the user
+  // try to unpin a group-pin from the profile feed.
+  let pinnedHere = $derived(
+    !!post.is_pinned &&
+      (viewerContext === null ||
+        post.pin_scope == null ||
+        viewerContext === post.pin_scope),
+  );
 
   let filterMatch: FilterResult | null = $derived(matchFilters(post.content, post.spoiler_text, filterContext));
   let filterRevealed = $state(false);
@@ -400,10 +423,14 @@
   // `post.content_html` is intentional — re-runs after an edit.
   let displayContentHtml = $derived.by(() => {
     const raw = post.content_html ?? '';
-    // Only attempt trimming when the server says the post has tags;
-    // a post with no hashtag links at all can't match.
-    if (!post.tags || post.tags.length === 0) return raw;
-    return stripTrailingHashtags(raw).html;
+    // Strip the trailing-hashtag footer first (gets surfaced as pills
+    // below the post), then swap any :shortcode: text for the
+    // matching <img> from the per-post emoji manifest. Doing emojis
+    // after the hashtag pass means we don't accidentally drop an
+    // emoji that lives next to a trailing hashtag.
+    const stripped =
+      !post.tags || post.tags.length === 0 ? raw : stripTrailingHashtags(raw).html;
+    return renderCustomEmojis(stripped, post.emojis);
   });
 
   // Poll voting
@@ -646,7 +673,7 @@
 
     <!-- Content column -->
     <div class="post-content-col">
-      {#if post.is_pinned}
+      {#if pinnedHere}
         {@const pinTitle = post.group
           ? `Pinned in ${post.group.name}`
           : post.page
@@ -1026,7 +1053,7 @@
 
       {#if !compact}
         <div class="post-actions-divider"></div>
-        <PostActions {post} onedit={startEditing} />
+        <PostActions {post} {viewerContext} onedit={startEditing} />
       {/if}
     </div>
   </div>
@@ -1668,6 +1695,20 @@
   .post-content :global(h3),
   .post-content :global(h4) {
     unicode-bidi: plaintext;
+  }
+
+  /* Custom emojis injected by renderCustomEmojis. Sized to flow with
+     the surrounding text — Mastodon-style 1.2em tall, baseline-
+     aligned. The trailing `vertical-align: middle` keeps tall glyphs
+     (square stickers) from blowing out the line height. */
+  .post-content :global(img.custom-emoji) {
+    display: inline-block;
+    height: 1.4em;
+    width: auto;
+    max-width: 100%;
+    vertical-align: middle;
+    margin: 0 1px;
+    object-fit: contain;
   }
 
   /* Markdown structure styling. Posts use `white-space: pre-line`

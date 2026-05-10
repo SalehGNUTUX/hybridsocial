@@ -2,6 +2,26 @@
   import type { Notification } from '$lib/api/types.js';
   import { relativeTime } from '$lib/utils/time.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
+  import { premiumCatalog, ensurePremiumCatalog } from '$lib/stores/reaction-catalog.js';
+
+  // Canonical 7 default reactions — must match PostActions/ReactionPicker.
+  // Maps the backend `reaction_type` shortcode to the emoji glyph so
+  // the notification row can show the actual reaction the actor left
+  // instead of a generic thumbs-up icon.
+  const REACTION_EMOJI: Record<string, string> = {
+    like: '\u{1F44D}',
+    love: '\u{2764}\u{FE0F}',
+    wow: '\u{1F92F}',
+    care: '\u{1F970}',
+    angry: '\u{1F621}',
+    sad: '\u{1F622}',
+    lol: '\u{1F602}',
+  };
+
+  // Premium reactions arrive as `:shortcode:` from the backend. Resolve
+  // them through the shared catalog the rest of the app uses; without
+  // it, premium types render as bare text.
+  ensurePremiumCatalog();
 
   let {
     notification,
@@ -36,7 +56,15 @@
         }
         return null;
       case 'group_invite':
+        if (notification.target_type === 'group' && notification.target_id) {
+          return `/groups/${notification.target_id}`;
+        }
         return notification.post ? `/groups/${notification.post.id}` : null;
+      case 'page_invite':
+        if (notification.target_type === 'page' && notification.target_id) {
+          return `/pages/${notification.target_id}`;
+        }
+        return null;
       default:
         return null;
     }
@@ -44,6 +72,28 @@
 
   let timeAgo = $derived(relativeTime(notification.created_at));
   let actorName = $derived(notification.account.display_name || notification.account.handle);
+
+  // For reaction notifications, render the actor's actual emoji
+  // (👍/❤️/🤯/🥰/😡/😢/😂 or a premium glyph) instead of the generic
+  // SVG icon. Premium reactions can be either a Unicode character or
+  // a custom uploaded image, so we surface both an emoji string and
+  // an image URL the template picks between.
+  type ReactionGlyph =
+    | { kind: 'emoji'; emoji: string }
+    | { kind: 'image'; url: string; alt: string };
+
+  let reactionGlyph: ReactionGlyph | null = $derived.by(() => {
+    if (notification.type !== 'reaction' || !notification.reaction_type) return null;
+    const t = notification.reaction_type;
+    if (REACTION_EMOJI[t]) return { kind: 'emoji', emoji: REACTION_EMOJI[t] };
+    // Premium shortcodes arrive in either `:fire:` or bare `fire` form
+    // depending on caller; the catalog is keyed without the colons.
+    const key = t.startsWith(':') && t.endsWith(':') ? t.slice(1, -1) : t;
+    const glyph = $premiumCatalog.get(key);
+    if (glyph?.character) return { kind: 'emoji', emoji: glyph.character };
+    if (glyph?.image_url) return { kind: 'image', url: glyph.image_url, alt: key };
+    return null;
+  });
 
   let description = $derived.by(() => {
     switch (notification.type) {
@@ -72,6 +122,8 @@
         return 'invited you to a group';
       case 'group_application':
         return 'applied to join your group';
+      case 'page_invite':
+        return 'invited you to manage a page';
       case 'report':
         return 'filed a report';
       case 'admin':
@@ -146,9 +198,15 @@
 
 {#snippet body()}
   <div class="notification-icon" style="color: {iconColor}">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d={iconPath} />
-    </svg>
+    {#if reactionGlyph?.kind === 'emoji'}
+      <span class="reaction-emoji" aria-hidden="true">{reactionGlyph.emoji}</span>
+    {:else if reactionGlyph?.kind === 'image'}
+      <img class="reaction-image" src={reactionGlyph.url} alt={reactionGlyph.alt} />
+    {:else}
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d={iconPath} />
+      </svg>
+    {/if}
   </div>
 
   <div class="notification-content">
@@ -261,6 +319,22 @@
     width: 32px;
     height: 32px;
     padding-block-start: var(--space-1);
+  }
+
+  .reaction-emoji {
+    font-size: 22px;
+    line-height: 1;
+    /* Emoji defaults to a serif-ish width inside flex — anchor it so
+       the row aligns with the SVG-icon variant on neighbouring rows. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .reaction-image {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
   }
 
   .notification-content {

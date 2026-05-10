@@ -17,6 +17,7 @@
     compact = false,
     emptyMessage = 'No posts yet',
     filterContext = 'home',
+    viewerContext = null,
     removeOnEvents = [],
     onloadmore,
   }: {
@@ -26,6 +27,9 @@
     compact?: boolean;
     emptyMessage?: string;
     filterContext?: string;
+    // Threaded through to PostCard so the pin badge / Unpin entry are
+    // scope-correct. See PostCard.viewerContext.
+    viewerContext?: 'profile' | 'group' | 'page' | null;
     /**
      * Additional window events that should trigger the
      * post-disolve animation (besides the always-on `post-deleted`).
@@ -204,7 +208,7 @@
             <span>{boost.account?.display_name || boost.account?.handle || 'Someone'} boosted</span>
           </div>
         {/if}
-        <PostCard {post} {compact} {filterContext} />
+        <PostCard {post} {compact} {filterContext} {viewerContext} />
       </div>
     {/if}
   {/each}

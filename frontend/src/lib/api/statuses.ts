@@ -80,7 +80,11 @@ export function pinPost(id: string): Promise<Post> {
 }
 
 export function unpinPost(id: string): Promise<Post> {
-  return api.post(`/api/v1/statuses/${id}/unpin`);
+  // Backend routes unpin as DELETE /api/v1/statuses/:id/pin (mirror
+  // of POST /api/v1/statuses/:id/pin). A previous build POSTed
+  // `/unpin` instead, which 404'd — that's the "Could not update
+  // pin" toast users were hitting from the post menu.
+  return api.delete(`/api/v1/statuses/${id}/pin`);
 }
 
 export function getScheduledPosts(): Promise<Post[]> {

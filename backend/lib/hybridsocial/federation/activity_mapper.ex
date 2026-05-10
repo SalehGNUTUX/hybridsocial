@@ -81,11 +81,47 @@ defmodule Hybridsocial.Federation.ActivityMapper do
       "sensitive" => ap_object["sensitive"] || false,
       "spoiler_text" => ap_object["summary"],
       "language" => extract_language(ap_object),
-      "published_at" => parse_datetime(ap_object["published"])
+      "published_at" => parse_datetime(ap_object["published"]),
+      "emojis" => extract_emojis(ap_object["tag"])
     }
 
     maybe_put(attrs, "parent_ap_id", ap_object["inReplyTo"])
   end
+
+  # AP `Note.tag` is a mixed array — hashtags, mentions, and custom
+  # emojis. Pull just the Emoji entries and normalize to the shape
+  # the renderer wants: `%{"shortcode" => "blob_smile", "url" =>
+  # "https://example/emoji/blob_smile.png", "static_url" => ...}`.
+  # Strips surrounding colons from `name` and drops entries missing
+  # an image URL (some peers ship malformed Emoji objects).
+  defp extract_emojis(nil), do: []
+  defp extract_emojis(tag) when is_list(tag), do: Enum.flat_map(tag, &emoji_entry/1)
+  defp extract_emojis(tag) when is_map(tag), do: emoji_entry(tag)
+  defp extract_emojis(_), do: []
+
+  defp emoji_entry(%{"type" => "Emoji", "name" => name} = tag) when is_binary(name) do
+    shortcode = name |> String.trim() |> String.trim(":")
+    url = extract_emoji_url(tag["icon"])
+
+    if shortcode != "" and is_binary(url) and http_url?(url) do
+      [%{"shortcode" => shortcode, "url" => url, "static_url" => url}]
+    else
+      []
+    end
+  end
+
+  defp emoji_entry(_), do: []
+
+  defp extract_emoji_url(%{"url" => url}) when is_binary(url), do: url
+  defp extract_emoji_url(%{"href" => url}) when is_binary(url), do: url
+  defp extract_emoji_url(url) when is_binary(url), do: url
+  defp extract_emoji_url(_), do: nil
+
+  defp http_url?(url) when is_binary(url) do
+    String.starts_with?(url, "http://") or String.starts_with?(url, "https://")
+  end
+
+  defp http_url?(_), do: false
 
   @doc """
   Converts an AP Actor to remote_actor attributes.

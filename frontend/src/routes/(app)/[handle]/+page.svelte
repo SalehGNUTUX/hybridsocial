@@ -488,6 +488,7 @@
             posts={displayPosts}
             loading={feedLoading}
             {hasMore}
+            viewerContext="profile"
             onloadmore={() => loadPosts(false)}
             emptyMessage={
               activeTab === 'media'

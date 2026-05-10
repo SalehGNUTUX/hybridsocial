@@ -481,13 +481,19 @@ defmodule Hybridsocial.Groups do
              inviter_id,
              :group
            ) do
-      %GroupInvite{}
-      |> GroupInvite.changeset(%{
-        group_id: group_id,
-        invited_by: inviter_id,
-        invited_id: invited_id
-      })
-      |> Repo.insert()
+      result =
+        %GroupInvite{}
+        |> GroupInvite.changeset(%{
+          group_id: group_id,
+          invited_by: inviter_id,
+          invited_id: invited_id
+        })
+        |> Repo.insert()
+
+      with {:ok, invite} <- result do
+        Hybridsocial.Notifications.notify_group_invite(invite)
+        {:ok, invite}
+      end
     else
       {:error, reason} -> {:error, reason}
     end

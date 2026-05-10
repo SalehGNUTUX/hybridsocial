@@ -15,7 +15,13 @@
   } = $props();
 
   let otherParticipants = $derived(
-    conversation.participants.filter((p) => p.id !== currentUserId)
+    // Backend's participant payload is the join-row, where `id` is the
+    // conversation_participant row id (per-conversation) and
+    // `identity_id` is the actual viewer identity. Compare against
+    // the latter — comparing `p.id` to `currentUserId` (identity uuid)
+    // never matches, so the row never filters out the viewer and the
+    // sidebar ends up showing their own avatar + name.
+    conversation.participants.filter((p) => p.identity_id !== currentUserId)
   );
 
   let displayName = $derived(

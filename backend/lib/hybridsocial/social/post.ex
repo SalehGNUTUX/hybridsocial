@@ -29,6 +29,14 @@ defmodule Hybridsocial.Social.Post do
     field :open_report_count, :integer, default: 0
     field :is_pinned, :boolean, default: false
 
+    # Per-post custom-emoji manifest. Each entry is a map with at
+    # least `shortcode` and `url`; the renderer swaps `:shortcode:`
+    # text in `content`/`content_html` for an <img> at render time.
+    # Federated posts populate this from the AP `tag` array's Emoji
+    # entries; local posts can leave it empty (instance emojis are
+    # picked up from the global custom_emojis table instead).
+    field :emojis, {:array, :map}, default: []
+
     field :ap_id, :string
     field :parent_ap_id, :string
 
@@ -105,7 +113,8 @@ defmodule Hybridsocial.Social.Post do
       :scheduled_at,
       :ap_id,
       :parent_ap_id,
-      :last_activity_at
+      :last_activity_at,
+      :emojis
     ])
     |> normalize_content()
     |> validate_required([:identity_id])

@@ -1,14 +1,14 @@
 <script lang="ts">
-  import type { Identity } from '$lib/api/types.js';
+  import type { ConversationParticipant } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
 
   let {
     participants,
   }: {
-    participants: Identity[];
+    participants: ConversationParticipant[];
   } = $props();
 
-  function nameFor(p: Identity): string {
+  function nameFor(p: ConversationParticipant): string {
     return p.display_name || p.acct || p.handle || 'Unknown';
   }
 </script>

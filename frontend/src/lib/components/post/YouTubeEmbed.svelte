@@ -87,7 +87,7 @@
     <iframe
       bind:this={iframeEl}
       class="yt-frame"
-      src={youtubeEmbedUrl(ref.id, ref.start)}
+      src={youtubeEmbedUrl(ref)}
       title={title || 'YouTube video'}
       loading="lazy"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -102,7 +102,7 @@
       onkeydown={onKey}
       aria-label={title ? `Play video: ${title}` : 'Play YouTube video'}
     >
-      {#if !thumbBroken}
+      {#if ref.id && !thumbBroken}
         <img
           class="yt-thumb"
           src={youtubeThumbnail(ref.id)}
@@ -120,11 +120,27 @@
         </svg>
       </span>
       <span class="yt-corner" aria-hidden="true">YouTube</span>
+      {#if ref.list}
+        <!-- Quick visual hint that this is a playlist so the user knows
+             tapping play lands on a YouTube-rendered playlist UI with
+             every video in the list selectable, not a single clip. -->
+        <span class="yt-playlist-badge" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          Playlist
+        </span>
+      {/if}
     </button>
     {#if title}
       <a
         class="yt-meta"
-        href={youtubeWatchUrl(ref.id, ref.start)}
+        href={youtubeWatchUrl(ref)}
         target="_blank"
         rel="noopener noreferrer"
         onclick={(e) => e.stopPropagation()}
@@ -213,6 +229,21 @@
     padding: 2px 6px;
     border-radius: var(--radius-sm);
     text-transform: uppercase;
+  }
+
+  .yt-playlist-badge {
+    position: absolute;
+    top: var(--space-2);
+    inset-inline-end: var(--space-2);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.65);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
   }
 
   .yt-meta {

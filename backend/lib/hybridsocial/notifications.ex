@@ -63,9 +63,35 @@ defmodule Hybridsocial.Notifications do
       target_type: n.target_type,
       target_id: n.target_id,
       created_at: n.inserted_at,
+      reaction_type: stream_reaction_type(n),
       actor: HybridsocialWeb.Helpers.Account.serialize_summary(n.actor)
     }
   end
+
+  # Look up the actor's current reaction emoji so the SSE push can
+  # render the right glyph (👍 / ❤️ / 😂 / …) instead of falling back
+  # to the generic thumb. Single row keyed on (post_id, identity_id)
+  # with target_media_id NULL — the post-level reaction is the one
+  # the bell was rung for.
+  defp stream_reaction_type(%Notification{
+         type: "reaction",
+         target_type: "post",
+         target_id: post_id,
+         actor_id: actor_id
+       })
+       when is_binary(post_id) and is_binary(actor_id) do
+    import Ecto.Query
+
+    Hybridsocial.Social.Reaction
+    |> where(
+      [r],
+      r.post_id == ^post_id and r.identity_id == ^actor_id and is_nil(r.target_media_id)
+    )
+    |> select([r], r.type)
+    |> Repo.one()
+  end
+
+  defp stream_reaction_type(_), do: nil
 
   def list_notifications(identity_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 20)
@@ -262,10 +288,20 @@ defmodule Hybridsocial.Notifications do
   def notify_group_invite(invite) do
     create_notification(%{
       recipient_id: invite.invited_id,
-      actor_id: invite.inviter_id,
+      actor_id: invite.invited_by,
       type: "group_invite",
       target_type: "group",
       target_id: invite.group_id
+    })
+  end
+
+  def notify_page_invite(invite) do
+    create_notification(%{
+      recipient_id: invite.invited_id,
+      actor_id: invite.invited_by,
+      type: "page_invite",
+      target_type: "page",
+      target_id: invite.page_id
     })
   end
 
@@ -357,6 +393,7 @@ defmodule Hybridsocial.Notifications do
       "poll_ended" -> "A poll has ended"
       "group_invite" -> "#{actor_name} invited you to a group"
       "group_application" -> "New group membership application"
+      "page_invite" -> "#{actor_name} invited you to manage a page"
       "report" -> "New report filed"
       "admin" -> "Admin notification"
       _ -> "New notification"
@@ -375,6 +412,7 @@ defmodule Hybridsocial.Notifications do
       "poll_ended" -> "A poll you participated in has ended"
       "group_invite" -> "You have been invited to join a group"
       "group_application" -> "Someone applied to join your group"
+      "page_invite" -> "You have been invited to manage a page"
       "report" -> "A new report requires attention"
       "admin" -> "You have an admin notification"
       _ -> "You have a new notification"

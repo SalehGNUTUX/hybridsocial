@@ -5,8 +5,8 @@ defmodule Hybridsocial.Notifications.Notification do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @valid_types ~w(follow follow_request reaction boost quote reply mention poll_ended group_invite group_application report admin)
-  @valid_target_types ~w(post group conversation)
+  @valid_types ~w(follow follow_request reaction boost quote reply mention poll_ended group_invite group_application page_invite report admin)
+  @valid_target_types ~w(post group conversation page)
 
   schema "notifications" do
     field :type, :string

@@ -19,6 +19,7 @@
   import Tabs from '$lib/components/ui/Tabs.svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { addToast } from '$lib/stores/toast.js';
 
   let group = $state<GroupDetail | null>(null);
   let loading = $state(true);
@@ -247,9 +248,19 @@
     inviting = true;
     try {
       await inviteToGroup(groupId, accountId);
+      // Drop the invitee from the result list immediately so a quick
+      // double-click can't re-fire the request and 422 on duplicate.
       inviteResults = inviteResults.filter((a) => a.id !== accountId);
-    } catch {
-      // Error
+      addToast('Invite sent', 'success');
+    } catch (err: unknown) {
+      const apiErr = err as { body?: { error?: string }; message?: string };
+      const msg =
+        apiErr?.body?.error === 'invite.disabled_by_recipient'
+          ? "This user doesn't accept invites"
+          : apiErr?.body?.error === 'invite.recipient_follows_only'
+            ? 'Only people they follow can invite them'
+            : apiErr?.message || 'Could not send invite';
+      addToast(msg, 'error');
     } finally {
       inviting = false;
     }

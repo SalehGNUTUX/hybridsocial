@@ -6,15 +6,30 @@
   import { pinPost, unpinPost } from '$lib/api/statuses.js';
   import { get } from 'svelte/store';
   import ReactionPicker from './ReactionPicker.svelte';
+  import RadialReactionPicker from './RadialReactionPicker.svelte';
   import { markSeen } from '$lib/utils/seen-posts.js';
 
   let {
     post,
     onedit,
+    viewerContext = null,
   }: {
     post: Post;
     onedit?: () => void;
+    // Matches PostCard.viewerContext. Used so the pin menu entry
+    // disappears when the post's pin lives in a scope different from
+    // the feed the user is looking at — i.e. don't offer "Unpin" from
+    // the profile feed when the pin actually belongs to a group.
+    viewerContext?: 'profile' | 'group' | 'page' | null;
   } = $props();
+
+  // What scope this post's pin lives in. Falls back to the
+  // implicit scope inferred from group_id / page_id presence for
+  // older backends that don't yet ship `pin_scope`.
+  let pinScope = $derived<'profile' | 'group' | 'page'>(
+    (post.pin_scope as 'profile' | 'group' | 'page' | null | undefined) ??
+      (post.group ? 'group' : post.page ? 'page' : 'profile'),
+  );
 
   // Canonical 7 default reactions — must match ReactionPicker.svelte
   // exactly so a click on 👍 doesn't display as 😀 elsewhere on the
@@ -56,6 +71,29 @@
   let isBookmarked = $state(!!post.is_bookmarked);
   let currentReaction = $state(post.current_user_reaction);
   let showReactionPicker = $state(false);
+
+  // ── Touch dial state ─────────────────────────────────────────────
+  // Long-press on the like button opens a radial picker (see
+  // RadialReactionPicker.svelte). The desktop hover-grid above is
+  // untouched — those handlers fire on real mouseenter, not on touch.
+  let radialOpen = $state(false);
+  let radialOriginX = $state(0);
+  let radialOriginY = $state(0);
+  let radialTouchX = $state(0);
+  let radialTouchY = $state(0);
+  let radialHighlighted = $state<string | null>(null);
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  // Track the starting touch point so we can cancel the long-press
+  // when the user starts scrolling instead of holding.
+  let touchStartX = 0;
+  let touchStartY = 0;
+  // Set to true once the dial is committed (or cancelled) so the
+  // synthetic click that follows touchend doesn't fall through to
+  // toggleReactionPicker() and double-fire as a stray "like".
+  let touchHandled = false;
+  const LONG_PRESS_MS = 320;
+  const SCROLL_CANCEL_PX = 12;
+
   // Below-vs-above flip: the picker normally renders above the like
   // button, but on a post near the top of the viewport that sends
   // the picker off the top of the screen. Measure the trigger rect
@@ -258,6 +296,14 @@
 
   function toggleReactionPicker(e: MouseEvent) {
     e.stopPropagation();
+    // A touch sequence already handled this interaction (long-press
+    // landed on an emoji, or the user released on the dead-zone) —
+    // the synthetic click that follows touchend would otherwise
+    // double-fire as an unintended "like". Reset and bail.
+    if (touchHandled) {
+      touchHandled = false;
+      return;
+    }
     // If already reacted, clicking removes the reaction.
     if (currentReaction) {
       handleReaction(currentReaction);
@@ -269,6 +315,96 @@
     showMoreMenu = false;
     showReactionDetail = false;
     handleReaction('like');
+  }
+
+  // The default 7 reactions, used by the radial dial. Mirrors the
+  // canonical list in ReactionPicker.svelte / reactionEmojis above —
+  // keep the three in sync.
+  const radialReactions = [
+    { type: 'like', emoji: '\u{1F44D}', label: 'Like' },
+    { type: 'love', emoji: '\u{2764}\u{FE0F}', label: 'Love' },
+    { type: 'wow', emoji: '\u{1F92F}', label: 'Wow' },
+    { type: 'care', emoji: '\u{1F970}', label: 'Care' },
+    { type: 'angry', emoji: '\u{1F621}', label: 'Angry' },
+    { type: 'sad', emoji: '\u{1F622}', label: 'Sad' },
+    { type: 'lol', emoji: '\u{1F602}', label: 'LOL' },
+  ];
+
+  function reactionTouchStart(e: TouchEvent) {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchHandled = false;
+    // Center the dial on the like button, not on the finger — keeps
+    // the arc symmetric regardless of where the user pressed.
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    radialOriginX = rect.left + rect.width / 2;
+    radialOriginY = rect.top + rect.height / 2;
+    radialTouchX = t.clientX;
+    radialTouchY = t.clientY;
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      radialOpen = true;
+      // Subtle haptic so the user knows the dial has armed.
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(12);
+      }
+    }, LONG_PRESS_MS);
+  }
+
+  function reactionTouchMove(e: TouchEvent) {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    radialTouchX = t.clientX;
+    radialTouchY = t.clientY;
+
+    // If the user has clearly started scrolling before the long-press
+    // fires, abort the long-press so the page can scroll normally.
+    if (longPressTimer) {
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      if (Math.hypot(dx, dy) > SCROLL_CANCEL_PX) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    } else if (radialOpen) {
+      // Stop the browser from also treating the move as a scroll —
+      // once the dial is open, the gesture belongs to us.
+      if (e.cancelable) e.preventDefault();
+    }
+  }
+
+  function reactionTouchEnd(e: TouchEvent) {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    if (radialOpen) {
+      // Suppress the synthetic click that immediately follows
+      // touchend, so the toggle handler doesn't also fire "like".
+      if (e.cancelable) e.preventDefault();
+      touchHandled = true;
+      const picked = radialHighlighted;
+      radialOpen = false;
+      radialHighlighted = null;
+      if (picked) {
+        handleReaction(picked);
+      }
+      // Reset touchHandled after a microtask so the click flag
+      // remains set for the very next click but doesn't leak.
+      setTimeout(() => { touchHandled = false; }, 400);
+    }
+  }
+
+  function reactionTouchCancel() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    radialOpen = false;
+    radialHighlighted = null;
   }
 
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -744,7 +880,11 @@
         class:bounce={bounceReaction}
         bind:this={reactionTriggerEl}
         onclick={toggleReactionPicker}
-        aria-label="React"
+        ontouchstart={reactionTouchStart}
+        ontouchmove={reactionTouchMove}
+        ontouchend={reactionTouchEnd}
+        ontouchcancel={reactionTouchCancel}
+        aria-label="React (long-press for more)"
         aria-expanded={showReactionPicker}
       >
         {#if currentReaction}
@@ -773,6 +913,17 @@
         </div>
       {/if}
     </div>
+
+    {#if radialOpen}
+      <RadialReactionPicker
+        originX={radialOriginX}
+        originY={radialOriginY}
+        touchX={radialTouchX}
+        touchY={radialTouchY}
+        reactions={radialReactions}
+        bind:highlightedType={radialHighlighted}
+      />
+    {/if}
 
     <!-- Comment -->
     {#if post.replies_locked_at}
@@ -875,10 +1026,24 @@
           {isPostMuted ? 'Unmute notifications' : 'Mute notifications'}
         </button>
         {#if isOwnPost()}
-          <button type="button" class="more-menu-item" role="menuitem" onclick={handlePinToggle}>
-            <span class="material-symbols-outlined menu-icon">{isPinned ? 'keep_off' : 'push_pin'}</span>
-            {isPinned ? 'Unpin from profile' : 'Pin to profile'}
-          </button>
+          {#if !isPinned || viewerContext === null || viewerContext === pinScope}
+            {@const pinNoun =
+              pinScope === 'group'
+                ? (post.group?.name ? `from ${post.group.name}` : 'from group')
+                : pinScope === 'page'
+                  ? (post.page?.name ? `from ${post.page.name}` : 'from page')
+                  : 'from profile'}
+            {@const pinNounAdd =
+              pinScope === 'group'
+                ? (post.group?.name ? `in ${post.group.name}` : 'in group')
+                : pinScope === 'page'
+                  ? (post.page?.name ? `on ${post.page.name}` : 'on page')
+                  : 'to profile'}
+            <button type="button" class="more-menu-item" role="menuitem" onclick={handlePinToggle}>
+              <span class="material-symbols-outlined menu-icon">{isPinned ? 'keep_off' : 'push_pin'}</span>
+              {isPinned ? `Unpin ${pinNoun}` : `Pin ${pinNounAdd}`}
+            </button>
+          {/if}
           {#if !post.edit_expires_at || new Date(post.edit_expires_at) > new Date()}
             <button type="button" class="more-menu-item" role="menuitem" onclick={handleEdit}>
               <span class="material-symbols-outlined menu-icon">edit</span>
@@ -1361,6 +1526,11 @@
   .action-like {
     position: relative;
     overflow: visible;
+    /* The radial picker hijacks long-press + drag on this button.
+       Without disabling touch-action, mobile Chrome treats the
+       gesture as a scroll and never fires our touchmove updates,
+       leaving the dial frozen on the initial touch point. */
+    touch-action: none;
   }
 
   /* ---- Stacked emoji display (right-side social proof) ---- */

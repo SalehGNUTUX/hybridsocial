@@ -78,6 +78,22 @@ defmodule Hybridsocial.Content.LinkPreviews do
   end
 
   defp fetch_remote(url) do
+    cond do
+      youtube_url?(url) ->
+        case fetch_youtube_oembed(url) do
+          {:ok, meta} -> {:ok, meta}
+          # oEmbed can fail when YouTube hides a video (region-blocked,
+          # private, age-gated). Fall through to the normal HTML
+          # parse so we still get *something* in the card.
+          {:error, _} -> fetch_remote_html(url)
+        end
+
+      true ->
+        fetch_remote_html(url)
+    end
+  end
+
+  defp fetch_remote_html(url) do
     with {:ok, _url} <- validate_url(url) do
       headers = [{"User-Agent", user_agent_for(url)}]
 
@@ -147,6 +163,75 @@ defmodule Hybridsocial.Content.LinkPreviews do
         end
     end
   end
+
+  # YouTube serves an SPA shell to non-Googlebot user agents — the
+  # <title> ends up as a bare " - YouTube" because the real value is
+  # injected by client-side JS we never run. Use the public oEmbed
+  # endpoint instead: works without auth, returns clean JSON, and
+  # gives us the playlist title on /playlist links and the video
+  # title on /watch links. Matches youtu.be, youtube.com, m.youtube,
+  # music.youtube, and the regional youtube.<cctld> shortcuts.
+  defp youtube_url?(url) do
+    case URI.parse(url) do
+      %URI{host: host} when is_binary(host) ->
+        host
+        |> String.downcase()
+        |> String.replace_prefix("www.", "")
+        |> case do
+          "youtu.be" -> true
+          "youtube.com" -> true
+          "m.youtube.com" -> true
+          "music.youtube.com" -> true
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp fetch_youtube_oembed(url) do
+    oembed_url =
+      "https://www.youtube.com/oembed?format=json&url=" <> URI.encode_www_form(url)
+
+    headers = [{"User-Agent", @default_user_agent}, {"Accept", "application/json"}]
+    options = [recv_timeout: @fetch_timeout, timeout: @fetch_timeout, follow_redirect: true, max_redirect: 2]
+
+    case HTTPoison.get(oembed_url, headers, options) do
+      {:ok, %HTTPoison.Response{status_code: status, body: body}}
+      when status >= 200 and status < 300 ->
+        case Jason.decode(body) do
+          {:ok, json} ->
+            {:ok,
+             %{
+               title: decode_entities(Map.get(json, "title")),
+               # YouTube oEmbed doesn't ship a description. The author
+               # name is the most useful thing to surface in the card
+               # subtitle ("by Channel Name") so the card isn't blank.
+               description: build_youtube_description(json),
+               image: Map.get(json, "thumbnail_url"),
+               site_name: "YouTube"
+             }}
+
+          {:error, _} ->
+            {:error, :invalid_oembed_response}
+        end
+
+      {:ok, %HTTPoison.Response{status_code: status}} ->
+        # 401/403 = embedding disabled; 404 = video taken down / private.
+        # Either way, oEmbed isn't going to help — let the caller fall
+        # back to the HTML path.
+        {:error, {:http_error, status}}
+
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, reason}
+    end
+  end
+
+  defp build_youtube_description(%{"author_name" => name}) when is_binary(name) and name != "",
+    do: "by " <> name
+
+  defp build_youtube_description(_), do: nil
 
   @doc """
   Extracts URLs from text content using regex.

@@ -100,7 +100,10 @@ export function rejectApplication(groupId: string, applicationId: string): Promi
 }
 
 export function inviteToGroup(groupId: string, accountId: string): Promise<void> {
-  return api.post(`/api/v1/groups/${groupId}/invite`, { account_id: accountId });
+  // Backend reads `invited_id` (matches the GroupInvite schema column);
+  // sending `account_id` made every invite fail validation silently
+  // since the changeset's validate_required([:invited_id]) kicked in.
+  return api.post(`/api/v1/groups/${groupId}/invite`, { invited_id: accountId });
 }
 
 export function updateMemberRole(groupId: string, accountId: string, role: string): Promise<void> {

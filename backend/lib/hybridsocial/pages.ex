@@ -300,13 +300,19 @@ defmodule Hybridsocial.Pages do
            org.owner_id == inviter_id or
              has_role?(page_identity_id, inviter_id, ["admin", "editor"]),
          :ok <- Hybridsocial.Accounts.InvitePrefs.check(invited_id, inviter_id, :page) do
-      %PageInvite{}
-      |> PageInvite.changeset(%{
-        page_id: page_identity_id,
-        invited_by: inviter_id,
-        invited_id: invited_id
-      })
-      |> Repo.insert()
+      result =
+        %PageInvite{}
+        |> PageInvite.changeset(%{
+          page_id: page_identity_id,
+          invited_by: inviter_id,
+          invited_id: invited_id
+        })
+        |> Repo.insert()
+
+      with {:ok, invite} <- result do
+        Hybridsocial.Notifications.notify_page_invite(invite)
+        {:ok, invite}
+      end
     else
       false -> {:error, :forbidden}
       {:error, reason} -> {:error, reason}

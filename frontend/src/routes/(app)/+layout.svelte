@@ -6,7 +6,7 @@
   import StaffOtpBanner from '$lib/components/ui/StaffOtpBanner.svelte';
   import OnboardingModal from '$lib/components/ui/OnboardingModal.svelte';
   import { authStore } from '$lib/stores/auth.js';
-  import { connectNotificationStream, disconnectNotificationStream } from '$lib/stores/notifications.js';
+  import { connectNotificationStream, disconnectNotificationStream, hydrateUnreadCount } from '$lib/stores/notifications.js';
   import { connectChatStream, disconnectChatStream } from '$lib/stores/chat-stream.js';
   import { initSound } from '$lib/stores/sound.js';
   import { initDmUnread } from '$lib/stores/dm-unread.js';
@@ -59,6 +59,7 @@
       streamsStarted = true;
       const apiBase = import.meta.env.VITE_API_URL || '';
       connectNotificationStream(apiBase);
+      hydrateUnreadCount();
       connectChatStream(apiBase);
       initSound();
       initDmUnread();

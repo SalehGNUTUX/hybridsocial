@@ -942,7 +942,16 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    font: inherit;
+    /* `font: inherit` (shorthand) also resets font-size to inherit
+       from the <nav>, which has no font-size declared and so falls
+       back to the root 1rem. That clobbered the `var(--text-xs)`
+       on `.footer-link` and made "Shortcuts" render larger than the
+       neighbouring About / Privacy / Terms links. Only inherit the
+       family/weight/line-height we actually want; keep the size and
+       color from the .footer-link rule. */
+    font-family: inherit;
+    font-weight: inherit;
+    line-height: inherit;
   }
 
   .footer-dot {

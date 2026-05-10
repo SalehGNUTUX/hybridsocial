@@ -4,6 +4,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
   alias Hybridsocial.Notifications
   alias Hybridsocial.Repo
   alias Hybridsocial.Social.Post
+  alias Hybridsocial.Social.Reaction
   alias Hybridsocial.Media
   import Ecto.Query
   import HybridsocialWeb.Helpers.Pagination, only: [clamp_limit: 1]
@@ -39,7 +40,8 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
       end
 
     posts = preload_target_posts(page)
-    serialized = Enum.map(page, &serialize_notification(&1, posts))
+    reactions = preload_reaction_types(page)
+    serialized = Enum.map(page, &serialize_notification(&1, posts, reactions))
 
     conn
     |> put_status(:ok)
@@ -56,7 +58,8 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
 
       notification ->
         posts = preload_target_posts([notification])
-        conn |> put_status(:ok) |> json(serialize_notification(notification, posts))
+        reactions = preload_reaction_types([notification])
+        conn |> put_status(:ok) |> json(serialize_notification(notification, posts, reactions))
     end
   end
 
@@ -67,6 +70,16 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
     conn |> put_status(:ok) |> json(%{message: "notifications.cleared"})
   end
 
+  # GET /api/v1/notifications/unread_count
+  # Lightweight count-only response so the navbar bell can hydrate
+  # its unread badge on app boot without paying the cost of fetching
+  # the full first page of items.
+  def unread_count(conn, _params) do
+    identity = conn.assigns.current_identity
+    count = Notifications.unread_count(identity.id)
+    conn |> put_status(:ok) |> json(%{count: count})
+  end
+
   # POST /api/v1/notifications/:id/read
   def mark_read(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
@@ -75,7 +88,8 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
       {:ok, notification} ->
         notification = Repo.preload(notification, :actor)
         posts = preload_target_posts([notification])
-        conn |> put_status(:ok) |> json(serialize_notification(notification, posts))
+        reactions = preload_reaction_types([notification])
+        conn |> put_status(:ok) |> json(serialize_notification(notification, posts, reactions))
 
       {:error, :not_found} ->
         conn |> put_status(:not_found) |> json(%{error: "notification.not_found"})
@@ -137,10 +151,15 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  defp serialize_notification(notification, posts) do
+  defp serialize_notification(notification, posts, reactions) do
     post =
       if notification.target_type == "post" and notification.target_id do
         Map.get(posts, notification.target_id)
+      end
+
+    reaction_type =
+      if notification.type == "reaction" and notification.target_type == "post" do
+        Map.get(reactions, {notification.actor_id, notification.target_id})
       end
 
     %{
@@ -151,8 +170,40 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
       account: HybridsocialWeb.Helpers.Account.serialize_summary(notification.actor),
       target_type: notification.target_type,
       target_id: notification.target_id,
+      reaction_type: reaction_type,
       post: serialize_post_preview(post)
     }
+  end
+
+  # For reaction notifications, look up the actor's current reaction
+  # on the post so the client can render the actual emoji instead of
+  # a generic thumb. Single query keyed on (actor_id, post_id) — the
+  # post-level reaction (target_media_id IS NULL) is the one the
+  # bell was rung for. If the actor since cleared their reaction, the
+  # row is gone and `reaction_type` falls back to nil.
+  defp preload_reaction_types(notifications) do
+    pairs =
+      notifications
+      |> Enum.filter(&(&1.type == "reaction" and &1.target_type == "post" and not is_nil(&1.target_id)))
+      |> Enum.map(&{&1.actor_id, &1.target_id})
+      |> Enum.uniq()
+
+    case pairs do
+      [] ->
+        %{}
+
+      _ ->
+        actor_ids = pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+        post_ids = pairs |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+        wanted = MapSet.new(pairs)
+
+        Reaction
+        |> where([r], r.identity_id in ^actor_ids and r.post_id in ^post_ids and is_nil(r.target_media_id))
+        |> select([r], {r.identity_id, r.post_id, r.type})
+        |> Repo.all()
+        |> Enum.filter(fn {aid, pid, _} -> MapSet.member?(wanted, {aid, pid}) end)
+        |> Map.new(fn {aid, pid, type} -> {{aid, pid}, type} end)
+    end
   end
 
   # Look up every `post` target across the notification list in a

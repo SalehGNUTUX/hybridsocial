@@ -41,7 +41,10 @@
   let conversationId = $derived(page.params.id!);
 
   let otherParticipants = $derived(
-    conversation?.participants.filter((p) => p.id !== userId) ?? []
+    // `id` is the conversation_participant row uuid; the viewer's
+    // identity matches `identity_id`. See ConversationParticipant in
+    // types.ts.
+    conversation?.participants.filter((p) => p.identity_id !== userId) ?? []
   );
 
   let displayName = $derived(

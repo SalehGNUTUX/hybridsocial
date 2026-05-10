@@ -334,6 +334,7 @@
             {posts}
             loading={postsLoading}
             hasMore={false}
+            viewerContext="page"
             emptyMessage="No posts yet"
           />
         {:else if activeTab === 'about'}

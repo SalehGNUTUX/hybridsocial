@@ -95,6 +95,16 @@ export function changeUserTier(id: string, tier: string): Promise<{ data: AdminU
   return api.put(`/api/v1/admin/users/${id}/tier`, { tier });
 }
 
+// Admin override for the per-tier rule that blocks verified accounts
+// from editing their own display_name. Goes through admin_update_changeset
+// on the backend, which skips that rule.
+export function editUserProfile(
+  id: string,
+  attrs: { display_name?: string | null; bio?: string | null },
+): Promise<{ data: AdminUser }> {
+  return api.put(`/api/v1/admin/users/${id}/profile`, attrs);
+}
+
 // Reports
 export function getReports(params?: Record<string, string>): Promise<PaginatedResponse<AdminReport>> {
   return api.get('/api/v1/admin/reports', params);

@@ -9,7 +9,7 @@
     forceSensitiveUser, unforceSensitiveUser, revokeAllSessions,
     setTrustLevel, getModerationNotes, createModerationNote, deleteModerationNote,
     resetUserPassword, sendUserPasswordResetEmail, disableUserTwoFactor, changeUserEmail,
-    confirmUserEmail, changeUserTier,
+    confirmUserEmail, changeUserTier, editUserProfile,
     getRoles, getUserRoles, assignUserRole, revokeUserRole,
     type UserRoleAssignment
   } from '$lib/api/admin.js';
@@ -79,6 +79,15 @@
   let tierTarget: AdminUser | null = $state(null);
   let tierValue = $state('free');
   let tierSubmitting = $state(false);
+
+  // Edit-profile modal — admin override of the verified-account
+  // display_name lock. Same backend (admin_update_changeset) skips
+  // the per-user rule for free-text profile fields.
+  let profileModalOpen = $state(false);
+  let profileTarget: AdminUser | null = $state(null);
+  let profileDisplayName = $state('');
+  let profileBio = $state('');
+  let profileSubmitting = $state(false);
 
   const tierOptions: { value: string; label: string; description: string }[] = [
     { value: 'free', label: 'Free (L0)', description: 'Default — unverified account' },
@@ -450,6 +459,37 @@
     tierValue = user.verification_tier || 'free';
     tierModalOpen = true;
     openDropdownId = null;
+  }
+
+  function openProfileModal(user: AdminUser) {
+    profileTarget = user;
+    profileDisplayName = user.display_name || '';
+    profileBio = user.bio || '';
+    profileModalOpen = true;
+    openDropdownId = null;
+  }
+
+  async function handleSaveProfile() {
+    if (!profileTarget) return;
+    profileSubmitting = true;
+    try {
+      const res = await editUserProfile(profileTarget.id, {
+        display_name: profileDisplayName.trim() || null,
+        bio: profileBio.trim() || null,
+      });
+      const updated = (res as any).data;
+      users = users.map((u) =>
+        u.id === profileTarget!.id
+          ? { ...u, display_name: updated?.display_name ?? profileDisplayName }
+          : u
+      );
+      addToast(`Profile updated for @${profileTarget.handle}`, 'success');
+      profileModalOpen = false;
+    } catch (e: any) {
+      addToast(e?.message || 'Failed to update profile', 'error');
+    } finally {
+      profileSubmitting = false;
+    }
   }
 
   async function handleChangeTier() {
@@ -875,6 +915,9 @@
                   <button class="dropdown-item" type="button" onclick={() => openTierModal(row as unknown as AdminUser)}>
                     Set Verification Tier…
                   </button>
+                  <button class="dropdown-item" type="button" onclick={() => openProfileModal(row as unknown as AdminUser)}>
+                    Edit Profile…
+                  </button>
                 {/if}
                 <hr class="dropdown-divider" />
                 <button class="dropdown-item" type="button" onclick={() => openNotesModal(row as unknown as AdminUser)}>
@@ -1022,6 +1065,49 @@
         onclick={handleChangeTier}
       >
         {tierSubmitting ? 'Saving...' : 'Save'}
+      </button>
+    </div>
+  {/if}
+</Modal>
+
+<!-- Edit Profile Modal — admin override for verified-account display_name lock -->
+<Modal bind:open={profileModalOpen} title="Edit Profile">
+  {#if profileTarget}
+    <p class="modal-text">
+      Change display name and bio for <strong>@{profileTarget.handle}</strong>.
+      Admin overrides bypass the verified-account display-name lock.
+    </p>
+    <div class="form-group">
+      <label class="form-label" for="profile-display-name">Display name</label>
+      <input
+        id="profile-display-name"
+        class="input"
+        type="text"
+        bind:value={profileDisplayName}
+        maxlength="50"
+        placeholder="(none)"
+      />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="profile-bio">Bio</label>
+      <textarea
+        id="profile-bio"
+        class="input"
+        bind:value={profileBio}
+        maxlength="500"
+        rows="3"
+        placeholder="(none)"
+      ></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" onclick={() => (profileModalOpen = false)}>Cancel</button>
+      <button
+        class="btn btn-primary"
+        type="button"
+        disabled={profileSubmitting}
+        onclick={handleSaveProfile}
+      >
+        {profileSubmitting ? 'Saving...' : 'Save'}
       </button>
     </div>
   {/if}

@@ -2081,7 +2081,12 @@
     padding: 24px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
     z-index: var(--z-modal);
-    overflow: visible;
+    /* Allow internal scroll once the content (textarea + many media
+       tiles + footer) exceeds the panel's max-height — previously
+       `overflow: visible` let the tile grid spill outside the rounded
+       card on mobile when 8–10 attachments stacked vertically. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
     animation: pop-in 0.2s ease both;
   }
 
@@ -2332,7 +2337,19 @@
     gap: 8px;
     flex-wrap: wrap;
     padding: 8px 0;
+    /* Indent under the textarea (48px avatar + 16px gap = 64px) so the
+       grid lines up with the input on desktop. On narrow phones the
+       indent leaves so little width that 80px tiles can only fit one
+       per row and the layout looks ragged — the @media rule below
+       drops the indent to recover the full content width. */
     margin-inline-start: 64px;
+    min-width: 0;
+  }
+
+  @media (max-width: 600px) {
+    .media-previews {
+      margin-inline-start: 0;
+    }
   }
 
   .media-preview-item {

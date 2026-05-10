@@ -351,6 +351,7 @@ defmodule HybridsocialWeb.Router do
     pipe_through [:api, :authenticated]
 
     get "/", NotificationController, :index
+    get "/unread_count", NotificationController, :unread_count
     post "/clear", NotificationController, :clear
     get "/:id", NotificationController, :show
     post "/:id/read", NotificationController, :mark_read

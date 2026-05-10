@@ -168,7 +168,11 @@ defmodule Hybridsocial.Accounts.Identity do
 
   defp reject_display_name_change_if_verified(changeset) do
     if get_change(changeset, :display_name) && verified_tier?(changeset.data) do
-      add_error(changeset, :display_name, "cannot be changed for verified accounts")
+      add_error(
+        changeset,
+        :display_name,
+        "Verified accounts can't change their display name. Contact an admin."
+      )
     else
       changeset
     end

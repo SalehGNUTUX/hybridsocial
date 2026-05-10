@@ -20,6 +20,10 @@ export function getNotification(id: string): Promise<Notification> {
   return api.get(`/api/v1/notifications/${id}`);
 }
 
+export function getUnreadNotificationCount(): Promise<{ count: number }> {
+  return api.get('/api/v1/notifications/unread_count');
+}
+
 export function markNotificationRead(id: string): Promise<void> {
   return api.post(`/api/v1/notifications/${id}/read`);
 }

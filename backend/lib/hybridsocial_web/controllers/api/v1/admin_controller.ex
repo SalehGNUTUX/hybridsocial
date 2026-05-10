@@ -3006,6 +3006,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       handle: display_handle,
       acct: acct,
       display_name: identity.display_name,
+      bio: identity.bio,
       avatar_url: identity.avatar_url,
       type: HybridsocialWeb.Helpers.Account.api_type(identity.type),
       domain: domain,

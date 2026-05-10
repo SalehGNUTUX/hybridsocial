@@ -250,6 +250,7 @@
             {posts}
             loading={postsLoading}
             hasMore={hasMorePosts}
+            viewerContext="group"
             emptyMessage="No posts in this group yet"
             onloadmore={loadMorePosts}
           />

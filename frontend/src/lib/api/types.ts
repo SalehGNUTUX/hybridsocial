@@ -88,7 +88,11 @@ export interface PostEmoji {
   shortcode: string;
   url: string;
   static_url: string;
-  category: string | null;
+  // Local custom emojis carry an admin-set category for the picker
+  // grouping. Federated emojis don't have a category — they come
+  // from the post's `tag` Emoji entries, which only ship shortcode +
+  // image URL — so the field is optional here.
+  category?: string | null;
 }
 
 export interface LinkCard {
@@ -115,6 +119,11 @@ export interface Post {
   boost_count: number;
   reaction_count: number;
   is_pinned: boolean;
+  // Which container the pin actually belongs to. Lets the UI hide the
+  // "Pinned" badge / Unpin entry on feeds outside that scope so a
+  // group-pin doesn't read as a profile-pin when the same row shows
+  // up on the parent profile timeline.
+  pin_scope?: 'profile' | 'group' | 'page' | null;
   is_boosted: boolean;
   is_bookmarked: boolean;
   is_muted: boolean;
@@ -258,6 +267,7 @@ export interface Notification {
     | 'update'
     | 'group_invite'
     | 'group_application'
+    | 'page_invite'
     | 'report'
     | 'admin';
   created_at: string;
@@ -267,7 +277,11 @@ export interface Notification {
   // Set for post-related notification types when the post object isn't
   // eagerly joined — UI can follow target_id + target_type to link.
   target_id?: string | null;
-  target_type?: 'post' | 'group' | null;
+  target_type?: 'post' | 'group' | 'page' | null;
+  // For type === 'reaction': the actor's current reaction emoji code
+  // (one of the canonical 7 like/love/wow/care/angry/sad/lol, or a
+  // premium shortcode). Null if the actor since cleared their react.
+  reaction_type?: string | null;
 }
 
 export interface Conversation {
@@ -284,9 +298,26 @@ export interface Conversation {
   created_by_id: string | null;
   unread_count: number;
   last_message: Message | null;
-  participants: Identity[];
+  participants: ConversationParticipant[];
   created_at: string;
   updated_at: string;
+}
+
+// The backend ships conversation participants as the join-row, not the
+// raw identity — so `id` is the conversation_participant uuid (unique
+// per conversation) and the viewer's actual account is on
+// `identity_id`. Code that needs to "filter out me" must compare the
+// auth store's user id against `identity_id`, not `id`.
+export interface ConversationParticipant {
+  id: string;
+  identity_id: string;
+  handle: string | null;
+  acct: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  joined_at: string | null;
+  notifications_enabled: boolean;
+  left_at: string | null;
 }
 
 export interface MessageReaction {
@@ -471,6 +502,7 @@ export interface AdminUser {
   handle: string;
   email: string | null;
   display_name: string | null;
+  bio: string | null;
   is_admin: boolean;
   is_bot: boolean;
   is_locked: boolean;

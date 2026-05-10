@@ -85,7 +85,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
     tags = tags_for(post.id)
 
     # Custom emoji used in content
-    emojis = emojis_in_content(post.content || "")
+    emojis = emojis_for_post(post)
 
     # In reply to account
     in_reply_to_account_id = in_reply_to_account_id(post)
@@ -141,6 +141,11 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
       boost_count: post.boost_count,
       reaction_count: post.reaction_count,
       is_pinned: post.is_pinned,
+      # Which scope the pin actually applies to. Lets the client hide
+      # the "Pinned" badge / Unpin action on feeds outside that scope,
+      # so a group-pin doesn't read as a profile-pin when the same
+      # post shows up on the author's parent profile timeline.
+      pin_scope: pin_scope_name(post),
       is_boosted: is_boosted,
       is_bookmarked: is_bookmarked,
       is_muted: is_muted,
@@ -252,7 +257,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
       card = card_for(post)
       mentions = extract_mentions(post.content_html || post.content || "")
       tags = tags_for(post.id)
-      emojis = emojis_in_content(post.content || "")
+      emojis = emojis_for_post(post)
       in_reply_to_account_id = in_reply_to_account_id(post)
 
       base_url = HybridsocialWeb.Endpoint.url()
@@ -272,6 +277,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
         boost_count: post.boost_count,
         reaction_count: post.reaction_count,
         is_pinned: post.is_pinned,
+        pin_scope: pin_scope_name(post),
         is_boosted: MapSet.member?(boosts_set, post.id),
         is_bookmarked: MapSet.member?(bookmarks_set, post.id),
         is_muted: MapSet.member?(mutes_set, post.id),
@@ -903,4 +909,53 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
       nil
     end
   end
+
+  # Mirrors `Posts.pin_scope/1` but returns the string the API client
+  # wants so the frontend doesn't have to know the precedence rules
+  # (group > page > profile).
+  defp pin_scope_name(%{group_id: gid}) when is_binary(gid), do: "group"
+  defp pin_scope_name(%{page_id: pid}) when is_binary(pid), do: "page"
+  defp pin_scope_name(_), do: "profile"
+
+  # Merge two emoji sources into one deduplicated list:
+  #   1. `post.emojis` — the per-post manifest the federation inbox
+  #      built from the AP `tag` Emoji entries. Authoritative for
+  #      remote posts, since the remote instance is the one that
+  #      knows what `:blobcatgooglywanted2:` looks like over there.
+  #   2. The instance-wide `custom_emojis` table — matches by
+  #      shortcode against the post text. Covers local posts that
+  #      reference admin-curated emojis without a per-post manifest.
+  #
+  # The per-post manifest wins on shortcode conflicts so a federated
+  # `:fire:` keeps its source-instance glyph instead of being replaced
+  # by ours.
+  defp emojis_for_post(post) do
+    federated = serialize_post_emojis(Map.get(post, :emojis))
+    local = emojis_in_content(post.content || "")
+
+    seen = MapSet.new(Enum.map(federated, & &1.shortcode))
+
+    local_unique =
+      Enum.reject(local, fn e -> MapSet.member?(seen, e.shortcode) end)
+
+    federated ++ local_unique
+  end
+
+  # Normalize whatever Ecto handed back for the row's `:emojis` array
+  # column to a stable `[%{shortcode, url, static_url}]` shape.
+  defp serialize_post_emojis(emojis) when is_list(emojis) do
+    emojis
+    |> Enum.map(fn entry ->
+      shortcode = Map.get(entry, "shortcode") || Map.get(entry, :shortcode)
+      url = Map.get(entry, "url") || Map.get(entry, :url)
+      static_url = Map.get(entry, "static_url") || Map.get(entry, :static_url) || url
+
+      if is_binary(shortcode) and is_binary(url) do
+        %{shortcode: shortcode, url: url, static_url: static_url}
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp serialize_post_emojis(_), do: []
 end

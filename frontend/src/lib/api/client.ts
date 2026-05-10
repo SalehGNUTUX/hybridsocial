@@ -7,9 +7,25 @@ export class ApiError extends Error {
     public status: number,
     public body: ApiErrorBody
   ) {
-    super(body.error_description || body.error);
+    super(firstDetailMessage(body) || body.error_description || body.error);
     this.name = 'ApiError';
   }
+}
+
+// Validation-failure responses ship the human-readable reason in
+// `body.details` as `{field: [msg, ...]}`. The outer `error` code
+// ("validation.failed") is useless on its own — surface the first
+// field message so callers that just show `err.message` get the
+// real reason.
+function firstDetailMessage(body: ApiErrorBody): string | undefined {
+  const details = body.details;
+  if (!details || typeof details !== 'object') return undefined;
+  for (const messages of Object.values(details)) {
+    if (Array.isArray(messages) && messages.length > 0 && typeof messages[0] === 'string') {
+      return messages[0];
+    }
+  }
+  return undefined;
 }
 
 interface RequestOptions {
