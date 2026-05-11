@@ -76,7 +76,10 @@ defmodule Hybridsocial.Accounts do
   # never reaches the source host. `MediaProxy.url/1` is a no-op for
   # URLs already on our domain.
   defp proxy_images(html) do
-    Regex.replace(~r/<img\b([^>]*?)\bsrc\s*=\s*"([^"]+)"([^>]*)>/i, html, fn _full, before_attrs, src, after_attrs ->
+    Regex.replace(~r/<img\b([^>]*?)\bsrc\s*=\s*"([^"]+)"([^>]*)>/i, html, fn _full,
+                                                                             before_attrs,
+                                                                             src,
+                                                                             after_attrs ->
       proxied = Hybridsocial.Media.MediaProxy.url(src)
       "<img#{before_attrs} src=\"#{proxied}\"#{after_attrs}>"
     end)
@@ -190,6 +193,54 @@ defmodule Hybridsocial.Accounts do
       {:error, :user, changeset, _} ->
         {:error, changeset}
     end
+  end
+
+  @doc """
+  Admin-driven account creation. Bypasses turnstile / PoW / invite-code /
+  email-domain checks because the caller is trusted staff, not a public
+  signup. No confirmation email is sent; pass `"auto_confirm" => true`
+  in `attrs` to mark the new account's email confirmed immediately.
+
+  Requires the standard registration changeset fields:
+  `handle`, `email`, `password`, `password_confirmation`.
+  Optional: `display_name`, `bio`, `auto_confirm`.
+  """
+  def admin_create_user(attrs) do
+    auto_confirm = attrs["auto_confirm"] == true or attrs["auto_confirm"] == "true"
+
+    Ecto.Multi.new()
+    |> Ecto.Multi.insert(:identity, fn _ ->
+      %Identity{}
+      |> Identity.create_changeset(Map.merge(attrs, %{"type" => "user"}))
+    end)
+    |> Ecto.Multi.insert(:user, fn %{identity: identity} ->
+      %User{identity_id: identity.id}
+      |> User.registration_changeset(attrs)
+      |> maybe_mark_confirmed(auto_confirm)
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{identity: identity, user: user}} ->
+        identity = %{identity | user: user}
+        Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "identities", {:identity_created, identity})
+        {:ok, identity}
+
+      {:error, :identity, changeset, _} ->
+        {:error, changeset}
+
+      {:error, :user, changeset, _} ->
+        {:error, changeset}
+    end
+  end
+
+  defp maybe_mark_confirmed(changeset, false), do: changeset
+
+  defp maybe_mark_confirmed(changeset, true) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    changeset
+    |> Ecto.Changeset.put_change(:confirmed_at, now)
+    |> Ecto.Changeset.put_change(:confirmation_token, nil)
   end
 
   defp check_pow(attrs) do

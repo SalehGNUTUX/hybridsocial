@@ -59,6 +59,23 @@ export function getAdminUser(id: string): Promise<AdminUser> {
   return api.get(`/api/v1/admin/users/${id}`);
 }
 
+export interface CreateAdminUserPayload {
+  handle: string;
+  email: string;
+  password: string;
+  display_name?: string;
+  bio?: string;
+  auto_confirm?: boolean;
+  // Role *names* (e.g. "admin", "moderator") — backend resolves to ids.
+  roles?: string[];
+}
+
+export function createAdminUser(
+  payload: CreateAdminUserPayload
+): Promise<{ data: AdminUser; assigned_roles: string[] }> {
+  return api.post('/api/v1/admin/users', payload);
+}
+
 export function suspendUser(id: string): Promise<void> {
   return api.post(`/api/v1/admin/users/${id}/suspend`);
 }

@@ -11,6 +11,7 @@
     resetUserPassword, sendUserPasswordResetEmail, disableUserTwoFactor, changeUserEmail,
     confirmUserEmail, changeUserTier, editUserProfile,
     getRoles, getUserRoles, assignUserRole, revokeUserRole,
+    createAdminUser,
     type UserRoleAssignment
   } from '$lib/api/admin.js';
   import type { AdminUser, ModerationNote, AdminRole } from '$lib/api/types.js';
@@ -103,6 +104,84 @@
   let userRoleAssignments: UserRoleAssignment[] = $state([]);
   let rolesLoading = $state(false);
   let rolesBusyRoleId: string | null = $state(null);
+
+  // Create user modal — admin-driven account creation. Bypasses the
+  // public signup gates (turnstile / PoW / invite) on the backend, so
+  // owners/admins can seed staff or replace lost accounts directly.
+  let createModalOpen = $state(false);
+  let createSubmitting = $state(false);
+  let createHandle = $state('');
+  let createEmail = $state('');
+  let createPassword = $state('');
+  let createDisplayName = $state('');
+  let createAutoConfirm = $state(true);
+  let createRoles: string[] = $state([]);
+  let createError = $state('');
+
+  function openCreateModal() {
+    createHandle = '';
+    createEmail = '';
+    createPassword = '';
+    createDisplayName = '';
+    createAutoConfirm = true;
+    createRoles = [];
+    createError = '';
+    createModalOpen = true;
+    // Lazily pull the role catalog the first time the modal opens so
+    // the multi-select has options. Reuses the same cache the "Manage
+    // Roles" modal populates.
+    if (allRoles.length === 0) {
+      getRoles().then((roles) => { allRoles = roles; }).catch(() => {});
+    }
+  }
+
+  function toggleCreateRole(name: string) {
+    if (createRoles.includes(name)) {
+      createRoles = createRoles.filter((r) => r !== name);
+    } else {
+      createRoles = [...createRoles, name];
+    }
+  }
+
+  function generatePassword() {
+    // 16 random base64url chars — strong enough that the admin doesn't
+    // have to think one up, easy to read aloud if they have to.
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    createPassword = btoa(String.fromCharCode(...bytes))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  async function handleCreateUser() {
+    createError = '';
+    const handle = createHandle.trim();
+    const email = createEmail.trim();
+    const password = createPassword;
+    if (!handle || !email || !password) {
+      createError = 'Handle, email, and password are required.';
+      return;
+    }
+    createSubmitting = true;
+    try {
+      await createAdminUser({
+        handle,
+        email,
+        password,
+        display_name: createDisplayName.trim() || undefined,
+        auto_confirm: createAutoConfirm,
+        roles: createRoles,
+      });
+      addToast(`Created @${handle}`, 'success');
+      createModalOpen = false;
+      await loadUsers();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create user';
+      createError = msg;
+      addToast(msg, 'error');
+    } finally {
+      createSubmitting = false;
+    }
+  }
 
   // Actions dropdown
   let openDropdownId: string | null = $state(null);
@@ -695,7 +774,13 @@
 </svelte:head>
 
 <div class="users-page">
-  <h1 class="page-title">Users</h1>
+  <div class="page-header">
+    <h1 class="page-title">Users</h1>
+    <button class="btn btn-primary" type="button" onclick={openCreateModal}>
+      <span class="material-symbols-outlined" style="font-size: 18px">person_add</span>
+      New user
+    </button>
+  </div>
 
   <div class="location-tabs" role="tablist">
     <button type="button" role="tab" class="loc-tab" class:loc-tab-active={locationFilter === 'all'} onclick={() => locationFilter = 'all'}>All</button>
@@ -1255,15 +1340,162 @@
   {/if}
 </Modal>
 
+<!-- Create User Modal — admin-driven account creation -->
+<Modal bind:open={createModalOpen} title="Create user">
+  <p class="modal-text">
+    Create a local account directly. Public signup gates (turnstile, invite codes) are bypassed.
+  </p>
+  <form onsubmit={(e) => { e.preventDefault(); handleCreateUser(); }}>
+    <div class="form-group">
+      <label class="form-label" for="create-handle">Handle</label>
+      <input
+        id="create-handle"
+        class="input"
+        type="text"
+        bind:value={createHandle}
+        placeholder="alice"
+        autocomplete="off"
+        required
+      />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="create-email">Email</label>
+      <input
+        id="create-email"
+        class="input"
+        type="email"
+        bind:value={createEmail}
+        placeholder="user@example.com"
+        autocomplete="off"
+        required
+      />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="create-password">Password</label>
+      <div class="password-row">
+        <input
+          id="create-password"
+          class="input"
+          type="text"
+          bind:value={createPassword}
+          autocomplete="new-password"
+          required
+        />
+        <button class="btn btn-sm btn-outline" type="button" onclick={generatePassword}>
+          Generate
+        </button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="create-display-name">Display name (optional)</label>
+      <input
+        id="create-display-name"
+        class="input"
+        type="text"
+        bind:value={createDisplayName}
+        maxlength="50"
+      />
+    </div>
+    <div class="form-group">
+      <label class="checkbox-row">
+        <input type="checkbox" bind:checked={createAutoConfirm} />
+        <span>Mark email confirmed (no confirmation email is sent)</span>
+      </label>
+    </div>
+    {#if allRoles.length > 0}
+      <div class="form-group">
+        <span class="form-label">Roles (optional)</span>
+        <div class="role-checkbox-list">
+          {#each allRoles as role (role.id)}
+            <label class="checkbox-row">
+              <input
+                type="checkbox"
+                checked={createRoles.includes(role.name)}
+                onchange={() => toggleCreateRole(role.name)}
+              />
+              <span>
+                <strong>{role.name}</strong>
+                {#if role.description}<span class="role-description"> — {role.description}</span>{/if}
+              </span>
+            </label>
+          {/each}
+        </div>
+      </div>
+    {/if}
+    {#if createError}
+      <p class="form-error">{createError}</p>
+    {/if}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" onclick={() => (createModalOpen = false)}>Cancel</button>
+      <button
+        class="btn btn-primary"
+        type="submit"
+        disabled={createSubmitting || !createHandle.trim() || !createEmail.trim() || !createPassword}
+      >
+        {createSubmitting ? 'Creating...' : 'Create user'}
+      </button>
+    </div>
+  </form>
+</Modal>
+
 <style>
   .users-page {
     max-width: 1200px;
   }
 
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-block-end: var(--space-6);
+  }
+
   .page-title {
     font-size: var(--text-2xl);
     font-weight: 700;
-    margin-block-end: var(--space-6);
+    margin: 0;
+  }
+
+  .page-header .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .password-row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: stretch;
+  }
+
+  .password-row .input {
+    flex: 1;
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+  }
+
+  .role-checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-block-start: var(--space-2);
+    max-height: 240px;
+    overflow-y: auto;
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  .form-error {
+    color: var(--danger);
+    font-size: var(--text-sm);
+    margin-block-start: var(--space-2);
   }
 
   .toolbar {

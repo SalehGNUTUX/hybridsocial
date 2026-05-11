@@ -812,6 +812,7 @@ defmodule HybridsocialWeb.Router do
     post "/users/:id/unforce_bot", AdminController, :unforce_bot
 
     # Admin user management
+    post "/users", AdminController, :admin_create_user
     put "/users/:id/profile", AdminController, :edit_user_profile
     post "/users/:id/reset_password", AdminController, :reset_user_password
     post "/users/:id/send_password_reset_email", AdminController, :send_user_password_reset_email

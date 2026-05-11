@@ -3810,9 +3810,14 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   def federation_drop_dead_letter(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "federation.manage") do
       case Hybridsocial.Federation.DeadLetters.drop(id) do
-        {:ok, _} -> json(conn, %{status: "dropped"})
-        {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "dead_letter.not_found"})
-        {:error, _} -> conn |> put_status(:internal_server_error) |> json(%{error: "dead_letter.drop_failed"})
+        {:ok, _} ->
+          json(conn, %{status: "dropped"})
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "dead_letter.not_found"})
+
+        {:error, _} ->
+          conn |> put_status(:internal_server_error) |> json(%{error: "dead_letter.drop_failed"})
       end
     else
       {:error, perm} -> deny(conn, perm)
@@ -4198,6 +4203,58 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
         conn
         |> put_status(:bad_request)
         |> json(%{error: "tier.invalid", valid_tiers: @valid_tiers})
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  def admin_create_user(conn, params) do
+    with :ok <- require_permission(conn, "users.manage") do
+      admin_id = conn.assigns.current_identity.id
+
+      attrs = %{
+        "handle" => params["handle"],
+        "email" => params["email"],
+        "password" => params["password"],
+        "password_confirmation" => params["password_confirmation"] || params["password"],
+        "display_name" => params["display_name"],
+        "bio" => params["bio"],
+        "auto_confirm" => params["auto_confirm"]
+      }
+
+      case Accounts.admin_create_user(attrs) do
+        {:ok, identity} ->
+          # Optional roles array — names of roles to assign on creation.
+          # Failures here don't roll back the user; admins can assign via
+          # the existing Manage Roles UI if anything's off.
+          roles = List.wrap(params["roles"]) |> Enum.filter(&is_binary/1)
+
+          assigned =
+            Enum.reduce(roles, [], fn role_name, acc ->
+              case RBAC.assign_role(identity.id, role_name, admin_id) do
+                {:ok, _} -> [role_name | acc]
+                _ -> acc
+              end
+            end)
+
+          Moderation.log(admin_id, "account.admin_created", "identity", identity.id, %{
+            handle: identity.handle,
+            roles: assigned,
+            auto_confirmed: attrs["auto_confirm"] == true or attrs["auto_confirm"] == "true"
+          })
+
+          # Re-fetch so is_admin reflects any role sync that just happened.
+          fresh = Accounts.get_identity(identity.id)
+
+          conn
+          |> put_status(:created)
+          |> json(%{data: serialize_account(fresh), assigned_roles: assigned})
+
+        {:error, changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "account.create_failed", details: changeset_errors(changeset)})
       end
     else
       {:error, perm} -> deny(conn, perm)
