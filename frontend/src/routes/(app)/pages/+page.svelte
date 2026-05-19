@@ -10,14 +10,42 @@
   let loading = $state(true);
   let error = $state('');
   let query = $state('');
+  // Selected category for the filter dropdown. Empty string = "All".
+  // Stored as a separate state so the search box and category filter
+  // compose (search within a category, or browse a category without
+  // typing anything).
+  let categoryFilter = $state('');
+
+  // Helper so category comparisons survive minor casing differences
+  // between the form's preset list and any free-text categories that
+  // got entered before the dropdown existed.
+  function pageCategory(p: any): string {
+    return (p?.organization?.category || p?.category || '').trim();
+  }
+
+  // The dropdown options are derived from the actual pages on screen
+  // rather than the hard-coded create-form list — that way a page
+  // with a custom / legacy category still shows up as filterable, and
+  // an empty deployment doesn't list every theoretical option.
+  let availableCategories = $derived.by(() => {
+    const set = new Set<string>();
+    for (const p of pages) {
+      const c = pageCategory(p);
+      if (c) set.add(c);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  });
 
   // Client-side filter — pages list is small enough that the round
   // trip to a server-side search isn't worth it. Match against the
-  // human-readable fields a user would type to find a page.
+  // human-readable fields a user would type to find a page, and
+  // intersect with the category filter when one's selected.
   let visiblePages = $derived.by(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return pages;
+    const cat = categoryFilter.trim().toLowerCase();
     return pages.filter((p) => {
+      if (cat && pageCategory(p).toLowerCase() !== cat) return false;
+      if (!q) return true;
       const haystack = [
         p.display_name,
         p.name,
@@ -166,25 +194,40 @@
     </button>
   </div>
 
-  <div class="search-bar">
-    <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-    <input
-      type="search"
-      class="search-input"
-      placeholder="Search pages…"
-      bind:value={query}
-      aria-label="Search pages"
-    />
-    {#if query}
-      <button type="button" class="search-clear" onclick={() => (query = '')} aria-label="Clear search">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="4" y1="4" x2="16" y2="16" />
-          <line x1="16" y1="4" x2="4" y2="16" />
-        </svg>
-      </button>
+  <div class="pages-toolbar">
+    <div class="search-bar">
+      <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="search"
+        class="search-input"
+        placeholder="Search pages…"
+        bind:value={query}
+        aria-label="Search pages"
+      />
+      {#if query}
+        <button type="button" class="search-clear" onclick={() => (query = '')} aria-label="Clear search">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="4" x2="16" y2="16" />
+            <line x1="16" y1="4" x2="4" y2="16" />
+          </svg>
+        </button>
+      {/if}
+    </div>
+
+    {#if availableCategories.length > 0}
+      <select
+        class="category-filter"
+        bind:value={categoryFilter}
+        aria-label="Filter by category"
+      >
+        <option value="">All categories</option>
+        {#each availableCategories as cat (cat)}
+          <option value={cat}>{cat}</option>
+        {/each}
+      </select>
     {/if}
   </div>
 
@@ -364,12 +407,44 @@
     color: var(--color-text-tertiary);
   }
 
-  /* Search */
+  /* Search + filter row */
+  .pages-toolbar {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-2);
+    margin-block-end: var(--space-4);
+  }
+
+  @media (max-width: 560px) {
+    .pages-toolbar {
+      flex-direction: column;
+    }
+  }
+
   .search-bar {
     position: relative;
     display: flex;
     align-items: center;
-    margin-block-end: var(--space-4);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .category-filter {
+    flex-shrink: 0;
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    min-width: 160px;
+    transition: border-color var(--transition-fast);
+  }
+
+  .category-filter:focus {
+    outline: none;
+    border-color: var(--color-primary);
   }
 
   .search-icon {
