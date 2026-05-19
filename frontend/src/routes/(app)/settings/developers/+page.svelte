@@ -252,8 +252,16 @@
 <svelte:head><title>Developer Tools - Settings</title></svelte:head>
 
 <div class="dev-page">
-  <h1 class="dev-title">Developer Tools</h1>
-  <p class="dev-subtitle">Build integrations with the API using your own profile or a bot.</p>
+  <div class="dev-header-row">
+    <div>
+      <h1 class="dev-title">Developer Tools</h1>
+      <p class="dev-subtitle">Build integrations with the API using your own profile or a bot.</p>
+    </div>
+    <a class="dev-docs-link" href="/help/developers">
+      <span class="material-symbols-outlined">menu_book</span>
+      Read the docs
+    </a>
+  </div>
 
   {#if loading}
     <div class="stitch-card" style="text-align: center; padding: 32px;">
@@ -589,8 +597,30 @@
 
 <style>
   .dev-page { max-width: 700px; }
+  .dev-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-block-end: var(--space-6);
+  }
   .dev-title { font-size: var(--text-2xl); font-weight: 700; margin-block-end: var(--space-1); }
-  .dev-subtitle { font-size: var(--text-sm); color: var(--color-text-secondary); margin-block-end: var(--space-6); }
+  .dev-subtitle { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0; }
+  .dev-docs-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .dev-docs-link:hover { background: var(--color-primary-soft); }
+  .dev-docs-link .material-symbols-outlined { font-size: 18px; }
 
   .stitch-card { background: var(--color-surface-raised, white); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-5); margin-block-end: var(--space-4); }
   .stitch-section-title { font-size: var(--text-base); font-weight: 600; margin-block-end: var(--space-3); }
