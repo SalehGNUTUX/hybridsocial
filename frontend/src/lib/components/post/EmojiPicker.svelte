@@ -300,7 +300,10 @@
        corners — looks like a stripe of "wrong colour" at the top
        edge in the report screenshot. Clip to the rounded shell. */
     overflow: hidden;
-    z-index: var(--z-popover, 30);
+    /* Portaled to <body> and must sit ABOVE the composer modal (--z-modal: 40)
+       and its backdrop so the picker covers the post body instead of being
+       painted over by it. */
+    z-index: 1000;
     animation: picker-in 0.15s ease;
   }
 
