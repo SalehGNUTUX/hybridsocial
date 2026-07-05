@@ -26,8 +26,15 @@ defmodule Hybridsocial.Federation.LocalUrl do
 
   @doc """
   True when the identity row belongs to a local actor.
+
+  Prefers the explicit `is_local` flag (set on every insert path); falls
+  back to the `/actors/` URL-prefix heuristic only for rows predating the
+  flag where it's still `nil`. Imported legacy actors have a foreign-shaped
+  `ap_actor_url` but `is_local = true`, so the flag is authoritative.
   """
-  def local_identity?(%Identity{ap_actor_url: url}), do: local_actor_url?(url)
+  def local_identity?(%Identity{is_local: true}), do: true
+  def local_identity?(%Identity{is_local: false}), do: false
+  def local_identity?(%Identity{is_local: nil, ap_actor_url: url}), do: local_actor_url?(url)
   def local_identity?(_), do: false
 
   @doc """

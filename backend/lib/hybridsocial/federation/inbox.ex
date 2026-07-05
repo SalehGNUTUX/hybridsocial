@@ -1099,6 +1099,9 @@ defmodule Hybridsocial.Federation.Inbox do
       type: "user",
       handle: handle,
       ap_actor_url: ap_id,
+      # A federated actor row — we don't hold its key and never sign as
+      # it. Must be explicit: the column defaults to true for local users.
+      is_local: false,
       display_name: remote_profile[:display_name],
       bio: remote_profile[:bio],
       avatar_url: remote_profile[:avatar_url],
@@ -1114,6 +1117,7 @@ defmodule Hybridsocial.Federation.Inbox do
       :type,
       :handle,
       :ap_actor_url,
+      :is_local,
       :display_name,
       :bio,
       :avatar_url,

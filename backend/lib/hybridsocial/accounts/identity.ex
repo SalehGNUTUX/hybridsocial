@@ -16,6 +16,14 @@ defmodule Hybridsocial.Accounts.Identity do
     field :inbox_url, :string
     field :outbox_url, :string
     field :followers_url, :string
+    field :following_url, :string
+    field :featured_url, :string
+    field :shared_inbox_url, :string
+    # Whether this identity is hosted on our instance (we hold its private
+    # key and sign as it). Native users get `/actors/<uuid>`; actors
+    # imported from a migrated instance keep their original `ap_actor_url`
+    # but are still local. Remote (federated) identity rows are false.
+    field :is_local, :boolean, default: true
     field :avatar_url, :string
     field :header_url, :string
     field :display_name, :string
@@ -101,6 +109,53 @@ defmodule Hybridsocial.Accounts.Identity do
     |> foreign_key_constraint(:parent_identity_id)
     |> generate_ap_urls()
     |> generate_keys()
+  end
+
+  @import_fields [
+    :id,
+    :type,
+    :handle,
+    :display_name,
+    :bio,
+    :avatar_url,
+    :header_url,
+    :ap_actor_url,
+    :public_key,
+    :private_key,
+    :inbox_url,
+    :outbox_url,
+    :followers_url,
+    :following_url,
+    :featured_url,
+    :shared_inbox_url,
+    :is_locked,
+    :is_bot,
+    :discoverable,
+    :also_known_as,
+    :metadata,
+    :onboarded_at
+  ]
+
+  @doc """
+  Insert a legacy local identity migrated from another instance,
+  preserving its original ActivityPub URI and RSA keypair instead of
+  generating fresh ones. The row is marked local so we serve its actor
+  document and sign outgoing requests as it — which is what keeps remote
+  servers accepting us after the platform swap.
+
+  Unlike `create_changeset/2` this does NOT call `generate_ap_urls/1` or
+  `generate_keys/1`; the caller must supply `ap_actor_url`, `public_key`
+  and `private_key` (the exact PEM the source instance served).
+  """
+  def import_changeset(identity \\ %__MODULE__{}, attrs) do
+    identity
+    |> cast(attrs, @import_fields)
+    |> put_change(:is_local, true)
+    |> validate_required([:type, :handle, :ap_actor_url, :public_key, :private_key])
+    |> validate_inclusion(:type, @valid_types)
+    |> validate_format(:handle, ~r/^[a-zA-Z0-9_]+$/)
+    |> unique_constraint(:handle)
+    |> unique_constraint(:ap_actor_url)
   end
 
   @update_fields [
