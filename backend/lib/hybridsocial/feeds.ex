@@ -10,7 +10,6 @@ defmodule Hybridsocial.Feeds do
   alias Hybridsocial.Social.{Post, Follow, Block, Boost, List, ListMember}
   alias Hybridsocial.Feeds.Visibility
   alias Hybridsocial.Feeds.AlgorithmResolver
-  alias Hybridsocial.Federation.LocalUrl
   alias Hybridsocial.Cache.FeedCache
 
   @default_limit 20
@@ -131,12 +130,14 @@ defmodule Hybridsocial.Feeds do
   defp maybe_filter_local(query, false), do: query
 
   defp maybe_filter_local(query, true) do
-    pattern = LocalUrl.actor_prefix() <> "%"
-
+    # Filter to locally-hosted authors by the is_local flag, NOT the
+    # actor-URL prefix: imported (legacy Pleroma) local users live at
+    # /users/<nick>, not the native /actors/<uuid>, so a prefix match
+    # wrongly excludes them and empties the local timeline.
     from p in query,
       join: i in Identity,
       on: i.id == p.identity_id,
-      where: is_nil(i.ap_actor_url) or like(i.ap_actor_url, ^pattern)
+      where: i.is_local == true
   end
 
   # ---------------------------------------------------------------------------
