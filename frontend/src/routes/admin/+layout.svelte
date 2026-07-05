@@ -74,9 +74,15 @@
     authorized = true;
     checking = false;
 
-    // Probe sudo status only if 2FA is enabled (the needsOtp branch
-    // will short-circuit rendering otherwise).
-    if (state.user.two_factor_enabled) {
+    // Probe sudo status if ANY second factor is set up (TOTP or a
+    // security key). The needsOtp branch short-circuits rendering for
+    // users with no second factor at all. Previously this only checked
+    // TOTP, so security-key admins never detected an existing sudo
+    // window and got re-prompted on every refresh.
+    if (
+      state.user.two_factor_enabled ||
+      (state.user as { security_keys_enabled?: boolean }).security_keys_enabled
+    ) {
       await fetchSudoStatus();
     } else {
       checkingSudo = false;

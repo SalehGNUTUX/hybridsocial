@@ -163,7 +163,7 @@
         <span class="row-label">{m.label}</span>
         <span class="row-value">{row ? m.format(row.latest.v) : '—'}</span>
         <span class="row-spark">
-          {#if row}
+          {#if row && row.sparkline && row.sparkline.length > 1}
             <Sparkline points={row.sparkline} width={100} height={24} />
           {/if}
         </span>
@@ -301,7 +301,10 @@
 
   .service-panel-row {
     display: grid;
-    grid-template-columns: 1fr auto 100px;
+    /* Sparkline column collapses to 0 when there's no time-series (e.g.
+       OpenSearch snapshot metrics), so the value gets the full width
+       instead of being crowded by an empty/placeholder chart. */
+    grid-template-columns: 1fr auto minmax(0, 100px);
     align-items: center;
     gap: 12px;
     padding: 8px 10px;
