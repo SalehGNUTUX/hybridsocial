@@ -68,6 +68,14 @@
 		}
 	}
 
+	# Older self-service reset emails linked to /auth/reset-password, but
+	# the SvelteKit route is /reset-password (so those links 404). Redirect
+	# them — preserving the ?token= query — so already-sent emails work.
+	@legacy_reset path /auth/reset-password
+	handle @legacy_reset {
+		redir * /reset-password?{query} 302
+	}
+
 	# Everything else gets the full WAF stack.
 	handle {
 		import /etc/caddy/waf.caddy
