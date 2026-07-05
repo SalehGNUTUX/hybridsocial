@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { Post } from '$lib/api/types.js';
   import { getBookmarks } from '$lib/api/timelines.js';
+  import { addToast } from '$lib/stores/toast.js';
   import FeedList from '$lib/components/feed/FeedList.svelte';
 
   let posts: Post[] = $state([]);
@@ -31,7 +32,10 @@
       cursor = result.next_cursor;
       hasMore = !!result.next_cursor;
     } catch {
-      // Handle error silently
+      // A failed load otherwise looks identical to an empty bookmark
+      // list (FeedList shows "Nothing here yet"), so surface it.
+      hasMore = false;
+      addToast('Could not load bookmarks', 'error');
     } finally {
       loading = false;
     }

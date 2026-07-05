@@ -1,20 +1,11 @@
 defmodule HybridsocialWeb.Api.V1.OAuthControllerTest do
   use HybridsocialWeb.ConnCase, async: true
 
-  alias Hybridsocial.Accounts
   alias Hybridsocial.Auth
   alias Hybridsocial.Auth.OAuth
 
-  @user_attrs %{
-    "handle" => "oauthtestuser",
-    "display_name" => "OAuth Test User",
-    "email" => "oauthtest@example.com",
-    "password" => "password1234567890",
-    "password_confirmation" => "password1234567890"
-  }
-
   defp create_user_and_login(conn) do
-    {:ok, identity} = Accounts.register_user(@user_attrs)
+    identity = create_user("oauthtestuser", "oauthtest@example.com")
     {:ok, tokens} = Auth.login("oauthtest@example.com", "password1234567890")
 
     authed_conn =

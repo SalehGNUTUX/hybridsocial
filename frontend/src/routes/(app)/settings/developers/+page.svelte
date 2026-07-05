@@ -26,6 +26,9 @@
     name: string;
     client_id: string;
     scopes: string[];
+    // Only returned once, by the create/with_token endpoints — the app
+    // list (GET /api/v1/apps) omits it, hence optional.
+    client_secret?: string;
   }
 
   interface CreatedCredentials {

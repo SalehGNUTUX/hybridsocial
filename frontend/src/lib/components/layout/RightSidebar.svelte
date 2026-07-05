@@ -4,12 +4,29 @@
   import { addToast } from '$lib/stores/toast.js';
   import { getPromotedUsers, getPromotionPricing, purchasePromotion, formatPrice } from '$lib/api/promotions.js';
   import type { PromotedUser, PromotionPricing } from '$lib/api/promotions.js';
+  import { getSuggestions, follow, unfollow, unfollowTag, getRelationships } from '$lib/api/accounts.js';
+  import type { Identity } from '$lib/api/types.js';
+
+  // A person shown in "Recommended Accounts". Merged from promoted
+  // users, the server's /suggestions endpoint, and any passed-in prop.
+  interface SidebarAccount {
+    id?: string;
+    handle: string;
+    acct?: string;
+    display_name: string | null;
+    avatar_url: string | null;
+    promoted?: boolean;
+  }
 
   let {
     suggestions = []
   }: {
-    suggestions?: { handle: string; acct?: string; display_name: string; avatar_url: string | null }[];
+    suggestions?: SidebarAccount[];
   } = $props();
+
+  // Distinguishes "still loading" from "genuinely empty" so widgets can
+  // show skeletons instead of a misleading empty state during fetch.
+  let loaded = $state(false);
 
   interface TrendingTag {
     tag: string;
@@ -26,8 +43,53 @@
   let followedTags: FollowedTag[] = $state([]);
 
   let promotedUsers: PromotedUser[] = $state([]);
+  let suggestedUsers: SidebarAccount[] = $state([]);
   let pricing: PromotionPricing | null = $state(null);
   let showPromoModal = $state(false);
+
+  // Follow state keyed by account id. `following` tracks the current
+  // relationship (prefilled from getRelationships); `followBusy` guards
+  // an in-flight request so the button can't be double-fired.
+  let following = $state<Record<string, boolean>>({});
+  let followBusy = $state<Record<string, boolean>>({});
+
+  async function toggleFollow(acct: SidebarAccount, e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = acct.id;
+    if (!id || followBusy[id]) return;
+    followBusy = { ...followBusy, [id]: true };
+    const wasFollowing = following[id];
+    // Optimistic flip; revert on failure.
+    following = { ...following, [id]: !wasFollowing };
+    try {
+      if (wasFollowing) {
+        await unfollow(id);
+      } else {
+        await follow(id);
+        addToast(`Following ${acct.display_name || acct.handle}`, 'success');
+      }
+    } catch {
+      following = { ...following, [id]: wasFollowing };
+      addToast('Could not update follow', 'error');
+    } finally {
+      followBusy = { ...followBusy, [id]: false };
+    }
+  }
+
+  async function handleUnfollowTag(tag: FollowedTag, e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const prev = followedTags;
+    // Optimistic removal.
+    followedTags = followedTags.filter(t => t.id !== tag.id);
+    try {
+      await unfollowTag(tag.name);
+    } catch {
+      followedTags = prev;
+      addToast('Could not unfollow hashtag', 'error');
+    }
+  }
 
   interface NewUser {
     id: string;
@@ -46,17 +108,30 @@
   let instanceVersion = $state<string | null>(null);
   let instanceSourceUrl = $state<string>('https://github.com/qfiber/hybridsocial');
 
-  let allPool = $derived([
-    ...promotedUsers,
-    ...suggestions.filter(s => !promotedUsers.some(p => p.handle === s.handle))
-  ]);
+  // Promoted first, then server suggestions, then any prop-passed
+  // accounts — deduped by handle so a promoted account can't appear twice.
+  let allPool = $derived.by(() => {
+    const seen = new Set<string>();
+    const out: SidebarAccount[] = [];
+    for (const p of [...promotedUsers, ...suggestedUsers, ...suggestions]) {
+      if (seen.has(p.handle)) continue;
+      seen.add(p.handle);
+      out.push(p);
+    }
+    return out;
+  });
 
-  // Shuffle and rotate visible suggestions every 2 minutes
+  // Shuffle and rotate visible suggestions every 2 minutes. Rotation
+  // pauses while the user is hovering/focused inside the section so the
+  // list can't reshuffle out from under a click.
   let shuffleTick = $state(0);
+  let rotationPaused = $state(false);
   let rotateInterval: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
-    rotateInterval = setInterval(() => { shuffleTick++; }, 120_000);
+    rotateInterval = setInterval(() => {
+      if (!rotationPaused) shuffleTick++;
+    }, 120_000);
     return () => { if (rotateInterval) clearInterval(rotateInterval); };
   });
 
@@ -71,7 +146,7 @@
     return copy;
   }
 
-  let allSuggestions = $derived(seededShuffle(allPool, shuffleTick + Date.now() / 120_000 | 0).slice(0, 5));
+  let allSuggestions = $derived(seededShuffle(allPool, shuffleTick + 1).slice(0, 5));
 
   function timeAgo(dateStr: string): string {
     const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -84,8 +159,9 @@
 
   onMount(async () => {
     try {
-      const [users, pricingData, newUsersData, trendingData, followedTagsData] = await Promise.all([
+      const [users, suggested, pricingData, newUsersData, trendingData, followedTagsData] = await Promise.all([
         getPromotedUsers().catch(() => [] as PromotedUser[]),
+        getSuggestions().catch(() => [] as Identity[]),
         getPromotionPricing().catch(() => null),
         api.get<NewUser[]>('/api/v1/directory/new', { limit: '5' }).catch(() => [] as NewUser[]),
         api.get<{ name: string; score: number; metadata: { post_count?: number; unique_accounts?: number; history?: number[] } }[]>('/api/v1/trends/tags')
@@ -99,12 +175,39 @@
         api.get<FollowedTag[]>('/api/v1/accounts/followed_tags').catch(() => [] as FollowedTag[]),
       ]);
       promotedUsers = users;
+      suggestedUsers = suggested.map(s => ({
+        id: s.id,
+        handle: s.handle,
+        acct: s.acct,
+        display_name: s.display_name,
+        avatar_url: s.avatar_url
+      }));
       pricing = pricingData;
       newUsers = newUsersData;
       trending = trendingData;
       followedTags = followedTagsData;
     } catch {
       // Sidebar is non-critical
+    } finally {
+      loaded = true;
+    }
+
+    // Prefill follow state for everyone with an id so the button shows
+    // the right label. Best-effort — the button still works without it.
+    const ids = [
+      ...promotedUsers.map(p => p.id),
+      ...suggestedUsers.map(s => s.id),
+      ...newUsers.map(u => u.id)
+    ].filter((id): id is string => !!id);
+    if (ids.length > 0) {
+      try {
+        const rels = await getRelationships([...new Set(ids)]);
+        const map: Record<string, boolean> = {};
+        for (const r of rels) map[r.id] = r.following;
+        following = map;
+      } catch {
+        // ignore — buttons default to "Follow"
+      }
     }
 
     // Instance meta for the footer. Non-blocking — if this 404s or
@@ -164,7 +267,14 @@
   }
 
   function plural(n: number, one: string, many: string): string {
-    return `${n} ${n === 1 ? one : many}`;
+    return `${compact(n)} ${n === 1 ? one : many}`;
+  }
+
+  // 1234 -> "1.2K", 2_500_000 -> "2.5M". Keeps count lines compact and
+  // scannable instead of printing raw six-digit numbers in a tight column.
+  const compactFmt = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+  function compact(n: number): string {
+    return compactFmt.format(n ?? 0);
   }
 
   async function handlePurchase() {
@@ -184,7 +294,37 @@
   }
 </script>
 
-<aside class="right-sidebar">
+{#snippet skeletonRows(count: number, avatar: boolean)}
+  <ul class="skeleton-list" aria-hidden="true">
+    {#each Array(count) as _, i (i)}
+      <li class="skel-row" class:with-avatar={avatar}>
+        {#if avatar}<span class="skel-avatar"></span>{/if}
+        <span class="skel-lines">
+          <span class="skel-line skel-line-lg"></span>
+          <span class="skel-line skel-line-sm"></span>
+        </span>
+      </li>
+    {/each}
+  </ul>
+{/snippet}
+
+{#snippet followBtn(acct: SidebarAccount)}
+  {#if acct.id}
+    {@const id = acct.id}
+    <button
+      type="button"
+      class="follow-btn"
+      class:is-following={following[id]}
+      onclick={(e) => toggleFollow(acct, e)}
+      disabled={followBusy[id]}
+      aria-label={following[id] ? `Unfollow ${acct.display_name || acct.handle}` : `Follow ${acct.display_name || acct.handle}`}
+    >
+      {following[id] ? 'Following' : 'Follow'}
+    </button>
+  {/if}
+{/snippet}
+
+<aside class="right-sidebar" aria-label="Discover">
   <section class="sidebar-section">
     <header class="section-header">
       <h3 class="section-title">
@@ -195,14 +335,19 @@
         Trending
       </h3>
     </header>
-    {#if trending.length > 0}
+    {#if !loaded}
+      {@render skeletonRows(5, false)}
+    {:else if trending.length > 0}
       <ul class="trend-list">
-        {#each trending.slice(0, 10) as item (item.tag)}
+        {#each trending.slice(0, 10) as item, i (item.tag)}
           <li>
             <a href="/tags/{encodeURIComponent(item.tag)}" class="trend-item">
+              <span class="trend-rank">{i + 1}</span>
               <div class="trend-text">
                 <span class="trend-tag">#{item.tag}</span>
-                <span class="trend-meta">{plural(item.people, 'person talking', 'people talking')}</span>
+                <span class="trend-meta">
+                  {plural(item.people, 'person', 'people')} talking{#if item.posts > 0} · <span class="tnum">{compact(item.posts)}</span> posts{/if}
+                </span>
               </div>
               {#if hasSparklineSignal(item.history)}
                 <svg class="trend-spark" viewBox="0 0 56 24" preserveAspectRatio="none" aria-hidden="true">
@@ -231,15 +376,28 @@
         Followed hashtags
       </h3>
     </header>
-    {#if followedTags.length > 0}
+    {#if !loaded}
+      {@render skeletonRows(4, false)}
+    {:else if followedTags.length > 0}
       <ul class="trend-list">
         {#each followedTags.slice(0, 8) as tag (tag.id)}
-          <li>
-            <a href="/tags/{encodeURIComponent(tag.name)}" class="trend-item">
+          <li class="tag-row">
+            <a href="/tags/{encodeURIComponent(tag.name)}" class="trend-item tag-link">
               <div class="trend-text">
                 <span class="trend-tag">#{tag.name}</span>
               </div>
             </a>
+            <button
+              type="button"
+              class="tag-unfollow"
+              onclick={(e) => handleUnfollowTag(tag, e)}
+              aria-label={`Unfollow #${tag.name}`}
+              title={`Unfollow #${tag.name}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
           </li>
         {/each}
       </ul>
@@ -249,56 +407,94 @@
     {/if}
   </section>
 
-  <section class="sidebar-section">
-    <h3 class="section-title">Recommended Accounts</h3>
-    {#if allSuggestions.length > 0}
+  <section
+    class="sidebar-section"
+    onmouseenter={() => rotationPaused = true}
+    onmouseleave={() => rotationPaused = false}
+    onfocusin={() => rotationPaused = true}
+    onfocusout={() => rotationPaused = false}
+    aria-label="Recommended accounts"
+  >
+    <header class="section-header">
+      <h3 class="section-title">
+        <svg class="section-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        Recommended Accounts
+      </h3>
+    </header>
+    {#if !loaded}
+      {@render skeletonRows(4, true)}
+    {:else if allSuggestions.length > 0}
       {#key shuffleTick}
       <ul class="suggestions-list suggestions-enter">
         {#each allSuggestions as person, i (person.handle)}
           <li class="suggestion-stagger" style="animation-delay: {i * 60}ms">
-            <a href="/@{person.handle}" class="suggestion-item">
-              <div class="suggestion-avatar">
-                <img src={person.avatar_url || '/images/default-avatar.svg'} alt={person.display_name} class="suggestion-img" />
-              </div>
-              <div class="suggestion-info">
-                <span class="suggestion-name">
-                  {person.display_name}
-                  {#if 'promoted' in person && person.promoted}
-                    <span class="promoted-badge">Promoted</span>
-                  {/if}
-                </span>
-                <span class="suggestion-handle">@{person.acct || person.handle}</span>
-              </div>
-            </a>
+            <div class="suggestion-item">
+              <a href="/@{person.handle}" class="suggestion-link">
+                <div class="suggestion-avatar">
+                  <img src={person.avatar_url || '/images/default-avatar.svg'} alt="" loading="lazy" class="suggestion-img" />
+                </div>
+                <div class="suggestion-info">
+                  <span class="suggestion-name">
+                    {person.display_name}
+                    {#if person.promoted}
+                      <span class="promoted-badge">Promoted</span>
+                    {/if}
+                  </span>
+                  <span class="suggestion-handle">@{person.acct || person.handle}</span>
+                </div>
+              </a>
+              {@render followBtn(person)}
+            </div>
           </li>
         {/each}
       </ul>
       {/key}
+      <a href="/directory" class="section-link">Find more people</a>
     {:else}
       <p class="empty-text">No suggestions right now.</p>
     {/if}
   </section>
 
-  {#if newUsers.length > 0}
+  {#if !loaded || newUsers.length > 0}
     <section class="sidebar-section">
-      <h3 class="section-title">New Members</h3>
-      <ul class="new-users-list">
-        {#each newUsers as user (user.id)}
-          <li>
-            <a href="/@{user.handle}" class="new-user-item">
-              <div class="new-user-avatar">
-                <img src={user.avatar_url || '/images/default-avatar.svg'} alt="" class="new-user-img" />
+      <header class="section-header">
+        <h3 class="section-title">
+          <svg class="section-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
+          </svg>
+          New Members
+        </h3>
+      </header>
+      {#if !loaded}
+        {@render skeletonRows(4, true)}
+      {:else}
+        <ul class="new-users-list">
+          {#each newUsers as user (user.id)}
+            <li>
+              <div class="new-user-item">
+                <a href="/@{user.handle}" class="new-user-link">
+                  <div class="new-user-avatar">
+                    <img src={user.avatar_url || '/images/default-avatar.svg'} alt="" loading="lazy" class="new-user-img" />
+                  </div>
+                  <div class="new-user-info">
+                    <span class="new-user-name">{user.display_name || user.handle}</span>
+                    <span class="new-user-meta">@{user.acct || user.handle} &middot; {timeAgo(user.joined_at)}</span>
+                  </div>
+                </a>
+                {@render followBtn(user)}
               </div>
-              <div class="new-user-info">
-                <span class="new-user-name">{user.display_name || user.handle}</span>
-                <span class="new-user-meta">@{user.acct || user.handle} &middot; {timeAgo(user.joined_at)}</span>
-              </div>
-              <span class="new-user-badge">New</span>
-            </a>
-          </li>
-        {/each}
-      </ul>
-      <a href="/directory" class="see-more-link">See more →</a>
+            </li>
+          {/each}
+        </ul>
+        <a href="/directory" class="section-link">See more</a>
+      {/if}
     </section>
   {/if}
 
@@ -459,7 +655,8 @@
     text-decoration: none;
   }
 
-  .section-link:hover {
+  .section-link:hover,
+  .section-link:focus-visible {
     text-decoration: underline;
   }
 
@@ -473,17 +670,23 @@
     font-size: 0.95em;
   }
 
-  .suggestions-enter {
-    animation: suggestions-fade-in 0.3s ease;
+  /* Entrance animations only when the user hasn't asked for reduced
+     motion. Without the guard the 2-minute reshuffle re-runs the whole
+     slide-in, which is exactly the kind of unsolicited motion the
+     preference is meant to suppress. */
+  @media (prefers-reduced-motion: no-preference) {
+    .suggestions-enter {
+      animation: suggestions-fade-in 0.3s ease;
+    }
+
+    .suggestion-stagger {
+      animation: suggestion-slide-in 0.3s ease both;
+    }
   }
 
   @keyframes suggestions-fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
-  }
-
-  .suggestion-stagger {
-    animation: suggestion-slide-in 0.3s ease both;
   }
 
   @keyframes suggestion-slide-in {
@@ -495,6 +698,58 @@
       opacity: 1;
       transform: translateX(0);
     }
+  }
+
+  /* ---- Skeleton loading rows ---- */
+  .skeleton-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .skel-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    margin-inline: calc(-1 * var(--space-3));
+  }
+
+  .skel-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    flex-shrink: 0;
+    background: var(--color-border);
+  }
+
+  .skel-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .skel-line {
+    height: 10px;
+    border-radius: var(--radius-sm);
+    background: var(--color-border);
+  }
+
+  .skel-line-lg { width: 65%; }
+  .skel-line-sm { width: 40%; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .skel-avatar,
+    .skel-line {
+      animation: skeleton-pulse 1.5s ease-in-out infinite;
+    }
+  }
+
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
   }
 
   .trend-item {
@@ -509,9 +764,25 @@
     transition: background var(--transition-fast);
   }
 
-  .trend-item:hover {
+  .trend-item:hover,
+  .trend-item:focus-visible {
     text-decoration: none;
     background: var(--color-surface-container-low);
+  }
+
+  .trend-rank {
+    flex-shrink: 0;
+    width: 1.25rem;
+    font-family: var(--font-headline);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-on-surface-variant);
+    text-align: center;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
 
   .trend-text {
@@ -549,18 +820,26 @@
   .suggestion-item {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     margin-inline: calc(-1 * var(--space-3));
-    text-decoration: none;
-    color: var(--color-on-surface);
     border-radius: var(--radius-lg);
     transition: background var(--transition-fast);
   }
 
-  .suggestion-item:hover {
-    text-decoration: none;
+  .suggestion-item:hover,
+  .suggestion-item:focus-within {
     background: var(--color-surface-container-low);
+  }
+
+  .suggestion-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 1;
+    min-width: 0;
+    text-decoration: none;
+    color: var(--color-on-surface);
   }
 
   .suggestion-avatar {
@@ -579,13 +858,6 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-  }
-
-  .suggestion-initial {
-    font-family: var(--font-headline);
-    font-weight: 600;
-    color: var(--color-primary);
-    font-size: var(--text-sm);
   }
 
   .suggestion-info {
@@ -620,6 +892,47 @@
   .suggestion-handle {
     font-size: var(--text-xs);
     color: var(--color-on-surface-variant);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---- Inline follow button (Recommended Accounts + New Members) ---- */
+  .follow-btn {
+    flex-shrink: 0;
+    padding: 5px var(--space-3);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-full);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast),
+      border-color var(--transition-fast), opacity var(--transition-fast);
+  }
+
+  .follow-btn:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .follow-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /* Following state: quiet outline so "Following" reads as done, and a
+     hover that hints at the unfollow action. */
+  .follow-btn.is-following {
+    background: transparent;
+    color: var(--color-on-surface-variant);
+    border-color: var(--color-border);
+  }
+
+  .follow-btn.is-following:hover {
+    border-color: var(--color-destructive, #dc2626);
+    color: var(--color-destructive, #dc2626);
+    box-shadow: none;
   }
 
   .empty-text {
@@ -636,18 +949,26 @@
   .new-user-item {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     margin-inline: calc(-1 * var(--space-3));
-    text-decoration: none;
-    color: var(--color-on-surface);
     border-radius: var(--radius-lg);
     transition: background var(--transition-fast);
   }
 
-  .new-user-item:hover {
-    text-decoration: none;
+  .new-user-item:hover,
+  .new-user-item:focus-within {
     background: var(--color-surface-container-low);
+  }
+
+  .new-user-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 1;
+    min-width: 0;
+    text-decoration: none;
+    color: var(--color-on-surface);
   }
 
   .new-user-avatar {
@@ -668,12 +989,6 @@
     object-fit: cover;
   }
 
-  .new-user-initial {
-    font-weight: 600;
-    color: var(--color-primary);
-    font-size: var(--text-sm);
-  }
-
   .new-user-info {
     display: flex;
     flex-direction: column;
@@ -692,33 +1007,55 @@
   .new-user-meta {
     font-size: var(--text-xs);
     color: var(--color-on-surface-variant);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .see-more-link {
-    display: block;
-    margin-block-start: var(--space-2);
-    padding: var(--space-2) 0;
-    color: var(--color-primary);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    text-decoration: none;
-    text-align: center;
+  /* ---- Followed hashtag row with unfollow affordance ---- */
+  .tag-row {
+    display: flex;
+    align-items: center;
   }
 
-  .see-more-link:hover {
-    text-decoration: underline;
+  .tag-link {
+    flex: 1;
+    min-width: 0;
   }
 
-  .new-user-badge {
-    font-size: 0.6rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-success, #22c55e);
-    background: rgba(34, 197, 94, 0.1);
-    padding: 2px 6px;
-    border-radius: var(--radius-full);
+  .tag-unfollow {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  }
+
+  /* Reveal on hover/focus of the row; always visible on touch (no hover). */
+  .tag-row:hover .tag-unfollow,
+  .tag-row:focus-within .tag-unfollow {
+    opacity: 1;
+  }
+
+  .tag-unfollow:hover,
+  .tag-unfollow:focus-visible {
+    background: var(--color-surface-container-low);
+    color: var(--color-destructive, #dc2626);
+  }
+
+  @media (hover: none) {
+    .tag-unfollow {
+      opacity: 1;
+    }
   }
 
   /* ---- Promote CTA ---- */

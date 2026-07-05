@@ -187,6 +187,13 @@
 
   {#if visiblePosts.length === 0 && !loading}
     <div class="feed-empty">
+      <div class="feed-empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 4l1.7 4.6L18 10.3l-4.3 1.7L12 16.6l-1.7-4.6L6 10.3l4.3-1.7L12 4Z" />
+          <path d="M18.5 14l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4Z" />
+        </svg>
+      </div>
+      <h2 class="feed-empty-title">Nothing here yet</h2>
       <p class="feed-empty-text">{emptyMessage}</p>
     </div>
   {/if}
@@ -361,13 +368,37 @@
   }
 
   .feed-empty {
-    padding: 80px 16px;
+    padding: 72px 24px;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .feed-empty-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-full);
+    display: grid;
+    place-items: center;
+    color: var(--color-primary);
+    background: var(--color-secondary-container);
+    box-shadow: 0 8px 24px rgba(0, 106, 105, 0.12);
+    margin-block-end: var(--space-5);
+  }
+
+  .feed-empty-title {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--color-text);
+    margin-block-end: var(--space-2);
   }
 
   .feed-empty-text {
-    font-size: 1rem;
+    font-size: var(--text-sm);
     color: var(--color-text-tertiary);
+    max-width: 320px;
+    line-height: 1.55;
   }
 
   .feed-loading {

@@ -3,18 +3,6 @@ defmodule Hybridsocial.Federation.MigrationTest do
 
   alias Hybridsocial.Federation.Migration
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   describe "add_also_known_as/2" do
     test "adds an alsoKnownAs URI to an identity" do
       user = create_user("akauser1", "aka1@test.com")

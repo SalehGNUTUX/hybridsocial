@@ -1,25 +1,6 @@
 defmodule HybridsocialWeb.Api.V1.ExportControllerTest do
   use HybridsocialWeb.ConnCase, async: true
 
-  alias Hybridsocial.Accounts
-
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
-  defp auth_conn(conn, identity) do
-    {:ok, token, _claims} = Hybridsocial.Auth.Token.generate_access_token(identity.id)
-    put_req_header(conn, "authorization", "Bearer #{token}")
-  end
-
   describe "POST /api/v1/export" do
     test "creates an export request", %{conn: conn} do
       identity = create_user("exporttest", "exporttest@test.com")

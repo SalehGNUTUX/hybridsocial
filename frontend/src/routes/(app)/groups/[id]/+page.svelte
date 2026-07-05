@@ -7,7 +7,7 @@
   import type { GroupDetail, GroupMember } from '$lib/api/groups.js';
   import { getGroup, getGroupTimeline, getGroupMembers, joinGroup, leaveGroup, updateMemberRole, banMember } from '$lib/api/groups.js';
   import { authStore, isStaffMember } from '$lib/stores/auth.js';
-  import GroupHeader from '$lib/components/group/GroupHeader.svelte';
+  import EntityHeader from '$lib/components/entity/EntityHeader.svelte';
   import GroupManageModal from '$lib/components/group/GroupManageModal.svelte';
   import ComposerTrigger from '$lib/components/post/ComposerTrigger.svelte';
   import MediaGrid from '$lib/components/feed/MediaGrid.svelte';
@@ -17,17 +17,21 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import AdminProfileActions from '$lib/components/admin/AdminProfileActions.svelte';
+  import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
 
   let group = $state<GroupDetail | null>(null);
-  let posts = $state<Post[]>([]);
   let members = $state<GroupMember[]>([]);
   let loading = $state(true);
-  let postsLoading = $state(false);
   let membersLoading = $state(false);
-  let hasMorePosts = $state(true);
   let hasMoreMembers = $state(true);
   let activeTab = $state('posts');
   let membersLoaded = $state(false);
+
+  // Shared paginated post feed (Posts + Media tabs).
+  const feed = createEntityFeed(async (cursor) => {
+    const r = await getGroupTimeline(groupId, cursor ?? undefined);
+    return Array.isArray(r) ? r : ((r as any).data ?? []);
+  });
 
   // Admin controls — the unified manage modal replaces the previous
   // pair of "Edit Group" / "Delete Group" buttons. All admin actions
@@ -40,6 +44,11 @@
   let currentUserId = $derived(get(authStore)?.user?.id);
   let isAdmin = $derived(group?.role === 'owner' || group?.role === 'admin');
   let isOwner = $derived(group?.role === 'owner');
+  // Mirror the Pages header: in-group owners/admins OR instance staff can
+  // manage. Staff aren't usually group members, so without the staff check
+  // a site admin could never open the manage modal — even though the modal
+  // and backend (`Groups.can_manage?/2`) already grant them the rights.
+  let canManage = $derived(isAdmin || $isStaffMember);
 
   const tabs = [
     { id: 'posts', label: 'Posts' },
@@ -48,20 +57,18 @@
     { id: 'about', label: 'About' }
   ];
 
-  onMount(async () => {
-    try {
-      const [g, timeline] = await Promise.all([
-        getGroup(groupId),
-        getGroupTimeline(groupId)
-      ]);
-      group = g;
-      posts = Array.isArray(timeline) ? timeline : (timeline as any).data || [];
-      hasMorePosts = posts.length >= 20;
-    } catch {
-      // Error loading group
-    } finally {
-      loading = false;
-    }
+  onMount(() => {
+    // Header + feed load in parallel.
+    (async () => {
+      try {
+        group = await getGroup(groupId);
+      } catch {
+        // Error loading group
+      } finally {
+        loading = false;
+      }
+    })();
+    feed.reset();
   });
 
   $effect(() => {
@@ -81,23 +88,6 @@
       // Error loading members
     } finally {
       membersLoading = false;
-    }
-  }
-
-  async function loadMorePosts() {
-    if (!hasMorePosts || postsLoading) return;
-    postsLoading = true;
-    try {
-      const cursor = posts.length > 0 ? posts[posts.length - 1]?.id : undefined;
-      const result = await getGroupTimeline(groupId, cursor);
-      const data = Array.isArray(result) ? result : (result as any).data || [];
-      const seen = new Set(posts.map((p) => p.id));
-      posts = [...posts, ...data.filter((p: Post) => !seen.has(p.id))];
-      hasMorePosts = data.length >= 20;
-    } catch {
-      // Error
-    } finally {
-      postsLoading = false;
     }
   }
 
@@ -175,18 +165,46 @@
   {#if loading}
     <div class="page-loading"><Spinner /></div>
   {:else if group}
-    <GroupHeader
-      {group}
-      onjoin={handleJoin}
-      onleave={handleLeave}
-      onsettings={openSettings}
+    <EntityHeader
+      name={group.name}
+      avatarUrl={group.avatar_url}
+      coverUrl={group.header_url}
+      description={group.description}
     >
-      {#snippet staffActions()}
+      {#snippet meta()}
+        {#if group}
+          <span class="eh-cap">{group.visibility}</span>
+          <span class="eh-dot" aria-hidden="true">·</span>
+          <span>{group.member_count === 1 ? '1 member' : `${group.member_count.toLocaleString()} members`}</span>
+        {/if}
+      {/snippet}
+      {#snippet adminActions()}
         {#if $isStaffMember && !isOwner && group?.identity}
           <AdminProfileActions account={group.identity} />
         {/if}
+        {#if canManage}
+          <button type="button" class="btn btn-ghost icon-btn" onclick={openSettings} aria-label="Group settings" title="Group settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+          </button>
+        {/if}
       {/snippet}
-    </GroupHeader>
+      {#snippet primaryAction()}
+        {#if group}
+          {#if group.is_member}
+            {#if !isOwner}
+              <button type="button" class="btn btn-outline" onclick={handleLeave}>Leave</button>
+            {/if}
+          {:else if group.pending_request}
+            <button type="button" class="btn btn-outline" disabled>Pending</button>
+          {:else}
+            <button type="button" class="btn btn-primary" onclick={handleJoin}>Join</button>
+          {/if}
+        {/if}
+      {/snippet}
+    </EntityHeader>
 
     <div class="group-content">
       <Tabs {tabs} bind:active={activeTab}>
@@ -199,22 +217,22 @@
             />
           {/if}
           <FeedList
-            {posts}
-            loading={postsLoading}
-            hasMore={hasMorePosts}
+            posts={feed.posts}
+            loading={feed.loading}
+            hasMore={feed.hasMore}
             viewerContext="group"
             emptyMessage="No posts in this group yet"
-            onloadmore={loadMorePosts}
+            onloadmore={feed.loadMore}
           />
         {:else if activeTab === 'media'}
-          <!-- Media tab shares the same `posts` list as the Posts tab —
-               we just filter for image / video attachments and render
-               them as a grid. Loading more posts feeds both tabs. -->
+          <!-- Media tab shares the same feed as the Posts tab — we just
+               filter for image / video attachments and render them as a
+               grid. Loading more posts feeds both tabs. -->
           <MediaGrid
-            {posts}
-            loading={postsLoading}
-            hasMore={hasMorePosts}
-            onloadmore={loadMorePosts}
+            posts={feed.posts}
+            loading={feed.loading}
+            hasMore={feed.hasMore}
+            onloadmore={feed.loadMore}
             emptyMessage="No photos or videos posted in this group yet"
           />
         {:else if activeTab === 'members'}
@@ -333,6 +351,24 @@
     max-width: var(--feed-max-width);
     margin: 0 auto;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* Header snippet helpers (rendered in this page's scope). */
+  .eh-cap {
+    text-transform: capitalize;
+  }
+
+  .eh-dot {
+    color: var(--color-text-tertiary);
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
   }
 
   .page-loading, .page-error {
@@ -370,7 +406,12 @@
   }
   .btn-danger:hover { opacity: 0.9; }
 
-  .group-content { margin-block-start: var(--space-4); }
+  .group-content {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    padding: 0 var(--space-4) var(--space-4);
+  }
   .tab-loading { display: flex; justify-content: center; padding: var(--space-8); }
   .tab-empty { text-align: center; padding: var(--space-12); }
   .empty-text { color: var(--color-text-tertiary); }

@@ -13,80 +13,86 @@
   }
 </script>
 
-{#if participants.length > 0}
-  <ul class="strip" aria-label="Conversation participants">
-    {#each participants as p (p.id)}
-      <li>
-        <a class="chip" href={`/@${p.handle}`} title={nameFor(p)}>
-          <Avatar src={p.avatar_url} name={nameFor(p)} size="md" />
-          <span class="chip-name">{nameFor(p)}</span>
-        </a>
-      </li>
-    {/each}
-  </ul>
+{#if participants.length === 1}
+  {@const p = participants[0]}
+  <a class="ps-identity" href={`/@${p.handle}`} aria-label={`${nameFor(p)} — view profile`}>
+    <Avatar src={p.avatar_url} name={nameFor(p)} size="md" />
+    <span class="ps-text">
+      <span class="ps-name">{nameFor(p)}</span>
+      <span class="ps-handle">@{p.acct || p.handle}</span>
+    </span>
+  </a>
+{:else if participants.length > 1}
+  <div class="ps-identity ps-identity-group">
+    <span class="ps-avatars" aria-hidden="true">
+      {#each participants.slice(0, 3) as p (p.id)}
+        <span class="ps-avatar-stacked">
+          <Avatar src={p.avatar_url} name={nameFor(p)} size="sm" />
+        </span>
+      {/each}
+    </span>
+    <span class="ps-text">
+      <span class="ps-name">{participants.map(nameFor).join(', ')}</span>
+      <span class="ps-handle">{participants.length} people</span>
+    </span>
+  </div>
 {/if}
 
 <style>
-  .strip {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .ps-identity {
     display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: var(--space-3, 12px);
-    overflow-x: auto;
-    overflow-y: hidden;
-    /* Quietly hide the horizontal scrollbar — bar is distracting on
-       1-on-1 chats where it'd be there but never used. Touch and
-       trackpad still scroll naturally. */
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    padding-block: 4px;
-    /* Bleed slightly past the flex container's gap so chips don't
-       look glued to the edges when the strip overflows. */
-    scroll-padding-inline: 8px;
-  }
-
-  .strip::-webkit-scrollbar {
-    display: none;
-  }
-
-  .strip > li {
-    flex: 0 0 auto;
-    list-style: none;
-  }
-
-  .chip {
-    flex: 0 0 auto;
-    display: inline-flex;
-    flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-3);
     text-decoration: none;
     color: var(--color-text);
-    max-width: 88px;
-    transition: transform var(--transition-fast);
+    min-width: 0;
+    border-radius: var(--radius-lg);
+    transition: opacity var(--transition-fast);
   }
 
-  .chip:hover {
+  a.ps-identity:hover {
     text-decoration: none;
-    transform: translateY(-2px);
+    opacity: 0.85;
   }
 
-  .chip:hover .chip-name {
-    color: var(--color-primary, #3b82f6);
+  .ps-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
   }
 
-  .chip-name {
-    font-size: var(--text-xs, 0.75rem);
-    font-weight: 600;
+  .ps-name {
+    font-size: var(--text-base);
+    font-weight: 700;
     color: var(--color-text);
-    text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 100%;
-    transition: color var(--transition-fast);
+  }
+
+  .ps-handle {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Group DM: overlapping avatar cluster. */
+  .ps-avatars {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .ps-avatar-stacked {
+    display: inline-flex;
+    border-radius: var(--radius-full);
+    box-shadow: 0 0 0 2px var(--color-surface-container-lowest, #fff);
+  }
+
+  .ps-avatar-stacked:not(:first-child) {
+    margin-inline-start: -12px;
   }
 </style>

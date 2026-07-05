@@ -7,13 +7,12 @@
   import { dmUnreadTotal } from '$lib/stores/dm-unread.js';
   import type { Identity } from '$lib/api/types.js';
 
-  let user: Identity | null = $state(null);
-  let notifCount = $state(0);
-  let dmCount = $state(0);
-
-  currentUser.subscribe((v) => (user = v));
-  unreadCount.subscribe((v) => (notifCount = v));
-  dmUnreadTotal.subscribe((v) => (dmCount = v));
+  // Auto-subscribed derivations — these unsubscribe automatically when
+  // the component is destroyed, unlike a bare store.subscribe() which
+  // would leak its listener.
+  let user = $derived($currentUser);
+  let notifCount = $derived($unreadCount);
+  let dmCount = $derived($dmUnreadTotal);
 
   interface NavItem {
     href: string;
@@ -22,20 +21,38 @@
     badge?: () => number;
   }
 
-  const navItems: NavItem[] = [
-    { href: '/home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
-    { href: '/explore', label: 'Explore', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' },
-    { href: '/notifications', label: 'Notifications', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', badge: () => notifCount },
-    { href: '/messages', label: 'Messages', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', badge: () => dmCount },
-    { href: '/lists', label: 'Lists', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
-    { href: '/groups', label: 'Groups', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-    { href: '/pages', label: 'Pages', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
-    { href: '/streams', label: 'Streams', icon: 'M5 3l14 9-14 9V3z' },
-    { href: '/bookmarks', label: 'Bookmarks', icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z' },
-    { href: '/scheduled', label: 'Scheduled', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20z M12 6v6l4 2' },
-    { href: '/drafts', label: 'Drafts', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
-    { href: '/settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+  // Grouped so the 12 destinations read as clusters (primary / discover /
+  // your content / utility) instead of one flat wall. Rendered with a
+  // thin divider between groups.
+  const navGroups: NavItem[][] = [
+    [
+      { href: '/home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
+      { href: '/explore', label: 'Explore', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' },
+      { href: '/notifications', label: 'Notifications', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', badge: () => notifCount },
+      { href: '/messages', label: 'Messages', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', badge: () => dmCount },
+    ],
+    [
+      { href: '/lists', label: 'Lists', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
+      { href: '/groups', label: 'Groups', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
+      { href: '/pages', label: 'Pages', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
+      { href: '/streams', label: 'Streams', icon: 'M5 3l14 9-14 9V3z' },
+    ],
+    [
+      { href: '/bookmarks', label: 'Bookmarks', icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z' },
+      { href: '/scheduled', label: 'Scheduled', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20z M12 6v6l4 2' },
+      { href: '/drafts', label: 'Drafts', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
+    ],
+    [
+      { href: '/settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+    ],
   ];
+
+  // Accessible name that folds in the unread count and survives the
+  // icon-only tablet mode where the visible label is hidden.
+  function navAriaLabel(item: NavItem): string {
+    const count = item.badge ? item.badge() : 0;
+    return count > 0 ? `${item.label}, ${count} unread` : item.label;
+  }
 
   function isActive(href: string): boolean {
     return page.url.pathname === href || page.url.pathname.startsWith(href + '/');
@@ -57,30 +74,38 @@
 <aside class="sidebar">
   <nav class="sidebar-nav" aria-label="Main navigation">
     <ul class="nav-list">
-      {#each navItems as item (item.href)}
-        <li>
-          <a
-            href={item.href}
-            class="nav-item"
-            class:active={isActive(item.href)}
-            aria-current={isActive(item.href) ? 'page' : undefined}
-          >
-            <span class="nav-icon-wrap">
-              <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d={item.icon} />
-              </svg>
-              {#if item.badge}
-                {@const badgeCount = item.badge()}
-                {#if badgeCount > 0}
-                  <span class="nav-badge-wrap">
-                    <Badge count={badgeCount} variant="danger" />
-                  </span>
+      {#each navGroups as group, gi (gi)}
+        {#if gi > 0}
+          <li class="nav-divider" role="separator" aria-hidden="true"></li>
+        {/if}
+        {#each group as item (item.href)}
+          {@const active = isActive(item.href)}
+          <li>
+            <a
+              href={item.href}
+              class="nav-item"
+              class:active
+              aria-current={active ? 'page' : undefined}
+              aria-label={navAriaLabel(item)}
+              title={item.label}
+            >
+              <span class="nav-icon-wrap">
+                <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width={active ? 2.5 : 2} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d={item.icon} />
+                </svg>
+                {#if item.badge}
+                  {@const badgeCount = item.badge()}
+                  {#if badgeCount > 0}
+                    <span class="nav-badge-wrap">
+                      <Badge count={badgeCount} variant="danger" />
+                    </span>
+                  {/if}
                 {/if}
-              {/if}
-            </span>
-            <span class="nav-label">{item.label}</span>
-          </a>
-        </li>
+              </span>
+              <span class="nav-label">{item.label}</span>
+            </a>
+          </li>
+        {/each}
       {/each}
       {#if showCompose}
         <!-- Composer trigger lives at the foot of the nav list rather
@@ -162,10 +187,27 @@
     text-decoration: none;
   }
 
+  .nav-item:focus-visible {
+    background: var(--color-surface-container-low);
+    color: var(--color-on-surface);
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+    text-decoration: none;
+  }
+
   .nav-item.active {
     background: var(--color-secondary-container);
     color: var(--color-primary);
     font-weight: 600;
+  }
+
+  /* Thin rule between destination groups. Indented to the row's text
+     inset so it doesn't run edge-to-edge. */
+  .nav-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--space-2) var(--space-4);
+    list-style: none;
   }
 
   /* Compose is rendered as a <button>; reset the user-agent styles
@@ -183,6 +225,13 @@
   button.nav-item:hover {
     background: var(--color-primary-hover);
     color: var(--color-text-on-primary);
+  }
+
+  button.nav-item:focus-visible {
+    background: var(--color-primary-hover);
+    color: var(--color-text-on-primary);
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .nav-icon {
@@ -234,6 +283,13 @@
     text-decoration: none;
   }
 
+  .user-link:focus-visible {
+    background: var(--color-surface-container-low);
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+    text-decoration: none;
+  }
+
   .user-info {
     display: flex;
     flex-direction: column;
@@ -279,6 +335,12 @@
     .user-link {
       justify-content: center;
       padding: var(--space-3);
+    }
+
+    /* Tighten the group dividers so they don't run wider than the
+       icon rail. */
+    .nav-divider {
+      margin-inline: var(--space-3);
     }
   }
 

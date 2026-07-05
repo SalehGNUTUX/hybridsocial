@@ -3,11 +3,11 @@
   import type { MediaAttachment, Identity } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
 
-  // Multi-strand audio player. The waveform envelope is baked once
-  // from the decoded audio; each draw frame renders N overlapping
-  // 1px strands whose phase is offset in time so they shimmer while
-  // the track plays. Idle state still shows the envelope but without
-  // the phase drift.
+  // Audio player with an iOS/macOS-style bar waveform. Idle, it shows the
+  // amplitude envelope baked from the decoded PCM (real per-slice
+  // loudness, never synthetic) with a progress fill. While playing, the
+  // same bars are driven by a live Web Audio AnalyserNode, so they react
+  // to the voice in real time — every bar is real signal, not animation.
 
   let {
     media,
@@ -28,25 +28,28 @@
   let peaksLoaded = $state(false);
 
   const SPEEDS = [1, 1.25, 1.5, 1.75, 2];
-  const BIN_COUNT = 260;
-  const STRAND_COUNT = 7;
+  // Source resolution we bake from the decoded clip. The number of bars
+  // actually drawn is derived from the canvas width; this is just the
+  // envelope we resample down from.
+  const BIN_COUNT = 400;
 
   let rafId: number | null = null;
-  let animPhase = 0;
-  let lastFrameTs = 0;
 
-  // Live-analysis graph. Wired lazily on first play so we don't
-  // create an AudioContext before a user gesture (Chrome blocks
-  // autoplay contexts otherwise). MediaElementSource can only be
-  // constructed ONCE per element, so we keep the handles around.
+  // Live Web Audio analyser, built lazily on first play (an AudioContext
+  // needs a user gesture, and a MediaElementSource can be created only
+  // once per <audio> element). While playing, the bars are driven by this
+  // real-time spectrum so the waveform genuinely reacts to the voice;
+  // paused/idle, we fall back to the baked envelope + progress.
   let liveCtx: AudioContext | null = null;
   let liveAnalyser: AnalyserNode | null = null;
-  let liveData: Uint8Array | null = null;
-  // Low-passed version of the analyser data so strand heights don't
-  // twitch frame-to-frame. Each bin decays toward the raw value with
-  // a weight, giving a smoothed shimmer instead of a hard-edge
-  // equalizer bounce.
+  // Concrete ArrayBuffer backing so it satisfies getByteFrequencyData's
+  // Uint8Array<ArrayBuffer> param under the generic lib.dom typings.
+  let liveData: Uint8Array<ArrayBuffer> | null = null;
   let liveSmooth: Float32Array | null = null;
+  // Set once we see any non-zero analyser frame. If it stays false the
+  // media is CORS-tainted (analysis is all zeros) — we then keep showing
+  // the honest static envelope instead of a dead flat line.
+  let liveSeen = false;
 
   async function loadWaveform() {
     if (!media.url) return;
@@ -75,40 +78,80 @@
       }
 
       const max = Math.max(...result, 0.001);
-      peaks = result.map((v) => Math.max(0.08, v / max));
+      // Normalise 0..1 against the loudest slice. Keep a tiny floor so
+      // silent gaps still read as small dashes (like a voice memo) —
+      // every value here is measured amplitude, never synthetic.
+      peaks = result.map((v) => Math.max(0.02, v / max));
       peaksLoaded = true;
       try { await ctx.close(); } catch { /* ignore */ }
       drawWaveform();
     } catch {
-      peaks = Array.from({ length: BIN_COUNT }, (_, i) => 0.3 + 0.6 * Math.abs(Math.sin(i * 0.12)));
+      // Decode failed (CORS / unsupported codec). Render a flat minimal
+      // baseline rather than a fake waveform — bars must reflect real
+      // audio only, so we show "no data" honestly instead of inventing peaks.
+      peaks = new Array(BIN_COUNT).fill(0.03);
       peaksLoaded = true;
       drawWaveform();
     }
   }
 
-  // Pull a fresh frame of live frequency data into `liveSmooth`,
-  // applying exponential smoothing so bins don't flicker. Returns
-  // a view onto the *useful* lower portion of the FFT — the upper
-  // half of the spectrum is near-silent for speech/music at 44.1kHz
-  // sample rate, which would render as a flat dead tail on the
-  // right side of the waveform. Stretching only the lower bins
-  // across the full canvas keeps every pixel reactive.
+  // Pull a fresh real-time frequency frame, exponentially smoothed so
+  // bars glide rather than strobe. Returns the useful lower portion of
+  // the spectrum (voice/music energy), or null while the signal is still
+  // all-zero (CORS taint / pre-audio) so the caller can fall back.
   function sampleLive(): Float32Array | null {
     if (!liveAnalyser || !liveData || !liveSmooth) return null;
     liveAnalyser.getByteFrequencyData(liveData);
-    const a = 0.32;
+    const a = 0.5;
+    let peak = 0;
     for (let i = 0; i < liveSmooth.length; i++) {
       const v = liveData[i] / 255;
+      if (v > peak) peak = v;
       liveSmooth[i] = liveSmooth[i] * (1 - a) + v * a;
     }
-    // Keep the lower ~40% of bins. With fftSize=512 that's 102 bins
-    // covering 0 → ~9 kHz at 44.1 kHz — basically everything a
-    // listener hears as "the sound", nothing past the hi-hat
-    // sparkle range that tends to read as zero.
-    const useful = Math.floor(liveSmooth.length * 0.4);
+    if (peak > 0.01) liveSeen = true;
+    if (!liveSeen) return null;
+    // Lower ~55% of bins carry essentially all the audible energy; the
+    // top end is a dead flat tail, so crop it and stretch the useful
+    // part across the full bar row.
+    const useful = Math.max(1, Math.floor(liveSmooth.length * 0.55));
     return liveSmooth.subarray(0, useful);
   }
 
+  // Draw one rounded, vertically-centred bar filled with a vertical
+  // gradient that's solid at the centre line and fades out toward the top
+  // and bottom tips — a soft, glowing look instead of hard-edged bars.
+  function fadeBar(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    midY: number,
+    half: number,
+    bw: number,
+    rgb: string,
+    alpha: number,
+  ) {
+    const yTop = midY - half;
+    const bh = half * 2;
+    const g = ctx.createLinearGradient(0, yTop, 0, midY + half);
+    g.addColorStop(0, `rgba(${rgb}, ${alpha * 0.05})`);
+    g.addColorStop(0.5, `rgba(${rgb}, ${alpha})`);
+    g.addColorStop(1, `rgba(${rgb}, ${alpha * 0.05})`);
+    ctx.fillStyle = g;
+    const r = Math.min(bw / 2, half);
+    if (typeof ctx.roundRect === 'function') {
+      ctx.beginPath();
+      ctx.roundRect(x, yTop, bw, bh, r);
+      ctx.fill();
+    } else {
+      ctx.fillRect(x, yTop, bw, bh);
+    }
+  }
+
+  // iOS/macOS voice-memo waveform: vertically-centred rounded bars, one
+  // per slot, each bar's height set by the REAL decoded amplitude for
+  // that slice of the clip (resampled from `peaks`). Bars before the
+  // playhead take the accent colour; the rest stay dimmed, and the bar
+  // under the playhead gets a brief highlight while playing.
   function drawWaveform() {
     if (!canvasEl) return;
     const dpr = window.devicePixelRatio || 1;
@@ -123,143 +166,92 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
-    // Prefer live analyser data when playing; fall back to the
-    // pre-decoded envelope (peaks) otherwise. This gives a real-
-    // time EQ-style shimmer during playback and a clean
-    // full-track silhouette when idle.
-    const live = playing ? sampleLive() : null;
-    const envelope = live ?? Float32Array.from(peaks);
-    if (envelope.length === 0) return;
-
-    // Interlacing sine-strand render. Each strand is a smooth
-    // curve centered on midY — amplitude comes from the signal
-    // envelope (live FFT or pre-decoded peaks), frequency +
-    // phase offsets per strand are what makes the bundle
-    // interlace instead of tracking as one thick line. The
-    // whole bundle spreads wider on loud sections and collapses
-    // toward the centerline when quiet, like the reference.
+    // Thin bars with a small gap.
+    const BAR_W = 2;
+    const GAP = 2;
+    const slot = BAR_W + GAP;
+    const barCount = Math.max(1, Math.floor((w + GAP) / slot));
     const midY = h / 2;
-    const maxHalf = h / 2 - 3;
-    // Sample the envelope at a denser resolution than its source
-    // (linear interpolation) so strand curves stay smooth even
-    // when the FFT crop gives us only ~100 bins.
-    const SAMPLES = 220;
+    const maxHalf = h / 2 - 1;
+    const minHalf = 1;
 
-    for (let s = 0; s < STRAND_COUNT; s++) {
-      const strandFrac = s / (STRAND_COUNT - 1 || 1);
-      const strandScale = 0.55 + 0.45 * Math.sin(strandFrac * Math.PI);
-      // Two sine terms per strand: a slow "carrier" that gives
-      // the interlacing shape, plus a higher-frequency harmonic
-      // that adds real-audio sharpness. Adding them makes the
-      // curve bumpier where the carrier peaks, like actual PCM.
-      const carrierFreq = 0.06 + 0.012 * s;
-      const harmonicFreq = carrierFreq * 4.3 + 0.01 * s;
-      const strandSpeed = 0.5 + s * 0.28;
-      const strandDir = s % 2 === 0 ? 1 : -1;
-      const strandPhase =
-        strandFrac * Math.PI * 2 + animPhase * strandSpeed * strandDir;
-      const harmonicPhase = strandPhase * 1.7 + strandFrac * 2.1;
-      // Strand-unique noise seed. Cheap deterministic hash keeps
-      // the jitter stable frame-to-frame at a given sample point,
-      // so the strand looks like one jagged curve and not
-      // TV static.
-      const noiseSeed = (s + 1) * 13.37;
+    const ACCENT = '97, 226, 255';
+    const HEAD = '184, 242, 255';
+    const DIM = '230, 242, 245';
 
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let i = 0; i <= SAMPLES; i++) {
-        const t = i / SAMPLES;
-        const x = t * w;
-        const envPos = t * (envelope.length - 1);
-        const envIdx = Math.floor(envPos);
-        const envFrac = envPos - envIdx;
-        const envA = envelope[envIdx] ?? 0;
-        const envB = envelope[Math.min(envIdx + 1, envelope.length - 1)] ?? envA;
-        const mag = Math.max(0.05, envA * (1 - envFrac) + envB * envFrac);
-
-        // Carrier: main interlacing shape.
-        const carrier = Math.sin(x * carrierFreq + strandPhase);
-        // Harmonic: higher-frequency wiggle — 0.35x weight so it
-        // sharpens the silhouette without drowning out the base.
-        const harmonic = Math.sin(x * harmonicFreq + harmonicPhase) * 0.35;
-        // Stable pseudo-noise per (strand, sample): fract of
-        // sin() is the cheap classic hash. Scale proportional to
-        // signal magnitude so quiet sections stay smooth.
-        const hash = Math.sin(i * 12.9898 + noiseSeed + animPhase * 0.2) * 43758.5453;
-        const noise = (hash - Math.floor(hash) - 0.5) * 0.45;
-
-        const shape = (carrier + harmonic + noise);
-        const y = midY + shape * maxHalf * strandScale * mag;
-
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+    // While playing, drive the bars from the live spectrum so they react
+    // to the voice in real time. Each bar tracks a band of the actual
+    // signal — not a synthetic animation.
+    const live = playing ? sampleLive() : null;
+    if (live) {
+      for (let i = 0; i < barCount; i++) {
+        const b0 = Math.floor((i / barCount) * live.length);
+        const b1 = Math.min(
+          live.length,
+          Math.max(b0 + 1, Math.ceil(((i + 1) / barCount) * live.length)),
+        );
+        let sum = 0;
+        for (let j = b0; j < b1; j++) sum += live[j];
+        const amp = sum / (b1 - b0);
+        const half = Math.max(minHalf, Math.pow(amp, 0.85) * maxHalf);
+        fadeBar(ctx, i * slot, midY, half, BAR_W, ACCENT, 1);
       }
-      const grad = ctx.createLinearGradient(0, 0, w, 0);
-      grad.addColorStop(0, `rgba(23, 67, 85, ${0.35 + strandFrac * 0.2})`);
-      grad.addColorStop(1, `rgba(97, 226, 255, ${0.45 + strandFrac * 0.3})`);
-      ctx.strokeStyle = grad;
-      ctx.stroke();
+    } else if (peaks.length > 0) {
+      const progress = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
+      const playhead = progress * barCount;
+      const headIdx = Math.floor(playhead);
+
+      for (let i = 0; i < barCount; i++) {
+        // Average the real envelope samples falling in this bar's slice —
+        // no interpolation-invented values, just measured amplitude.
+        const a0 = Math.floor((i / barCount) * peaks.length);
+        const a1 = Math.min(
+          peaks.length,
+          Math.max(a0 + 1, Math.ceil(((i + 1) / barCount) * peaks.length)),
+        );
+        let sum = 0;
+        for (let j = a0; j < a1; j++) sum += peaks[j];
+        const amp = sum / (a1 - a0);
+
+        // Mild perceptual curve (as iOS does): gently compress the dynamic
+        // range so quiet-but-present passages stay visible next to the
+        // peaks, while keeping the pronounced silent gaps.
+        const half = Math.max(minHalf, Math.pow(amp, 0.72) * maxHalf);
+
+        if (i < headIdx) fadeBar(ctx, i * slot, midY, half, BAR_W, ACCENT, 1);
+        else if (playing && i === headIdx) fadeBar(ctx, i * slot, midY, half, BAR_W, HEAD, 1);
+        else fadeBar(ctx, i * slot, midY, half, BAR_W, DIM, 0.28);
+      }
+    } else {
+      return;
     }
 
-    // The seek bar below the canvas shows played progress; no
-    // need to also overlay a played-region tint on the waveform
-    // itself — it was reading as a clipped background rectangle.
+    // Fade the whole row out at the left and right ends so it doesn't butt
+    // hard against the container edges. One destination-in pass masks the
+    // already-drawn bars by a horizontal alpha ramp.
+    ctx.globalCompositeOperation = 'destination-in';
+    const edge = 0.12;
+    const mask = ctx.createLinearGradient(0, 0, w, 0);
+    mask.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    mask.addColorStop(edge, 'rgba(0, 0, 0, 1)');
+    mask.addColorStop(1 - edge, 'rgba(0, 0, 0, 1)');
+    mask.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = mask;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
   }
 
-  // Lazily build the live-analysis graph on first play. Must run
-  // from a user-gesture stack (the click that called .play()),
-  // otherwise the AudioContext starts suspended and stays that
-  // way. MediaElementSource can only be attached ONCE per
-  // <audio> element, so we stash the handles and reuse them on
-  // every subsequent play.
-  function ensureLiveGraph() {
-    if (liveAnalyser) return;
-    if (!audioEl) return;
-    const Ctx = (window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext) as
-      | typeof AudioContext
-      | undefined;
-    if (!Ctx) return;
-    try {
-      liveCtx = new Ctx();
-      const src = liveCtx.createMediaElementSource(audioEl);
-      liveAnalyser = liveCtx.createAnalyser();
-      liveAnalyser.fftSize = 512;
-      liveAnalyser.smoothingTimeConstant = 0.6;
-      // Source → analyser → destination. Without the destination
-      // hop, playback would be silent because we've intercepted
-      // the element's default output.
-      src.connect(liveAnalyser);
-      liveAnalyser.connect(liveCtx.destination);
-      liveData = new Uint8Array(liveAnalyser.frequencyBinCount);
-      liveSmooth = new Float32Array(liveAnalyser.frequencyBinCount);
-    } catch {
-      // MediaElementSource failed (CORS taint, or already-
-      // connected element on HMR). Fall back to the static
-      // pre-decoded envelope — the player still plays audio,
-      // it just won't shimmer to the live signal.
-      liveCtx = null;
-      liveAnalyser = null;
-      liveData = null;
-      liveSmooth = null;
-    }
-  }
-
-  // Per-frame animation loop. Only runs while playing; paused state
-  // stays frozen so decoding isn't wasted + battery-aware.
-  function tick(ts: number) {
+  // While playing, redraw each frame so the played-bar fill and the
+  // playhead highlight advance smoothly. Cheap — just a few dozen
+  // rounded rects per frame. Paused state stays frozen.
+  function tick() {
     if (!playing) return;
-    if (lastFrameTs === 0) lastFrameTs = ts;
-    const dt = (ts - lastFrameTs) / 1000;
-    lastFrameTs = ts;
-    animPhase += dt * 2.2; // radians/sec
     drawWaveform();
     rafId = requestAnimationFrame(tick);
   }
 
   function startAnim() {
     if (rafId != null) return;
-    lastFrameTs = 0;
     rafId = requestAnimationFrame(tick);
   }
 
@@ -270,13 +262,44 @@
     }
   }
 
+  // Build the live-analysis graph on first play. Must run from the play
+  // click's gesture stack or the AudioContext starts suspended. The
+  // MediaElementSource can only be attached ONCE per <audio> element, so
+  // we stash the handles and reuse them on every subsequent play.
+  function ensureLiveGraph() {
+    if (liveAnalyser || !audioEl) return;
+    const Ctx = (window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext) as
+      | typeof AudioContext
+      | undefined;
+    if (!Ctx) return;
+    try {
+      liveCtx = new Ctx();
+      const src = liveCtx.createMediaElementSource(audioEl);
+      liveAnalyser = liveCtx.createAnalyser();
+      liveAnalyser.fftSize = 512;
+      liveAnalyser.smoothingTimeConstant = 0.7;
+      // src → analyser → destination. Without the destination hop the
+      // element would be silent (we've intercepted its default output).
+      src.connect(liveAnalyser);
+      liveAnalyser.connect(liveCtx.destination);
+      liveData = new Uint8Array(liveAnalyser.frequencyBinCount);
+      liveSmooth = new Float32Array(liveAnalyser.frequencyBinCount);
+    } catch {
+      // MediaElementSource failed (already connected on HMR, etc.) —
+      // playback still works, the bars just fall back to the envelope.
+      liveCtx = null;
+      liveAnalyser = null;
+      liveData = null;
+      liveSmooth = null;
+    }
+  }
+
   function onPlay() {
     playing = true;
     ensureLiveGraph();
-    // Resume if the context was suspended (page backgrounded, etc).
-    if (liveCtx && liveCtx.state === 'suspended') {
-      void liveCtx.resume();
-    }
+    // Resume if the context was auto-suspended (tab backgrounded, etc.).
+    if (liveCtx && liveCtx.state === 'suspended') void liveCtx.resume();
     startAnim();
   }
 
@@ -322,13 +345,29 @@
     if (audioEl) audioEl.playbackRate = speed;
   }
 
-  function seekToEvent(e: MouseEvent) {
-    e.stopPropagation();
+  // Seek on pointer DOWN (not click): a click needs a down+up on the same
+  // pixels, which is unreliable on a thin bar — pointerdown fires on the
+  // press so a single tap always registers. Capturing the pointer lets the
+  // user drag to scrub even if they slide off the (short) bar vertically.
+  function seekToRatio(clientX: number, el: HTMLElement) {
     if (!audioEl || !duration) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, x / rect.width));
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     audioEl.currentTime = ratio * duration;
+  }
+
+  function seekDown(e: PointerEvent) {
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture?.(e.pointerId);
+    seekToRatio(e.clientX, el);
+  }
+
+  function seekMove(e: PointerEvent) {
+    // Only while the button is held (dragging to scrub).
+    if (e.buttons !== 1) return;
+    e.stopPropagation();
+    seekToRatio(e.clientX, e.currentTarget as HTMLElement);
   }
 
   // Clicks anywhere inside the player (labels, waveform, dead space)
@@ -381,9 +420,8 @@
     resizeObs?.disconnect();
     visibilityObs?.disconnect();
     stopAnim();
-    // Tear the live graph down — leaving an AudioContext running
-    // after the component unmounts leaks memory + keeps the tab's
-    // audio indicator on.
+    // Close the AudioContext so it doesn't leak or keep the tab's audio
+    // indicator lit after the player unmounts.
     if (liveCtx) {
       try { void liveCtx.close(); } catch { /* ignore */ }
       liveCtx = null;
@@ -434,8 +472,16 @@
     <canvas bind:this={canvasEl} class="ap-wave"></canvas>
   </div>
 
-  <button type="button" class="ap-seek" onclick={seekToEvent} aria-label="Seek">
-    <div class="ap-seek-fill" style:width="{progressPct}%"></div>
+  <button
+    type="button"
+    class="ap-seek"
+    onpointerdown={seekDown}
+    onpointermove={seekMove}
+    aria-label="Seek"
+  >
+    <span class="ap-seek-track">
+      <span class="ap-seek-fill" style:width="{progressPct}%"></span>
+    </span>
   </button>
 
   <div class="ap-controls">
@@ -518,11 +564,8 @@
   }
 
   .ap-wave-wrap {
-    height: 92px;
+    height: 54px;
     position: relative;
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(23, 67, 85, 0.08), rgba(11, 14, 17, 0));
-    overflow: hidden;
     transition: opacity 400ms ease;
   }
 
@@ -536,18 +579,32 @@
     height: 100%;
   }
 
+  /* Tall, full-width hit area so a click anywhere on the strip seeks —
+     the visible track is a thin bar centred inside it. */
   .ap-seek {
     appearance: none;
     background: none;
     border: none;
     padding: 0;
+    margin: 0;
     cursor: pointer;
+    width: 100%;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    touch-action: none;
+  }
+
+  .ap-seek-track {
+    position: relative;
     width: 100%;
     height: 4px;
     border-radius: 2px;
     background: rgba(97, 226, 255, 0.1);
-    position: relative;
     overflow: hidden;
+    /* Let all pointer events fall through to the button so its rect (and
+       full width) is always the seek reference. */
+    pointer-events: none;
   }
 
   .ap-seek-fill {

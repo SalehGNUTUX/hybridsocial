@@ -15,13 +15,7 @@ defmodule Hybridsocial.Social.PostsAudioGateTest do
   end
 
   defp create_user(handle, email, tier) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
+    identity = create_user(handle, email)
 
     {:ok, identity} =
       identity

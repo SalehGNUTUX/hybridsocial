@@ -3,18 +3,6 @@ defmodule Hybridsocial.Social.PostsTest do
 
   alias Hybridsocial.Social.Posts
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   describe "create_post/2" do
     test "creates a post with valid attrs" do
       identity = create_user("poster", "poster@test.com")

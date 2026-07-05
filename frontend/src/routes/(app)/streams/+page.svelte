@@ -3,7 +3,6 @@
   import { api } from '$lib/api/client.js';
   import type { Post } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
-  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   let posts: Post[] = $state([]);
   let loading = $state(true);
@@ -67,6 +66,27 @@
   onMount(() => {
     loadStreams();
   });
+
+  // Videos start with preload="none" (poster only). This action loads
+  // metadata once a card nears the viewport and pauses playback when a
+  // card scrolls fully out of view, so we don't fetch every video up
+  // front or leave audio playing off-screen.
+  function lazyVideo(node: HTMLVideoElement) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            if (node.preload === 'none') node.preload = 'metadata';
+          } else if (!node.paused) {
+            node.pause();
+          }
+        }
+      },
+      { threshold: 0.25 },
+    );
+    io.observe(node);
+    return { destroy: () => io.disconnect() };
+  }
 </script>
 
 <svelte:head>
@@ -79,12 +99,23 @@
   </div>
 
   {#if loading}
-    <div class="loading-state">
-      <Spinner />
+    <div class="streams-feed" aria-hidden="true">
+      {#each Array(2) as _, i (i)}
+        <div class="stream-card">
+          <div class="skel-video"></div>
+          <div class="skel-body">
+            <div class="skel-line skel-line-lg"></div>
+            <div class="skel-line skel-line-sm"></div>
+          </div>
+        </div>
+      {/each}
     </div>
   {:else if error}
     <div class="error-state">
-      <p>{error}</p>
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <p class="empty-text">{error}</p>
       <button type="button" class="btn btn-outline" onclick={loadStreams}>Retry</button>
     </div>
   {:else if posts.length === 0}
@@ -104,10 +135,13 @@
             <div class="stream-video-wrapper">
               <video
                 src={videoAttachment.url}
+                poster={videoAttachment.preview_url || undefined}
                 controls
-                preload="metadata"
+                playsinline
+                preload="none"
                 class="stream-video"
                 aria-label={videoAttachment.description || 'Video stream'}
+                use:lazyVideo
                 onplay={(e) => handlePlay(post.id, e)}
                 onended={(e) => handleEnded(post.id, e)}
               >
@@ -121,17 +155,17 @@
               </div>
             </div>
           {/if}
-          {#if post.content}
-            <div class="stream-content">
-              <p>{post.content}</p>
-            </div>
+          {#if post.content_html}
+            <div class="stream-content">{@html post.content_html}</div>
+          {:else if post.content}
+            <div class="stream-content"><p>{post.content}</p></div>
           {/if}
           <div class="stream-actions">
             <a href="/post/{post.id}" class="stream-action-link">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
-              {post.reply_count > 0 ? post.reply_count : ''} Comments
+              {post.reply_count > 0 ? `${post.reply_count} ` : ''}Comments
             </a>
             <span class="stream-stat">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -140,7 +174,7 @@
                 <line x1="9" y1="9" x2="9.01" y2="9"/>
                 <line x1="15" y1="9" x2="15.01" y2="9"/>
               </svg>
-              {post.reaction_count > 0 ? post.reaction_count : ''} Reactions
+              {post.reaction_count > 0 ? `${post.reaction_count} ` : ''}Reactions
             </span>
           </div>
         </div>
@@ -163,12 +197,6 @@
     font-size: var(--text-xl);
     font-weight: 700;
     color: var(--color-text);
-  }
-
-  .loading-state {
-    display: flex;
-    justify-content: center;
-    padding: var(--space-16);
   }
 
   .error-state,
@@ -236,6 +264,12 @@
     text-decoration: none;
   }
 
+  .stream-author:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    border-radius: var(--radius-md);
+  }
+
   .stream-author-name {
     font-size: var(--text-sm);
     font-weight: 600;
@@ -246,6 +280,16 @@
     font-size: var(--text-sm);
     color: var(--color-text);
     line-height: var(--leading-relaxed);
+    overflow-wrap: anywhere;
+  }
+
+  .stream-content :global(a) {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .stream-content :global(a:hover) {
+    text-decoration: underline;
   }
 
   .stream-actions {
@@ -266,6 +310,14 @@
 
   .stream-action-link:hover {
     color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .stream-action-link:focus-visible {
+    color: var(--color-primary);
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
     text-decoration: none;
   }
 
@@ -291,5 +343,40 @@
 
   .btn-outline:hover {
     background: var(--color-surface);
+  }
+
+  /* ---- Skeleton loading cards ---- */
+  .skel-video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--color-border);
+  }
+
+  .skel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: var(--space-4);
+  }
+
+  .skel-line {
+    height: 12px;
+    border-radius: var(--radius-sm);
+    background: var(--color-border);
+  }
+
+  .skel-line-lg { width: 80%; }
+  .skel-line-sm { width: 50%; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .skel-video,
+    .skel-line {
+      animation: skeleton-pulse 1.5s ease-in-out infinite;
+    }
+  }
+
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
   }
 </style>

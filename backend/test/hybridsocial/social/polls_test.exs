@@ -3,18 +3,6 @@ defmodule Hybridsocial.Social.PollsTest do
 
   alias Hybridsocial.Social.{Polls, Posts}
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   defp create_poll_post(identity) do
     {:ok, post} =
       Posts.create_post(identity.id, %{

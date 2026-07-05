@@ -14,6 +14,7 @@ defmodule Hybridsocial.Premium.Verification do
     field :verified_at, :utc_datetime_usec
     field :expires_at, :utc_datetime_usec
     field :metadata, :map, default: %{}
+    field :rejection_reason, :string
 
     belongs_to :identity, Hybridsocial.Accounts.Identity
     has_many :vouches, Hybridsocial.Premium.VerificationVouch
@@ -23,7 +24,15 @@ defmodule Hybridsocial.Premium.Verification do
 
   def changeset(verification, attrs) do
     verification
-    |> cast(attrs, [:identity_id, :type, :status, :verified_at, :expires_at, :metadata])
+    |> cast(attrs, [
+      :identity_id,
+      :type,
+      :status,
+      :verified_at,
+      :expires_at,
+      :metadata,
+      :rejection_reason
+    ])
     |> validate_required([:identity_id, :type])
     |> validate_inclusion(:type, @valid_types)
     |> validate_inclusion(:status, @valid_statuses)
@@ -32,11 +41,23 @@ defmodule Hybridsocial.Premium.Verification do
 
   def approve_changeset(verification) do
     verification
-    |> change(status: "approved", verified_at: DateTime.utc_now())
+    |> change(status: "approved", verified_at: DateTime.utc_now(), rejection_reason: nil)
   end
 
-  def reject_changeset(verification) do
+  def reject_changeset(verification, reason \\ nil) do
+    reason =
+      case reason do
+        r when is_binary(r) ->
+          case String.trim(r) do
+            "" -> nil
+            trimmed -> trimmed
+          end
+
+        _ ->
+          nil
+      end
+
     verification
-    |> change(status: "rejected")
+    |> change(status: "rejected", rejection_reason: reason)
   end
 end

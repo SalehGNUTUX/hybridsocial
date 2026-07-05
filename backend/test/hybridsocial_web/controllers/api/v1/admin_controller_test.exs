@@ -4,46 +4,9 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
   alias Hybridsocial.Moderation
   alias Hybridsocial.Auth.RBAC
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
-  # The RequireAdmin plug gates every admin endpoint on BOTH an active
-  # role and otp_enabled=true. Tests that want to exercise admin
-  # endpoints have to flip both bits, not just the role — otherwise
-  # every request 403s with "admin.otp_required".
-  defp make_admin(identity) do
-    {:ok, _} = RBAC.assign_role(identity.id, "owner", identity.id)
-    enable_otp(identity)
-    identity
-  end
-
-  defp make_moderator(identity) do
-    {:ok, _} = RBAC.assign_role(identity.id, "moderator", identity.id)
-    enable_otp(identity)
-    identity
-  end
-
-  defp enable_otp(identity) do
-    Hybridsocial.Accounts.get_user_by_identity(identity.id)
-    |> Ecto.Changeset.change(otp_enabled: true)
-    |> Hybridsocial.Repo.update!()
-  end
-
-  defp auth_conn(conn, identity) do
-    {:ok, token, _} = Hybridsocial.Auth.Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{token}")
-  end
+  # User/admin/moderator factories and the auth_conn/admin_conn helpers
+  # come from Hybridsocial.AccountsFixtures (auto-imported by ConnCase).
+  # admin_conn/2 also opens the sudo window every admin route requires.
 
   describe "admin reports" do
     setup %{conn: conn} do
@@ -59,7 +22,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
         })
 
       %{
-        conn: auth_conn(conn, admin),
+        conn: admin_conn(conn, admin),
         admin: admin,
         user: user,
         reported: reported,
@@ -113,7 +76,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
           "description" => "Test report"
         })
 
-      %{conn: auth_conn(conn, moderator), moderator: moderator, report: report}
+      %{conn: admin_conn(conn, moderator), moderator: moderator, report: report}
     end
 
     test "moderator can view reports", %{conn: conn} do
@@ -143,7 +106,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       admin = create_user("admin2", "admin2@test.com") |> make_admin()
       Moderation.log(admin.id, "test.action", nil, nil, %{})
 
-      %{conn: auth_conn(conn, admin), admin: admin}
+      %{conn: admin_conn(conn, admin), admin: admin}
     end
 
     test "GET /api/v1/admin/audit_log lists entries", %{conn: conn} do
@@ -158,7 +121,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       admin = create_user("admin3", "admin3@test.com") |> make_admin()
       user = create_user("target1", "target1@test.com")
 
-      %{conn: auth_conn(conn, admin), admin: admin, user: user}
+      %{conn: admin_conn(conn, admin), admin: admin, user: user}
     end
 
     test "GET /api/v1/admin/accounts lists accounts", %{conn: conn} do
@@ -197,7 +160,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
     setup %{conn: conn} do
       admin = create_user("admin4", "admin4@test.com") |> make_admin()
 
-      %{conn: auth_conn(conn, admin), admin: admin}
+      %{conn: admin_conn(conn, admin), admin: admin}
     end
 
     test "POST /api/v1/admin/content_filters creates a filter", %{conn: conn} do
@@ -228,7 +191,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
     setup %{conn: conn} do
       admin = create_user("admin5", "admin5@test.com") |> make_admin()
 
-      %{conn: auth_conn(conn, admin), admin: admin}
+      %{conn: admin_conn(conn, admin), admin: admin}
     end
 
     test "POST /api/v1/admin/banned_domains bans a domain", %{conn: conn} do
@@ -260,7 +223,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
   describe "non-admin access" do
     test "returns 403 for non-admin users", %{conn: conn} do
       user = create_user("regular1", "regular1@test.com")
-      conn = auth_conn(conn, user)
+      conn = admin_conn(conn, user)
 
       conn = get(conn, "/api/v1/admin/reports")
       assert json_response(conn, 403)["error"] == "auth.forbidden"
@@ -277,7 +240,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       cm = create_user("cm1", "cm1@test.com")
       {:ok, _} = RBAC.assign_role(cm.id, "community_manager", cm.id)
       enable_otp(cm)
-      conn = auth_conn(conn, cm)
+      conn = admin_conn(conn, cm)
 
       conn = get(conn, "/api/v1/admin/reports")
       assert json_response(conn, 403)["error"] == "permission.denied"
@@ -287,7 +250,7 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       cm = create_user("cm2", "cm2@test.com")
       {:ok, _} = RBAC.assign_role(cm.id, "community_manager", cm.id)
       enable_otp(cm)
-      conn = auth_conn(conn, cm)
+      conn = admin_conn(conn, cm)
 
       conn = get(conn, "/api/v1/admin/content_filters")
       assert %{"data" => _} = json_response(conn, 200)

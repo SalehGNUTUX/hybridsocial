@@ -715,6 +715,7 @@ export interface AdminDashboardStats {
   total_posts: number;
   known_instances: number;
   open_reports: number;
+  pending_verifications: number;
   services: {
     valkey: ServiceHealth;
     opensearch: ServiceHealth;

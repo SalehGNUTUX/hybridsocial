@@ -1,31 +1,7 @@
 defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
   use HybridsocialWeb.ConnCase, async: false
 
-  alias Hybridsocial.Auth.Token
   alias Hybridsocial.Notifications
-
-  # ---------------------------------------------------------------------------
-  # Helpers
-  # ---------------------------------------------------------------------------
-
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "Password123456!!",
-        "password_confirmation" => "Password123456!!"
-      })
-
-    identity
-  end
-
-  defp authenticate(conn, identity) do
-    {:ok, access_token, _claims} = Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{access_token}")
-  end
 
   # ---------------------------------------------------------------------------
   # GET /api/v1/notifications
@@ -42,10 +18,10 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/notifications")
 
-      assert json_response(conn, 200) == []
+      assert json_response(conn, 200)["data"] == []
     end
 
     test "returns notifications for the current user", %{conn: conn} do
@@ -61,10 +37,10 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/notifications")
 
-      response = json_response(conn, 200)
+      response = json_response(conn, 200)["data"]
       assert length(response) == 1
       notification = hd(response)
       assert notification["type"] == "follow"
@@ -87,10 +63,10 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(carol)
+        |> auth_conn(carol)
         |> get("/api/v1/notifications")
 
-      assert json_response(conn, 200) == []
+      assert json_response(conn, 200)["data"] == []
     end
   end
 
@@ -112,7 +88,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/notifications/#{notif.id}")
 
       response = json_response(conn, 200)
@@ -125,7 +101,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/notifications/#{Ecto.UUID.generate()}")
 
       assert json_response(conn, 404)
@@ -145,7 +121,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(carol)
+        |> auth_conn(carol)
         |> get("/api/v1/notifications/#{notif.id}")
 
       assert json_response(conn, 404)
@@ -173,7 +149,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> post("/api/v1/notifications/clear")
 
       assert json_response(conn, 200)["message"] == "notifications.cleared"
@@ -199,7 +175,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> post("/api/v1/notifications/#{notif.id}/read")
 
       response = json_response(conn, 200)
@@ -211,7 +187,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> post("/api/v1/notifications/#{Ecto.UUID.generate()}/read")
 
       assert json_response(conn, 404)
@@ -236,7 +212,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> delete("/api/v1/notifications/#{notif.id}")
 
       assert json_response(conn, 200)["message"] == "notification.dismissed"
@@ -248,7 +224,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> delete("/api/v1/notifications/#{Ecto.UUID.generate()}")
 
       assert json_response(conn, 404)
@@ -265,7 +241,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/notification_preferences")
 
       assert json_response(conn, 200) == %{}
@@ -279,7 +255,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/notification_preferences")
 
       response = json_response(conn, 200)
@@ -299,7 +275,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> patch("/api/v1/notification_preferences", %{
           "type" => "follow",
           "email" => true,
@@ -319,7 +295,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> patch("/api/v1/notification_preferences", %{"email" => true})
 
       assert json_response(conn, 422)["error"] == "notification_preferences.type_required"

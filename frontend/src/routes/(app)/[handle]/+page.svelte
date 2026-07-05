@@ -11,21 +11,44 @@
   import ProfileHeader from '$lib/components/profile/ProfileHeader.svelte';
   import AdminProfileActions from '$lib/components/admin/AdminProfileActions.svelte';
   import Tabs from '$lib/components/ui/Tabs.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
   import FeedList from '$lib/components/feed/FeedList.svelte';
+  import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
 
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
   let handle = $state('');
   let account = $state<Identity | null>(null);
   let relationship: Relationship | null = $state(null);
-  let posts: Post[] = $state([]);
   let pinnedPosts: Post[] = $state([]);
   let loading = $state(true);
-  let feedLoading = $state(false);
-  let hasMore = $state(true);
-  let cursor: string | null = $state(null);
   let error: string | null = $state(null);
   let activeTab = $state('posts');
+
+  // Shared paginated post feed (tab-aware fetch). Reactions hits the
+  // favourites endpoint; every other tab hits account statuses with the
+  // matching filter. Pinned posts (Posts tab) are handled separately below.
+  const feed = createEntityFeed(async (cursor) => {
+    if (!account) return [];
+    if (activeTab === 'reactions') {
+      const params: Record<string, string> = {};
+      if (cursor) params.max_id = cursor;
+      const items = await api.get<Post[]>('/api/v1/accounts/favourites', params);
+      return Array.isArray(items) ? items : [];
+    }
+    const params: {
+      only_media?: boolean;
+      cursor?: string;
+      exclude_replies?: boolean;
+      only_direct?: boolean;
+    } = {};
+    if (activeTab === 'posts') params.exclude_replies = true;
+    if (activeTab === 'media') params.only_media = true;
+    if (activeTab === 'direct') params.only_direct = true;
+    if (cursor) params.cursor = cursor;
+    const result = await getAccountStatuses(account.id, params);
+    return Array.isArray(result) ? result : ((result as any).data ?? []);
+  });
 
   // Reactive identity of the signed-in user. Snapshotting
   // `get(authStore)` inside `loadProfile` races with auth
@@ -42,6 +65,7 @@
     account !== null && viewerId !== null && account.id === viewerId,
   );
   let confirmAction: 'block' | 'unblock' | 'mute' | 'unmute' | null = $state(null);
+  let showConfirmModal = $state(false);
   let familiarFollowers = $state<Identity[]>([]);
   let vouchStatus = $state<{ count: number; required: number; vouches: any[] } | null>(null);
   let hasVouched = $state(false);
@@ -112,7 +136,7 @@
         } catch { vouchStatus = null; }
       }
 
-      await loadPosts(true);
+      await reloadFeed();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load profile';
       // Auto-retry on network errors (server might be restarting)
@@ -127,78 +151,30 @@
     }
   }
 
-  async function loadPosts(reset = false) {
+  // Reset the feed for the current tab. Pinned posts are only meaningful
+  // on the main "Posts" tab; fetch them in parallel with the first page
+  // so they show at the top without an extra round-trip on paginate.
+  async function reloadFeed() {
     if (!account) return;
-    if (reset) {
-      posts = [];
-      pinnedPosts = [];
-      cursor = null;
-      hasMore = true;
-    }
-    feedLoading = true;
-    try {
-      // The Reactions tab lives on the viewer's own profile only
-      // (we can't enumerate someone else's reactions). It hits the
-      // existing favourites endpoint which returns every post the
-      // caller has emoji-reacted to, newest first.
-      if (activeTab === 'reactions') {
-        const params: Record<string, string> = {};
-        if (cursor) params.max_id = cursor;
-        const items = await api.get<Post[]>('/api/v1/accounts/favourites', params);
-        const result = Array.isArray(items) ? items : [];
-        posts = reset ? result : [...posts, ...result];
-        cursor = result.length > 0 ? result[result.length - 1]?.id : null;
-        hasMore = result.length >= 20;
-        return;
-      }
-
-      const params: { only_media?: boolean; pinned?: boolean; cursor?: string; exclude_replies?: boolean; only_direct?: boolean } = {};
-      if (activeTab === 'posts') params.exclude_replies = true;
-      if (activeTab === 'media') params.only_media = true;
-      if (activeTab === 'direct') params.only_direct = true;
-      if (cursor) params.cursor = cursor;
-
-      // Pinned posts are only meaningful on the main "Posts" tab.
-      // Fetch them in parallel with the first page so they show at
-      // the top without an extra round-trip on every paginate.
-      const pinnedPromise =
-        reset && activeTab === 'posts'
-          ? getAccountStatuses(account.id, { pinned: true }).catch(() => [] as Post[])
-          : Promise.resolve(null as Post[] | null);
-
-      const [result, pinnedResult] = await Promise.all([
-        getAccountStatuses(account.id, params),
-        pinnedPromise,
-      ]);
-      const items = Array.isArray(result) ? result : (result as any).data || [];
-      if (pinnedResult) {
-        pinnedPosts = Array.isArray(pinnedResult) ? pinnedResult : [];
-      }
-      if (reset) {
-        posts = items;
-      } else {
-        const seen = new Set(posts.map((p) => p.id));
-        posts = [...posts, ...items.filter((p: Post) => !seen.has(p.id))];
-      }
-      cursor = items.length > 0 ? items[items.length - 1]?.id : null;
-      hasMore = items.length >= 20;
-    } catch {
-      // Silently handle feed errors
-    } finally {
-      feedLoading = false;
-    }
+    pinnedPosts = [];
+    const pinnedPromise =
+      activeTab === 'posts'
+        ? getAccountStatuses(account.id, { pinned: true }).catch(() => [] as Post[])
+        : Promise.resolve(null as Post[] | null);
+    const [, pinnedResult] = await Promise.all([feed.reset(), pinnedPromise]);
+    if (pinnedResult) pinnedPosts = Array.isArray(pinnedResult) ? pinnedResult : [];
   }
 
   // Pinned posts render at the top of the Posts tab. Filter them out of
   // the regular feed so the same post doesn't appear twice.
   let displayPosts = $derived.by(() => {
-    if (activeTab !== 'posts' || pinnedPosts.length === 0) return posts;
+    if (activeTab !== 'posts' || pinnedPosts.length === 0) return feed.posts;
     const pinnedIds = new Set(pinnedPosts.map((p) => p.id));
-    return [...pinnedPosts, ...posts.filter((p) => !pinnedIds.has(p.id))];
+    return [...pinnedPosts, ...feed.posts.filter((p) => !pinnedIds.has(p.id))];
   });
 
   function handleTabChange() {
-    loadPosts(true);
+    reloadFeed();
   }
 
   async function handleVouch() {
@@ -252,11 +228,13 @@
   function handleBlock() {
     if (!account || !relationship) return;
     confirmAction = relationship.blocking ? 'unblock' : 'block';
+    showConfirmModal = true;
   }
 
   function handleMute() {
     if (!account || !relationship) return;
     confirmAction = relationship.muting ? 'unmute' : 'mute';
+    showConfirmModal = true;
   }
 
   async function executeConfirmedAction() {
@@ -268,6 +246,7 @@
           // Blocking the account: the profile is now hidden from the
           // viewer per the server gate, so route home rather than
           // sit on a 404'd profile.
+          showConfirmModal = false;
           confirmAction = null;
           await goto('/home', { replaceState: true });
           return;
@@ -283,6 +262,7 @@
       }
       await refreshRelationshipAndAccount();
     } catch { /* handle error */ }
+    showConfirmModal = false;
     confirmAction = null;
   }
 
@@ -319,14 +299,13 @@
     // Skip replies on the main "Posts" tab — they belong under a
     // reply tab or the parent post page.
     if (newPost.parent_id && activeTab === 'posts') return;
-    if (posts.some((p) => p.id === newPost.id)) return;
-    posts = [newPost, ...posts];
+    feed.prepend(newPost);
   }
 
   function handlePostReplace(e: Event) {
     const { oldId, post } = (e as CustomEvent<{ oldId: string; post: Post }>).detail;
     if (!oldId || !post) return;
-    posts = posts.map((p) => (p.id === oldId ? post : p));
+    feed.replaceById(oldId, post);
   }
 
   // Reflect a pin/unpin from the menu without reloading the whole tab.
@@ -342,10 +321,10 @@
       // is_pinned=true in the regular array so the indicator shows
       // even before the next refetch.
       pinnedPosts = [updated, ...pinnedPosts.filter((p) => p.id !== id)];
-      posts = posts.map((p) => (p.id === id ? { ...p, is_pinned: true } : p));
+      feed.set(feed.posts.map((p) => (p.id === id ? { ...p, is_pinned: true } : p)));
     } else {
       pinnedPosts = pinnedPosts.filter((p) => p.id !== id);
-      posts = posts.map((p) => (p.id === id ? { ...p, is_pinned: false } : p));
+      feed.set(feed.posts.map((p) => (p.id === id ? { ...p, is_pinned: false } : p)));
     }
   }
 
@@ -377,10 +356,8 @@
     if (activeTab !== 'direct') return;
     if (!isOwnProfile) return;
 
-    const incoming = detail.data;
-    // Dedupe against optimistic local inserts.
-    if (posts.some((p) => p.id === incoming.id)) return;
-    posts = [incoming, ...posts];
+    // prepend dedupes against optimistic local inserts.
+    feed.prepend(detail.data);
   }
 
   // Reload when tab changes (not on initial mount)
@@ -400,9 +377,9 @@
 <div class="profile-page">
   {#if loading}
     <div class="profile-skeleton">
-      <Skeleton width="100%" height="180px" />
+      <Skeleton width="100%" height="210px" />
       <div class="profile-skeleton-info">
-        <Skeleton width="80px" height="80px" rounded />
+        <Skeleton width="88px" height="88px" rounded />
         <Skeleton width="200px" height="24px" />
         <Skeleton width="140px" height="16px" />
         <Skeleton width="100%" height="40px" />
@@ -486,10 +463,10 @@
         {#if activeTab === 'posts' || activeTab === 'replies' || activeTab === 'media' || activeTab === 'reactions'}
           <FeedList
             posts={displayPosts}
-            loading={feedLoading}
-            {hasMore}
+            loading={feed.loading}
+            hasMore={feed.hasMore}
             viewerContext="profile"
-            onloadmore={() => loadPosts(false)}
+            onloadmore={feed.loadMore}
             emptyMessage={
               activeTab === 'media'
                 ? 'No media posts yet'
@@ -504,24 +481,25 @@
   {/if}
 </div>
 
-{#if confirmAction}
-  <div class="dialog-overlay" onclick={() => confirmAction = null} role="dialog" aria-modal="true" aria-label={confirmMessages[confirmAction].title}>
-    <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-      <h3 class="dialog-title">{confirmMessages[confirmAction].title}</h3>
-      <p class="dialog-message">{confirmMessages[confirmAction].message}</p>
-      <div class="dialog-actions">
-        <button type="button" class="dialog-cancel" onclick={() => confirmAction = null}>Cancel</button>
-        <button
-          type="button"
-          class={confirmAction === 'block' || confirmAction === 'mute' ? 'dialog-confirm-danger' : 'dialog-confirm'}
-          onclick={executeConfirmedAction}
-        >
-          {confirmMessages[confirmAction].button}
-        </button>
-      </div>
+<Modal
+  bind:open={showConfirmModal}
+  title={confirmAction ? confirmMessages[confirmAction].title : ''}
+  onclose={() => (confirmAction = null)}
+>
+  {#if confirmAction}
+    <p class="dialog-message">{confirmMessages[confirmAction].message}</p>
+    <div class="dialog-actions">
+      <button type="button" class="dialog-cancel" onclick={() => (showConfirmModal = false)}>Cancel</button>
+      <button
+        type="button"
+        class={confirmAction === 'block' || confirmAction === 'mute' ? 'dialog-confirm-danger' : 'dialog-confirm'}
+        onclick={executeConfirmedAction}
+      >
+        {confirmMessages[confirmAction].button}
+      </button>
     </div>
-  </div>
-{/if}
+  {/if}
+</Modal>
 
 <style>
   .profile-page {
@@ -574,7 +552,8 @@
   .profile-skeleton {
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-md);
     overflow: hidden;
   }
 
@@ -583,13 +562,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    margin-block-start: -40px;
+    margin-block-start: -44px;
   }
 
   .profile-feed-section {
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-md);
     padding: 0 var(--space-4) var(--space-4);
   }
 
@@ -613,48 +593,17 @@
     color: var(--color-text-secondary);
   }
 
-  .dialog-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: var(--space-4);
-  }
-
-  .dialog-panel {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
-    padding: var(--space-6);
-    max-width: 400px;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .dialog-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-  }
-
   .dialog-message {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
     line-height: 1.5;
-    margin: 0;
+    margin: 0 0 var(--space-4);
   }
 
   .dialog-actions {
     display: flex;
     justify-content: flex-end;
     gap: var(--space-2);
-    margin-top: var(--space-2);
   }
 
   .dialog-cancel {

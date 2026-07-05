@@ -5,18 +5,6 @@ defmodule Hybridsocial.SearchTest do
   alias Hybridsocial.Social.Posts
   alias Hybridsocial.Groups
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   describe "search_accounts/2" do
     test "finds accounts by handle prefix" do
       user = create_user("searchable", "searchable@test.com")

@@ -197,58 +197,67 @@
 </script>
 
 {#snippet body()}
-  <div class="notification-icon" style="color: {iconColor}">
-    {#if reactionGlyph?.kind === 'emoji'}
-      <span class="reaction-emoji" aria-hidden="true">{reactionGlyph.emoji}</span>
-    {:else if reactionGlyph?.kind === 'image'}
-      <img class="reaction-image" src={reactionGlyph.url} alt={reactionGlyph.alt} />
-    {:else}
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d={iconPath} />
-      </svg>
-    {/if}
-  </div>
-
-  <div class="notification-content">
-    <div class="notification-actor">
-      <Avatar src={notification.account.avatar_url} name={actorName} size="sm" />
-    </div>
-
-    <div class="notification-body">
-      <p class="notification-text">
-        <a href="/@{notification.account.handle}" class="notification-actor-name" onclick={stopBubble}>{actorName}</a>
-        {description}
-      </p>
-
-      {#if notification.post}
-        {@const post = notification.post}
-        {@const text = (post.content ?? '').replace(/\s+/g, ' ').trim()}
-        {@const snippet = text.length > 30 ? text.slice(0, 30).trimEnd() + '…' : text}
-        {@const firstMedia = post.media_attachments?.[0]}
-        {@const thumbSrc = firstMedia?.preview_url || firstMedia?.url || null}
-        {#if snippet}
-          <p class="notification-preview">{snippet}</p>
-        {:else if firstMedia && thumbSrc && (firstMedia.type === 'image' || firstMedia.type === 'gifv')}
-          <img class="notification-thumb" src={thumbSrc} alt="" />
-        {:else if firstMedia && thumbSrc && firstMedia.type === 'video'}
-          <span class="notification-thumb notification-thumb-wrap">
-            <img src={thumbSrc} alt="" />
-            <span class="material-symbols-outlined notification-thumb-icon">play_arrow</span>
-          </span>
-        {:else if firstMedia}
-          <span class="notification-thumb notification-thumb-fallback">
-            <span class="material-symbols-outlined notification-thumb-icon">
-              {firstMedia.type === 'audio' ? 'graphic_eq' : 'attach_file'}
-            </span>
-          </span>
-        {/if}
+  <!-- Single visual anchor: the actor's avatar with a small type badge
+       on its corner (reaction rows show the actual reaction glyph). -->
+  <div class="notification-avatar-wrap">
+    <Avatar src={notification.account.avatar_url} name={actorName} size="md" />
+    <span
+      class="notification-badge"
+      class:notification-badge-glyph={!!reactionGlyph}
+      style={reactionGlyph ? '' : `background: ${iconColor}`}
+    >
+      {#if reactionGlyph?.kind === 'emoji'}
+        <span class="reaction-emoji" aria-hidden="true">{reactionGlyph.emoji}</span>
+      {:else if reactionGlyph?.kind === 'image'}
+        <img class="reaction-image" src={reactionGlyph.url} alt={reactionGlyph.alt} />
+      {:else}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d={iconPath} />
+        </svg>
       {/if}
-
-      <time class="notification-time" datetime={notification.created_at}>
-        {timeAgo}
-      </time>
-    </div>
+    </span>
   </div>
+
+  <div class="notification-body">
+    <p class="notification-text">
+      <a href="/@{notification.account.handle}" class="notification-actor-name" onclick={stopBubble}>{actorName}</a>
+      {description}
+    </p>
+
+    {#if notification.post}
+      {@const post = notification.post}
+      {@const text = (post.content ?? '').replace(/\s+/g, ' ').trim()}
+      {@const snippet = text.length > 30 ? text.slice(0, 30).trimEnd() + '…' : text}
+      {@const firstMedia = post.media_attachments?.[0]}
+      {@const thumbSrc = firstMedia?.preview_url || firstMedia?.url || null}
+      {#if snippet}
+        <p class="notification-preview">{snippet}</p>
+      {:else if firstMedia && thumbSrc && (firstMedia.type === 'image' || firstMedia.type === 'gifv')}
+        <img class="notification-thumb" src={thumbSrc} alt="" />
+      {:else if firstMedia && thumbSrc && firstMedia.type === 'video'}
+        <span class="notification-thumb notification-thumb-wrap">
+          <img src={thumbSrc} alt="" />
+          <span class="material-symbols-outlined notification-thumb-icon">play_arrow</span>
+        </span>
+      {:else if firstMedia}
+        <span class="notification-thumb notification-thumb-fallback">
+          <span class="material-symbols-outlined notification-thumb-icon">
+            {firstMedia.type === 'audio' ? 'graphic_eq' : 'attach_file'}
+          </span>
+        </span>
+      {/if}
+    {/if}
+
+    <time class="notification-time" datetime={notification.created_at}>
+      {timeAgo}
+    </time>
+  </div>
+
+  {#if !notification.read}
+    <!-- Non-colour-only unread signal: a distinct dot, not just the
+         tinted row background (accessibility: don't rely on colour alone). -->
+    <span class="notification-unread-dot" role="img" aria-label="Unread"></span>
+  {/if}
 {/snippet}
 
 {#if targetHref}
@@ -274,11 +283,14 @@
 <style>
   .notification-item {
     display: flex;
+    align-items: flex-start;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: background var(--transition-fast);
+    /* Kill the ~300ms mobile tap delay so a tap navigates instantly. */
+    touch-action: manipulation;
     /* Anchor reset — the row is wrapped in <a> so ctrl/shift-click
        open in new tab/window, but we don't want the default link
        blue / underline on the entire card. */
@@ -311,46 +323,62 @@
     background: color-mix(in srgb, var(--color-primary-soft) 80%, var(--color-surface) 20%);
   }
 
-  .notification-icon {
+  /* Avatar + corner type badge — one visual anchor per row. */
+  .notification-avatar-wrap {
+    position: relative;
     flex-shrink: 0;
+  }
+
+  .notification-badge {
+    position: absolute;
+    inset-inline-end: -3px;
+    inset-block-end: -3px;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-full);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding-block-start: var(--space-1);
+    color: #fff;
+    /* Ring in the row surface colour lifts the badge off the avatar. */
+    box-shadow: 0 0 0 2px var(--color-surface-container-lowest, #fff);
+    box-sizing: border-box;
+  }
+
+  /* Reaction rows show the actual glyph on a light chip instead of a
+     coloured icon badge. */
+  .notification-badge-glyph {
+    background: var(--color-surface-container-lowest, #fff);
   }
 
   .reaction-emoji {
-    font-size: 22px;
+    font-size: 13px;
     line-height: 1;
-    /* Emoji defaults to a serif-ish width inside flex — anchor it so
-       the row aligns with the SVG-icon variant on neighbouring rows. */
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
 
   .reaction-image {
-    width: 22px;
-    height: 22px;
+    width: 14px;
+    height: 14px;
     object-fit: contain;
-  }
-
-  .notification-content {
-    display: flex;
-    gap: var(--space-3);
-    flex: 1;
-    min-width: 0;
-  }
-
-  .notification-actor {
-    flex-shrink: 0;
   }
 
   .notification-body {
     flex: 1;
     min-width: 0;
+    padding-block-start: 2px;
+  }
+
+  .notification-unread-dot {
+    flex-shrink: 0;
+    align-self: center;
+    width: 9px;
+    height: 9px;
+    border-radius: var(--radius-full);
+    background: var(--color-primary);
+    margin-inline-start: var(--space-1);
   }
 
   .notification-text {

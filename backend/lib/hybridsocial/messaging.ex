@@ -1335,6 +1335,29 @@ defmodule Hybridsocial.Messaging do
     result
   end
 
+  @doc """
+  Broadcast a transient `chat.typing` signal to the conversation's
+  participants (the sender is filtered out client-side). Only members can
+  emit one. Fire-and-forget — nothing is persisted.
+  """
+  def broadcast_typing(conversation_id, identity_id) do
+    member? =
+      Participant
+      |> where(
+        [p],
+        p.conversation_id == ^conversation_id and p.identity_id == ^identity_id and
+          is_nil(p.left_at)
+      )
+      |> Repo.exists?()
+
+    if member? do
+      broadcast_conversation_event(conversation_id, :typing, %{identity_id: identity_id})
+      :ok
+    else
+      {:error, :not_found}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # PubSub Broadcasting
   # ---------------------------------------------------------------------------

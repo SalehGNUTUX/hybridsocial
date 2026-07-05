@@ -4,18 +4,6 @@ defmodule Hybridsocial.Social.StreamsTest do
   alias Hybridsocial.Social.Streams
   alias Hybridsocial.Social.{Post, StreamView}
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "Password123456!!",
-        "password_confirmation" => "Password123456!!"
-      })
-
-    identity
-  end
-
   defp create_post(identity, attrs \\ %{}) do
     defaults = %{
       identity_id: identity.id,

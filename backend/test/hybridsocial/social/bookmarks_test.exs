@@ -3,18 +3,6 @@ defmodule Hybridsocial.Social.BookmarksTest do
 
   alias Hybridsocial.Social.{Bookmarks, Posts}
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   describe "bookmark/2" do
     test "creates a bookmark" do
       identity = create_user("bm_user1", "bm1@test.com")

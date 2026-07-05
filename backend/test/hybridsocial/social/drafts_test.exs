@@ -3,18 +3,6 @@ defmodule Hybridsocial.Social.DraftsTest do
 
   alias Hybridsocial.Social.{Drafts, PostDraft}
 
-  defp create_user(handle) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => "#{handle}_#{:erlang.unique_integer([:positive])}",
-        "email" => "#{handle}_#{:erlang.unique_integer([:positive])}@example.com",
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   describe "create_draft/2" do
     test "creates a draft owned by the caller" do
       identity = create_user("drafter")

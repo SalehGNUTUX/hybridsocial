@@ -4,18 +4,6 @@ defmodule Hybridsocial.Admin.BackupTest do
   alias Hybridsocial.Admin.Backup
   alias Hybridsocial.Admin.BackupJob
 
-  defp create_admin(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity |> Ecto.Changeset.change(is_admin: true) |> Hybridsocial.Repo.update!()
-  end
-
   describe "create_backup/3" do
     test "creates a backup job record" do
       admin = create_admin("backupadmin", "backupadmin@test.com")

@@ -14,7 +14,10 @@ defmodule HybridsocialWeb.Api.V1.MediaControllerTest do
   }
 
   setup %{conn: conn} do
-    {:ok, _} = Accounts.register_user(@valid_user_attrs)
+    # confirm_email (from AccountsFixtures) clears the RequireConfirmedEmail
+    # gate so login returns 200 and the upload endpoints are reachable.
+    {:ok, identity} = Accounts.register_user(@valid_user_attrs)
+    confirm_email(identity)
 
     login_conn =
       post(conn, "/api/v1/auth/login", %{

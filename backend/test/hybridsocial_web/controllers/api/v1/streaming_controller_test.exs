@@ -1,18 +1,6 @@
 defmodule HybridsocialWeb.Api.V1.StreamingControllerTest do
   use HybridsocialWeb.ConnCase, async: true
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   defp login(conn, email) do
     {:ok, tokens} = Hybridsocial.Auth.login(email, "password1234567890")
     put_req_header(conn, "authorization", "Bearer #{tokens.access_token}")

@@ -300,18 +300,4 @@ defmodule Hybridsocial.Federation.ActivityBuilderTest do
       assert activity["target"] == new_ap_id
     end
   end
-
-  # --- Helper ---
-
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
 end

@@ -9,13 +9,12 @@
 // persist this — it's session-scoped, dropped on full reload.
 
 import type { Post } from '$lib/api/types.js';
-import type { FeedTab } from '$lib/components/feed/FeedToggle.svelte';
 
 export interface HomeFeedSnapshot {
   posts: Post[];
   cursor: string | null;
   hasMore: boolean;
-  feedType: FeedTab;
+  tabId: string;
 }
 
 let snapshot: HomeFeedSnapshot | null = null;

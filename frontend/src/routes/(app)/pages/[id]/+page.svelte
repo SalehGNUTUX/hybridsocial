@@ -9,21 +9,31 @@
   import { api } from '$lib/api/client.js';
   import { currentUser, isStaffMember } from '$lib/stores/auth.js';
   import type { Post } from '$lib/api/types.js';
-  import Avatar from '$lib/components/ui/Avatar.svelte';
   import Tabs from '$lib/components/ui/Tabs.svelte';
   import FeedList from '$lib/components/feed/FeedList.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import AdminProfileActions from '$lib/components/admin/AdminProfileActions.svelte';
+  import EntityHeader from '$lib/components/entity/EntityHeader.svelte';
+  import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
 
   let pageId = $state('');
   let pageData: any = $state(null);
   let loading = $state(true);
   let error = $state('');
   let activeTab = $state('posts');
-  let posts: Post[] = $state([]);
-  let postsLoading = $state(false);
   let isFollowing = $state(false);
   let followLoading = $state(false);
+
+  // Shared paginated post feed (Posts + Media tabs). The endpoint
+  // supports cursor pagination, so this also gives the page infinite
+  // scroll that the previous one-shot fetch lacked.
+  const feed = createEntityFeed(async (cursor) => {
+    const result = await api.get<{ data?: Post[] } | Post[]>(
+      `/api/v1/pages/${pageId}/statuses`,
+      cursor ? { cursor } : undefined,
+    );
+    return Array.isArray(result) ? result : (result.data ?? []);
+  });
 
   // Owner detection — backend serialize_page returns
   // organization.owner_id (the identity_id of the page's creator).
@@ -69,29 +79,11 @@
     try {
       pageData = await getPage(pageId);
       isFollowing = pageData?.is_following ?? false;
-      await loadPosts();
+      await feed.reset();
     } catch {
       error = 'Failed to load page.';
     } finally {
       loading = false;
-    }
-  }
-
-  async function loadPosts() {
-    if (!pageData) return;
-    postsLoading = true;
-    try {
-      // Endpoint returns PaginatedResponse<Post> ({data, next_cursor,
-      // prev_cursor}) — keep the bare-array branch as a fallback in
-      // case an older deploy / proxy still returns the legacy shape.
-      const result = await api.get<{ data?: Post[] } | Post[]>(
-        `/api/v1/pages/${pageId}/statuses`,
-      );
-      posts = Array.isArray(result) ? result : (result.data ?? []);
-    } catch {
-      posts = [];
-    } finally {
-      postsLoading = false;
     }
   }
 
@@ -134,127 +126,62 @@
       <button type="button" class="btn btn-outline" onclick={loadPage}>Retry</button>
     </div>
   {:else if pageData}
-    <div class="page-profile">
-      <!-- Cover image -->
-      <div class="page-cover">
-        {#if pageData.header_url || pageData.cover_url}
-          <img src={pageData.header_url || pageData.cover_url} alt="" class="cover-img" />
-        {:else}
-          <div class="cover-gradient" aria-hidden="true"></div>
+    <EntityHeader
+      name={pageData.display_name || pageData.name || pageData.handle}
+      handle={pageData.handle}
+      avatarUrl={pageData.avatar_url || pageData.logo_url}
+      coverUrl={pageData.header_url || pageData.cover_url}
+      description={pageData.description || pageData.bio}
+    >
+      {#snippet meta()}
+        {#if pageData.category}
+          <span class="page-category-badge">{pageData.category}</span>
         {/if}
-      </div>
+      {/snippet}
 
-      <div class="page-info-section">
-        <div class="page-avatar-row">
-          <div class="page-avatar-wrapper">
-            <Avatar
-              src={pageData.avatar_url || pageData.logo_url}
-              name={pageData.display_name || pageData.name || pageData.handle}
-              size="xl"
-            />
-          </div>
-          <div class="page-actions">
-            {#if $isStaffMember && !isOwner && pageData}
-              <AdminProfileActions account={pageData} />
-            {/if}
-            {#if canManage}
-              <!-- One settings icon replaces the old Edit / Manage /
-                   Delete trio. Everything an admin used to do across
-                   those three buttons now lives in PageManageModal. -->
-              <button
-                type="button"
-                class="btn btn-ghost icon-btn"
-                onclick={() => (manageModalOpen = true)}
-                aria-label="Manage page"
-                title="Manage page"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-                </svg>
-              </button>
-            {/if}
-            {#if !isOwner}
-              <button
-                type="button"
-                class="btn {isFollowing ? 'btn-outline' : 'btn-primary'}"
-                onclick={toggleFollow}
-                disabled={followLoading}
-              >
-                {isFollowing ? 'Following' : 'Follow'}
-              </button>
-            {/if}
-          </div>
-        </div>
-
-        <div class="page-identity">
-          <h1 class="page-name">{pageData.display_name || pageData.name || pageData.handle}</h1>
-          <span class="page-handle">@{pageData.handle}</span>
-          {#if pageData.category}
-            <span class="page-category-badge">{pageData.category}</span>
-          {/if}
-        </div>
-
-        {#if pageData.description || pageData.bio}
-          <p class="page-description">{pageData.description || pageData.bio}</p>
+      {#snippet adminActions()}
+        {#if $isStaffMember && !isOwner && pageData}
+          <AdminProfileActions account={pageData} />
         {/if}
-
-        <!-- Business details -->
-        <div class="business-details">
-          {#if pageData.website}
-            <div class="detail-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-              </svg>
-              <a href={pageData.website} class="detail-link" target="_blank" rel="noopener">{pageData.website}</a>
-            </div>
-          {/if}
-          {#if pageData.email}
-            <div class="detail-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-              </svg>
-              <a href="mailto:{pageData.email}" class="detail-link">{pageData.email}</a>
-            </div>
-          {/if}
-          {#if pageData.phone}
-            <div class="detail-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
-              </svg>
-              <span>{pageData.phone}</span>
-            </div>
-          {/if}
-          {#if pageData.address}
-            <div class="detail-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
-              </svg>
-              <span>{pageData.address}</span>
-            </div>
-          {/if}
-        </div>
-
-        {#if pageData.social_links && pageData.social_links.length > 0}
-          <div class="social-links">
-            {#each pageData.social_links.slice(0, 4) as link (link.url || link)}
-              <a href={link.url || link} class="social-link" target="_blank" rel="noopener">
-                {link.label || link.url || link}
-              </a>
-            {/each}
-          </div>
+        {#if canManage}
+          <!-- One settings icon → PageManageModal (all admin actions). -->
+          <button
+            type="button"
+            class="btn btn-ghost icon-btn"
+            onclick={() => (manageModalOpen = true)}
+            aria-label="Manage page"
+            title="Manage page"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+          </button>
         {/if}
+      {/snippet}
 
+      {#snippet primaryAction()}
+        {#if !isOwner}
+          <button
+            type="button"
+            class="btn {isFollowing ? 'btn-outline' : 'btn-primary'}"
+            onclick={toggleFollow}
+            disabled={followLoading}
+          >
+            {isFollowing ? 'Following' : 'Follow'}
+          </button>
+        {/if}
+      {/snippet}
+
+      {#snippet stats()}
         {#if pageData.followers_count !== undefined}
-          <div class="page-stats">
-            <span class="stat-item">
-              <strong>{pageData.followers_count}</strong>
-              <span class="stat-label">Followers</span>
-            </span>
-          </div>
+          <span class="stat-item">
+            <strong>{pageData.followers_count}</strong>
+            <span class="stat-label">Followers</span>
+          </span>
         {/if}
-      </div>
-    </div>
+      {/snippet}
+    </EntityHeader>
 
     <div class="page-feed-section">
       <Tabs {tabs} bind:active={activeTab}>
@@ -265,16 +192,19 @@
             placeholder={`Share something with ${pageData.display_name || pageData.name || pageData.handle || 'this page'}…`}
           />
           <FeedList
-            {posts}
-            loading={postsLoading}
-            hasMore={false}
+            posts={feed.posts}
+            loading={feed.loading}
+            hasMore={feed.hasMore}
             viewerContext="page"
             emptyMessage="No posts yet"
+            onloadmore={feed.loadMore}
           />
         {:else if activeTab === 'media'}
           <MediaGrid
-            {posts}
-            loading={postsLoading}
+            posts={feed.posts}
+            loading={feed.loading}
+            hasMore={feed.hasMore}
+            onloadmore={feed.loadMore}
             emptyMessage="No photos or videos posted on this page yet"
           />
         {:else if activeTab === 'about'}
@@ -285,18 +215,83 @@
                 <p class="about-text">{pageData.description || pageData.bio}</p>
               </div>
             {/if}
-            {#if pageData.category}
+
+            {#if pageData.website || pageData.email || pageData.phone || pageData.address}
               <div class="about-block">
-                <h3 class="about-heading">Category</h3>
-                <p class="about-text">{pageData.category}</p>
+                <h3 class="about-heading">Contact</h3>
+                <div class="business-details">
+                  {#if pageData.website}
+                    <div class="detail-item">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+                      </svg>
+                      <a href={pageData.website} class="detail-link" target="_blank" rel="noopener">{pageData.website}</a>
+                    </div>
+                  {/if}
+                  {#if pageData.email}
+                    <div class="detail-item">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                      </svg>
+                      <a href="mailto:{pageData.email}" class="detail-link">{pageData.email}</a>
+                    </div>
+                  {/if}
+                  {#if pageData.phone}
+                    <div class="detail-item">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+                      </svg>
+                      <span>{pageData.phone}</span>
+                    </div>
+                  {/if}
+                  {#if pageData.address}
+                    <div class="detail-item">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                      </svg>
+                      <span>{pageData.address}</span>
+                    </div>
+                  {/if}
+                </div>
               </div>
             {/if}
-            {#if pageData.created_at}
+
+            {#if pageData.social_links && pageData.social_links.length > 0}
               <div class="about-block">
-                <h3 class="about-heading">Created</h3>
-                <p class="about-text">{new Date(pageData.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <h3 class="about-heading">Links</h3>
+                <div class="social-links">
+                  {#each pageData.social_links as link (link.url || link)}
+                    <a href={link.url || link} class="social-link" target="_blank" rel="noopener">
+                      {link.label || link.url || link}
+                    </a>
+                  {/each}
+                </div>
               </div>
             {/if}
+
+            <div class="about-block">
+              <h3 class="about-heading">Info</h3>
+              <dl class="info-list">
+                {#if pageData.category}
+                  <div class="info-row">
+                    <dt class="info-label">Category</dt>
+                    <dd class="info-value" style="text-transform: capitalize">{pageData.category}</dd>
+                  </div>
+                {/if}
+                {#if pageData.followers_count !== undefined}
+                  <div class="info-row">
+                    <dt class="info-label">Followers</dt>
+                    <dd class="info-value">{pageData.followers_count.toLocaleString()}</dd>
+                  </div>
+                {/if}
+                {#if pageData.created_at}
+                  <div class="info-row">
+                    <dt class="info-label">Created</dt>
+                    <dd class="info-value">{new Date(pageData.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</dd>
+                  </div>
+                {/if}
+              </dl>
+            </div>
           </div>
         {/if}
       </Tabs>
@@ -336,75 +331,6 @@
     color: var(--color-text-secondary);
   }
 
-  .page-profile {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
-    /* No overflow clipping — the moderation popover anchored inside
-       .page-actions needs to escape the card. The cover clips itself. */
-  }
-
-  .page-cover {
-    height: 180px;
-    overflow: hidden;
-    border-top-left-radius: var(--radius-xl);
-    border-top-right-radius: var(--radius-xl);
-  }
-
-  .cover-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .cover-gradient {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(var(--gradient-direction, 135deg), var(--gradient-start, var(--color-primary)), var(--gradient-end, #0d9488));
-  }
-
-  .page-info-section {
-    padding: 0 var(--space-6) var(--space-6);
-  }
-
-  .page-avatar-row {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    margin-block-start: -40px;
-  }
-
-  .page-avatar-wrapper {
-    border: 4px solid var(--color-surface-raised);
-    border-radius: var(--radius-full);
-    background: var(--color-surface-raised);
-  }
-
-  .page-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-block-start: var(--space-10);
-  }
-
-  .page-identity {
-    margin-block-start: var(--space-3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-
-  .page-name {
-    font-size: var(--text-xl);
-    font-weight: 700;
-    color: var(--color-text);
-  }
-
-  .page-handle {
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
-  }
-
   .page-category-badge {
     display: inline-block;
     align-self: flex-start;
@@ -414,14 +340,6 @@
     padding: 2px var(--space-2);
     border-radius: var(--radius-sm);
     margin-block-start: var(--space-1);
-  }
-
-  .page-description {
-    margin-block-start: var(--space-3);
-    font-size: var(--text-sm);
-    color: var(--color-text);
-    line-height: var(--leading-relaxed);
-    white-space: pre-wrap;
   }
 
   .business-details {
@@ -466,12 +384,6 @@
 
   .social-link:hover {
     text-decoration: underline;
-  }
-
-  .page-stats {
-    display: flex;
-    gap: var(--space-5);
-    margin-block-start: var(--space-3);
   }
 
   .stat-item {
@@ -523,77 +435,37 @@
     white-space: pre-wrap;
   }
 
-  /* Buttons */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3);
-    border: none;
-    border-radius: var(--radius-md);
+  /* Structured info list — mirrors the group About for a consistent look. */
+  .info-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .info-row {
+    display: flex;
+    gap: var(--space-3);
     font-size: var(--text-sm);
-    font-weight: 500;
-    cursor: pointer;
-    transition: background var(--transition-fast);
   }
 
-  .btn-primary {
-    background: var(--color-primary);
-    color: var(--color-text-inverse);
+  .info-label {
+    flex-shrink: 0;
+    width: 96px;
+    color: var(--color-text-tertiary);
   }
 
-  .btn-primary:hover:not(:disabled) {
-    background: var(--color-primary-hover);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-outline {
-    background: transparent;
-    border: 1px solid var(--color-border);
+  .info-value {
     color: var(--color-text);
+    min-width: 0;
+    word-break: break-word;
   }
 
-  .btn-outline:hover {
-    background: var(--color-surface);
-  }
-
-  .btn-danger-outline {
-    color: #dc2626;
-    border-color: rgba(220, 38, 38, 0.4);
-  }
-
-  .btn-danger-outline:hover {
-    background: rgba(220, 38, 38, 0.08);
-  }
-
-  .btn-danger {
-    background: #dc2626;
-    color: #fff;
-    border: 0;
-  }
-
-  .btn-danger:hover:not(:disabled) {
-    background: #b91c1c;
-  }
-
-  .btn-danger:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-ghost {
-    background: transparent;
-    border: 0;
-    color: var(--color-text-secondary);
-  }
-
-  .btn-ghost:hover:not(:disabled) {
-    background: var(--color-surface);
-    color: var(--color-text);
+  /* Icon-only button sizing (the manage gear). All other buttons use the
+     global .btn system in app.css, so Pages and Groups match exactly. */
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
   }
 
   /* --- Edit / Delete modal --- */
@@ -701,16 +573,6 @@
     justify-content: flex-end;
     gap: var(--space-2);
     margin-block-start: var(--space-3);
-  }
-
-  @media (max-width: 480px) {
-    .page-cover {
-      height: 120px;
-    }
-
-    .page-info-section {
-      padding: 0 var(--space-4) var(--space-4);
-    }
   }
 
 </style>

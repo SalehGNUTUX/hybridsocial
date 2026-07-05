@@ -434,7 +434,20 @@
   {#if showSidebar}
     <aside class="lightbox-sidebar" aria-label="Replies on this image">
       <header class="lightbox-sidebar-header">
-        <span class="material-symbols-outlined" aria-hidden="true">chat_bubble</span>
+        <svg
+          class="sidebar-header-icon"
+          viewBox="0 0 24 24"
+          width="1em"
+          height="1em"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M8 10.5H16M8 14.5H11M21.0039 12C21.0039 16.9706 16.9745 21 12.0039 21C9.9675 21 3.00463 21 3.00463 21C3.00463 21 4.56382 17.2561 3.93982 16.0008C3.34076 14.7956 3.00391 13.4372 3.00391 12C3.00391 7.02944 7.03334 3 12.0039 3C16.9745 3 21.0039 7.02944 21.0039 12Z" />
+        </svg>
         <span>{currentReplies.length} {currentReplies.length === 1 ? 'reply' : 'replies'} on this image</span>
       </header>
       <ul class="lightbox-reply-list">
@@ -737,7 +750,8 @@
     border-block-end: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  .lightbox-sidebar-header :global(.material-symbols-outlined) {
+  .lightbox-sidebar-header :global(.material-symbols-outlined),
+  .sidebar-header-icon {
     font-size: 18px;
     opacity: 0.85;
   }

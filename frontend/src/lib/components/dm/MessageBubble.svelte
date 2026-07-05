@@ -326,10 +326,35 @@
                 class="media-image"
                 loading="lazy"
               />
+            {:else if attachment.type === 'gifv'}
+              <!-- Looping muted clip, GIF-style. -->
+              <video
+                src={attachment.url}
+                class="media-video"
+                autoplay
+                loop
+                muted
+                playsinline
+              ></video>
             {:else if attachment.type === 'video'}
               <video src={attachment.url} controls preload="metadata" class="media-video">
                 <track kind="captions" />
               </video>
+            {:else if attachment.type === 'audio'}
+              <audio src={attachment.url} controls preload="metadata" class="media-audio"></audio>
+            {:else}
+              <!-- Any other attachment (generic file) — a download chip so
+                   it never renders as an empty bubble. -->
+              <a
+                class="media-file"
+                href={attachment.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span class="material-symbols-outlined media-file-icon" aria-hidden="true">description</span>
+                <span class="media-file-name">{attachment.description || 'Attachment'}</span>
+                <span class="material-symbols-outlined media-file-dl" aria-hidden="true">download</span>
+              </a>
             {/if}
           {/each}
         </div>
@@ -512,39 +537,6 @@
     margin-block-end: 14px;
   }
 
-  /* When a new message arrives the page sets `.rippling` on the
-     scroll container; each row runs a tiny upward bounce, staggered
-     from the bottom up via the `--ripple-i` index that the page
-     writes inline. The newest row (index 0) pushes first; each one
-     above is a frame later, so it reads as a wave moving up the
-     stack. */
-  :global(.messages-container.rippling) .message-row {
-    animation: bubble-ripple 0.55s ease-out;
-    animation-delay: calc(var(--ripple-i, 0) * 28ms);
-    will-change: transform;
-  }
-
-  @keyframes bubble-ripple {
-    0% {
-      transform: translateY(0);
-    }
-    35% {
-      transform: translateY(-4px);
-    }
-    65% {
-      transform: translateY(1px);
-    }
-    100% {
-      transform: translateY(0);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :global(.messages-container.rippling) .message-row {
-      animation: none;
-    }
-  }
-
   .message-row.own {
     flex-direction: row-reverse;
   }
@@ -577,14 +569,43 @@
     word-break: break-word;
   }
 
+  /* Own messages: a solid accent bubble with on-primary text — a clear,
+     iMessage-style distinction from received messages (the previous
+     faint tint read almost identically to received). */
   .bubble-own {
-    background: var(--color-primary-soft);
-    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+    background: var(--gradient-primary);
+    color: var(--color-text-on-primary);
+    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xs) var(--radius-xl);
   }
 
   .bubble-other {
-    background: var(--color-surface);
-    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-xs);
+    background: var(--color-surface-container-low);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xl) var(--radius-xs);
+  }
+
+  /* Flip all inner content to the on-primary palette on the accent
+     bubble so text, links, meta and ticks stay legible. */
+  .bubble-own .message-text,
+  .bubble-own .message-body,
+  .bubble-own .message-body :global(*) {
+    color: var(--color-text-on-primary);
+  }
+
+  .bubble-own .message-body :global(a) {
+    text-decoration: underline;
+  }
+
+  .bubble-own .message-time,
+  .bubble-own .message-edited,
+  .bubble-own .message-pending,
+  .bubble-own .read-receipt,
+  .bubble-own .read-receipt.tick-delivered {
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .bubble-own .read-receipt.tick-read {
+    color: #ffffff;
   }
 
   /* Quoted-reply preview at the top of a bubble. The left bar uses
@@ -895,16 +916,52 @@
   }
 
   .media-image {
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     max-width: 100%;
-    max-height: 300px;
+    max-height: 320px;
     object-fit: cover;
   }
 
   .media-video {
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     max-width: 100%;
-    max-height: 300px;
+    max-height: 320px;
+  }
+
+  .media-audio {
+    width: 260px;
+    max-width: 100%;
+    height: 40px;
+  }
+
+  /* Generic file / unknown attachment → a tappable download chip.
+     `color: inherit` so it reads on-primary inside own (accent) bubbles. */
+  .media-file {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    background: rgba(127, 127, 127, 0.12);
+    color: inherit;
+    text-decoration: none;
+    max-width: 260px;
+  }
+
+  .media-file-name {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .media-file-icon,
+  .media-file-dl {
+    font-size: 20px;
+    flex-shrink: 0;
+    opacity: 0.85;
   }
 
   .message-meta {
@@ -912,16 +969,22 @@
     align-items: center;
     gap: var(--space-1);
     margin-block-start: var(--space-1);
+    /* Received bubbles read left-to-right, so their meta hugs the start;
+       own (right-aligned) bubbles hug the end. */
+    justify-content: flex-start;
+  }
+
+  .bubble-own .message-meta {
     justify-content: flex-end;
   }
 
   .message-time {
-    font-size: 11px;
+    font-size: var(--text-xs);
     color: var(--color-text-tertiary);
   }
 
   .message-edited {
-    font-size: 11px;
+    font-size: var(--text-xs);
     color: var(--color-text-tertiary);
     font-style: italic;
   }
@@ -947,7 +1010,7 @@
   }
 
   .message-pending {
-    font-size: 10px;
+    font-size: var(--text-xs);
     color: var(--color-text-tertiary);
     font-style: italic;
   }

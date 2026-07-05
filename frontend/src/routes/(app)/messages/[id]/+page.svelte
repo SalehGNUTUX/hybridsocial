@@ -8,6 +8,7 @@
     getMessages,
     sendMessage,
     markConversationRead,
+    sendTyping,
     deleteConversation,
     deleteMessage as apiDeleteMessage,
     addMessageReaction,
@@ -32,6 +33,13 @@
   let hasMore = $state(true);
   let messagesEndEl: HTMLDivElement | undefined = $state();
   let typingUser = $state<string | null>(null);
+  let typingTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Fire-and-forget typing ping (the composer throttles the calls).
+  function handleTyping() {
+    const cid = page.params.id;
+    if (cid) sendTyping(cid).catch(() => {});
+  }
   // The message the user is currently composing a reply to. Cleared on
   // send / cancel / conversation switch. The composer renders a quoted
   // preview while this is non-null and includes reply_to_id in the
@@ -99,7 +107,7 @@
         markConversationReadLocal(cid);
         await markConversationRead(cid);
         if (token !== loadToken) return;
-        scrollToBottom();
+        scrollToBottom(true);
       } catch (err) {
         if (token !== loadToken) return;
         console.error('[messages] load failed', err);
@@ -127,7 +135,26 @@
     switch (detail.type) {
       case 'chat.new_message':
         appendLiveMessage(data as unknown as Message);
+        // Their message landed — they've stopped typing.
+        typingUser = null;
         break;
+      case 'chat.typing': {
+        const { identity_id, conversation_id } = data as {
+          identity_id?: string;
+          conversation_id?: string;
+        };
+        // Ignore our own echo and pings for other conversations (the
+        // user stream carries every conversation the viewer is in).
+        if (!identity_id || identity_id === userId) break;
+        if (conversation_id && conversation_id !== page.params.id) break;
+        const who = conversation?.participants.find((p) => p.identity_id === identity_id);
+        typingUser = who?.display_name || who?.handle || 'Someone';
+        if (typingTimer) clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => {
+          typingUser = null;
+        }, 4000);
+        break;
+      }
       case 'chat.delivered': {
         const { message_id, status } = data as { message_id: string; status?: string };
         if (!message_id) break;
@@ -246,10 +273,35 @@
     }
   }
 
-  function scrollToBottom() {
+  function scrollToBottom(instant = false) {
     requestAnimationFrame(() => {
-      messagesEndEl?.scrollIntoView({ behavior: 'smooth' });
+      messagesEndEl?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth' });
     });
+  }
+
+  // Day separators — group the thread by calendar day so a long
+  // conversation reads as a timeline instead of one undivided column.
+  function dayLabel(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return d.toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+    });
+  }
+
+  function isNewDay(i: number): boolean {
+    if (i === 0) return true;
+    return (
+      new Date(messages[i].created_at).toDateString() !==
+      new Date(messages[i - 1].created_at).toDateString()
+    );
   }
 
   function scrollToMessage(messageId: string) {
@@ -456,7 +508,24 @@
         </button>
       {/if}
 
+      {#if messages.length === 0}
+        <div class="thread-empty">
+          <div class="thread-empty-icon" aria-hidden="true">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          <p class="thread-empty-title">No messages yet</p>
+          <p class="thread-empty-text">Say hello — send the first message below.</p>
+        </div>
+      {/if}
+
       {#each messages as message, i (message.id)}
+        {#if isNewDay(i)}
+          <div class="day-sep" role="separator">
+            <span class="day-sep-label">{dayLabel(message.created_at)}</span>
+          </div>
+        {/if}
         <div
           class="bubble-slot"
           data-message-id={message.id}
@@ -487,6 +556,7 @@
       onsend={handleSend}
       {replyingTo}
       oncancelreply={() => (replyingTo = null)}
+      ontyping={handleTyping}
     />
   {/if}
 </div>
@@ -675,6 +745,56 @@
 
   .messages-end {
     height: 1px;
+  }
+
+  /* Day separator — a centred pill labelling each calendar day. */
+  .day-sep {
+    display: flex;
+    justify-content: center;
+    margin-block: var(--space-3);
+  }
+
+  .day-sep-label {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    background: var(--color-surface-container);
+    padding: 3px var(--space-3);
+    border-radius: var(--radius-full);
+  }
+
+  /* Empty thread (new conversation). */
+  .thread-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: var(--space-1);
+    padding: var(--space-8) var(--space-4);
+  }
+
+  .thread-empty-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-full);
+    display: grid;
+    place-items: center;
+    color: var(--color-primary);
+    background: var(--color-secondary-container);
+    margin-block-end: var(--space-3);
+  }
+
+  .thread-empty-title {
+    font-size: var(--text-base);
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .thread-empty-text {
+    font-size: var(--text-sm);
+    color: var(--color-text-tertiary);
   }
 
   /* Desktop: hide back button since split view is available */

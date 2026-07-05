@@ -236,6 +236,19 @@ defmodule HybridsocialWeb.Api.V1.ConversationController do
     end
   end
 
+  # POST /api/v1/conversations/:id/typing — fire-and-forget typing ping.
+  def typing(conn, %{"id" => conversation_id}) do
+    identity = conn.assigns.current_identity
+
+    case Messaging.broadcast_typing(conversation_id, identity.id) do
+      :ok ->
+        send_resp(conn, :no_content, "")
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "conversation.not_found"})
+    end
+  end
+
   # PATCH /api/v1/conversations/:id/settings
   def update_settings(conn, %{"id" => conversation_id} = params) do
     identity = conn.assigns.current_identity

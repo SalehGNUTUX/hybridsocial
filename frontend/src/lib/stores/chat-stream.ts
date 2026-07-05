@@ -48,6 +48,7 @@ export function connectChatStream(apiBase: string): void {
       'chat.read',
       'chat.reaction_added',
       'chat.reaction_removed',
+      'chat.typing',
       'direct.new_post',
     ];
 

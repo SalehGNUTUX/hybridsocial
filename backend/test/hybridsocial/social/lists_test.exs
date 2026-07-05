@@ -4,22 +4,6 @@ defmodule Hybridsocial.Social.ListsTest do
   alias Hybridsocial.Social.Lists
 
   # ---------------------------------------------------------------------------
-  # Helpers
-  # ---------------------------------------------------------------------------
-
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "Password123456!!",
-        "password_confirmation" => "Password123456!!"
-      })
-
-    identity
-  end
-
-  # ---------------------------------------------------------------------------
   # List CRUD
   # ---------------------------------------------------------------------------
 

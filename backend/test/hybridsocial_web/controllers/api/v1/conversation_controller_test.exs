@@ -8,18 +8,6 @@ defmodule HybridsocialWeb.Api.V1.ConversationControllerTest do
   # Helpers
   # ---------------------------------------------------------------------------
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "Password123456!!",
-        "password_confirmation" => "Password123456!!"
-      })
-
-    identity
-  end
-
   defp authenticate(conn, identity) do
     {:ok, access_token, _claims} = Token.generate_access_token(identity.id)
 

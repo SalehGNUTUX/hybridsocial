@@ -1,25 +1,6 @@
 defmodule HybridsocialWeb.Api.V1.MigrationControllerTest do
   use HybridsocialWeb.ConnCase
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
-  defp auth_conn(conn, identity) do
-    {:ok, token, _} = Hybridsocial.Auth.Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{token}")
-  end
-
   describe "POST /api/v1/accounts/also_known_as" do
     setup %{conn: conn} do
       user = create_user("akauser", "akauser@test.com")

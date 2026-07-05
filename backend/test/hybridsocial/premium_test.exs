@@ -3,18 +3,6 @@ defmodule Hybridsocial.PremiumTest do
 
   alias Hybridsocial.Premium
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   describe "apply_for_verification/3" do
     test "creates a verification request" do
       identity = create_user("verifyuser", "verify@test.com")
@@ -60,6 +48,26 @@ defmodule Hybridsocial.PremiumTest do
 
       assert {:ok, updated} = Premium.reject_verification(verification.id, "admin")
       assert updated.status == "rejected"
+      assert updated.rejection_reason == nil
+    end
+
+    test "records the rejection reason when given" do
+      identity = create_user("rejectuser2", "reject2@test.com")
+      {:ok, verification} = Premium.apply_for_verification(identity.id, "manual")
+
+      assert {:ok, updated} =
+               Premium.reject_verification(verification.id, "admin", "Insufficient evidence")
+
+      assert updated.status == "rejected"
+      assert updated.rejection_reason == "Insufficient evidence"
+    end
+
+    test "treats a blank reason as no reason" do
+      identity = create_user("rejectuser3", "reject3@test.com")
+      {:ok, verification} = Premium.apply_for_verification(identity.id, "manual")
+
+      assert {:ok, updated} = Premium.reject_verification(verification.id, "admin", "   ")
+      assert updated.rejection_reason == nil
     end
   end
 

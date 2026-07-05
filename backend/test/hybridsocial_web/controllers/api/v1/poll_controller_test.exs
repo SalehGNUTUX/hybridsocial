@@ -3,18 +3,6 @@ defmodule HybridsocialWeb.Api.V1.PollControllerTest do
 
   alias Hybridsocial.Social.{Posts, Polls}
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   defp login(conn, email) do
     {:ok, tokens} = Hybridsocial.Auth.login(email, "password1234567890")
     put_req_header(conn, "authorization", "Bearer #{tokens.access_token}")
@@ -44,7 +32,7 @@ defmodule HybridsocialWeb.Api.V1.PollControllerTest do
       response = json_response(conn, 200)
       assert response["id"] == poll.id
       assert length(response["options"]) == 2
-      assert response["multiple_choice"] == false
+      assert response["multiple"] == false
     end
 
     test "returns 404 for non-existent poll", %{conn: conn} do

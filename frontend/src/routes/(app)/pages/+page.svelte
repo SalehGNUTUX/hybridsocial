@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { getPages, createPage } from '$lib/api/pages.js';
   import { api } from '$lib/api/client.js';
-  import Avatar from '$lib/components/ui/Avatar.svelte';
+  import EntityCard from '$lib/components/entity/EntityCard.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
 
@@ -60,13 +60,6 @@
       return haystack.includes(q);
     });
   });
-
-  function formatCount(n: number | undefined): string {
-    if (typeof n !== 'number') return '0';
-    if (n < 1000) return String(n);
-    if (n < 1_000_000) return (n / 1000).toFixed(n < 10_000 ? 1 : 0) + 'K';
-    return (n / 1_000_000).toFixed(1) + 'M';
-  }
 
   // Create modal
   let showCreateModal = $state(false);
@@ -258,37 +251,17 @@
       {#each visiblePages as pg (pg.id)}
         {@const name = pg.display_name || pg.name || pg.handle}
         {@const category = pg.organization?.category || pg.category}
-        <a href="/pages/{pg.id}" class="page-card">
-          <div class="page-card-banner">
-            {#if pg.header_url}
-              <img src={pg.header_url} alt="" class="page-card-banner-img" loading="lazy" />
-            {:else}
-              <div class="page-card-banner-fallback"></div>
-            {/if}
-          </div>
-          <div class="page-card-body">
-            <div class="page-card-avatar-wrap">
-              <Avatar src={pg.avatar_url || pg.logo_url} {name} size="lg" />
-            </div>
-            <div class="page-card-info">
-              <h3 class="page-card-name" title={name}>{name}</h3>
-              {#if pg.handle}
-                <span class="page-card-handle">@{pg.handle}</span>
-              {/if}
-              {#if pg.bio}
-                <p class="page-card-bio">{pg.bio}</p>
-              {/if}
-              <div class="page-card-meta">
-                {#if category}
-                  <span class="page-card-category">{category}</span>
-                {/if}
-                <span class="page-card-followers">
-                  <strong>{formatCount(pg.followers_count)}</strong> followers
-                </span>
-              </div>
-            </div>
-          </div>
-        </a>
+        <EntityCard
+          {name}
+          handle={pg.handle}
+          avatarUrl={pg.avatar_url || pg.logo_url}
+          coverUrl={pg.header_url}
+          description={pg.bio}
+          badge={category}
+          count={pg.followers_count ?? 0}
+          countLabel="followers"
+          href="/pages/{pg.id}"
+        />
       {/each}
     </div>
   {/if}
@@ -504,120 +477,6 @@
     .pages-grid {
       grid-template-columns: 1fr 1fr;
     }
-  }
-
-  .page-card {
-    display: flex;
-    flex-direction: column;
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
-    overflow: hidden;
-    text-decoration: none;
-    color: var(--color-text);
-    transition: box-shadow var(--transition-fast), transform var(--transition-fast);
-  }
-
-  .page-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
-    text-decoration: none;
-  }
-
-  .page-card-banner {
-    height: 96px;
-    background: var(--color-surface-container);
-    overflow: hidden;
-  }
-
-  .page-card-banner-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  .page-card-banner-fallback {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, var(--color-primary-soft), var(--color-primary));
-    opacity: 0.5;
-  }
-
-  .page-card-body {
-    position: relative;
-    padding: var(--space-4);
-    padding-block-start: 0;
-  }
-
-  /* Pull avatar up so it overlaps the banner like a profile header. */
-  .page-card-avatar-wrap {
-    margin-block-start: -32px;
-    margin-block-end: var(--space-2);
-    width: fit-content;
-    border: 3px solid var(--color-surface-raised);
-    border-radius: 50%;
-    background: var(--color-surface-raised);
-  }
-
-  .page-card-info {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-width: 0;
-  }
-
-  .page-card-name {
-    font-size: var(--text-base);
-    font-weight: 700;
-    color: var(--color-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .page-card-handle {
-    font-size: var(--text-xs);
-    color: var(--color-text-secondary);
-  }
-
-  .page-card-bio {
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
-    margin-block-start: 2px;
-    /* Two-line clamp so wildly-long bios don't blow out the card height. */
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .page-card-meta {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-    flex-wrap: wrap;
-  }
-
-  .page-card-category {
-    font-size: var(--text-xs);
-    color: var(--color-primary);
-    background: var(--color-primary-soft);
-    padding: 2px var(--space-2);
-    border-radius: var(--radius-sm);
-    font-weight: 600;
-  }
-
-  .page-card-followers {
-    font-size: var(--text-xs);
-    color: var(--color-text-secondary);
-  }
-
-  .page-card-followers strong {
-    color: var(--color-text);
-    font-weight: 700;
   }
 
   /* Buttons */

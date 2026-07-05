@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import type { Post } from '$lib/api/types.js';
   import { getScheduledPosts, deleteScheduledPost, updateScheduledPost } from '$lib/api/statuses.js';
-  import { relativeTime, fullDateTime } from '$lib/utils/time.js';
-  import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { fullDateTime } from '$lib/utils/time.js';
+  import { addToast } from '$lib/stores/toast.js';
+  import AsyncState from '$lib/components/ui/AsyncState.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
 
   let posts: Post[] = $state([]);
   let loading = $state(true);
@@ -16,8 +17,10 @@
   let editScheduledAt = $state('');
   let editSaving = $state(false);
 
-  // Delete state
+  // Delete confirmation
   let deletingId: string | null = $state(null);
+  let showDeleteModal = $state(false);
+  let deleting = $state(false);
 
   async function loadScheduledPosts() {
     loading = true;
@@ -45,7 +48,7 @@
   }
 
   async function saveEdit() {
-    if (!editingId) return;
+    if (!editingId || editSaving) return;
     editSaving = true;
     try {
       await updateScheduledPost(editingId, {
@@ -53,9 +56,10 @@
         scheduled_at: editScheduledAt || undefined,
       });
       editingId = null;
+      addToast('Scheduled post updated', 'success');
       await loadScheduledPosts();
     } catch {
-      // Error handled silently
+      addToast('Could not update scheduled post', 'error');
     } finally {
       editSaving = false;
     }
@@ -63,20 +67,26 @@
 
   function confirmDelete(id: string) {
     deletingId = id;
-  }
-
-  function cancelDelete() {
-    deletingId = null;
+    showDeleteModal = true;
   }
 
   async function handleDelete() {
-    if (!deletingId) return;
+    if (!deletingId || deleting) return;
+    deleting = true;
+    const id = deletingId;
+    const prev = posts;
+    // Optimistic removal; restore on failure.
+    posts = posts.filter((p) => p.id !== id);
     try {
-      await deleteScheduledPost(deletingId);
-      posts = posts.filter((p) => p.id !== deletingId);
+      await deleteScheduledPost(id);
+      addToast('Scheduled post deleted', 'success');
+      showDeleteModal = false;
       deletingId = null;
     } catch {
-      // Error handled silently
+      posts = prev;
+      addToast('Could not delete scheduled post', 'error');
+    } finally {
+      deleting = false;
     }
   }
 
@@ -112,24 +122,26 @@
     <h1 class="page-title">Scheduled Posts</h1>
   </div>
 
-  {#if loading}
-    <div class="loading-state">
-      <Spinner />
-    </div>
-  {:else if error}
-    <div class="error-state">
-      <p>{error}</p>
-      <button class="btn btn-outline" type="button" onclick={loadScheduledPosts}>Retry</button>
-    </div>
-  {:else if posts.length === 0}
-    <div class="empty-state">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" stroke-width="1.5" aria-hidden="true">
-        <circle cx="12" cy="12" r="10"/>
-        <polyline points="12 6 12 12 16 14"/>
-      </svg>
-      <p class="empty-text">No scheduled posts</p>
-    </div>
-  {:else}
+  <AsyncState
+    {loading}
+    {error}
+    isEmpty={posts.length === 0}
+    emptyTitle="No scheduled posts"
+    emptyText="Posts you schedule for later will appear here."
+    onretry={loadScheduledPosts}
+  >
+    {#snippet skeleton()}
+      <div class="scheduled-list" aria-hidden="true">
+        {#each Array(3) as _, i (i)}
+          <div class="scheduled-card">
+            <div class="skel-line lg"></div>
+            <div class="skel-line sm"></div>
+            <div class="skel-meta"></div>
+          </div>
+        {/each}
+      </div>
+    {/snippet}
+
     <div class="scheduled-list">
       {#each posts as post (post.id)}
         <div class="scheduled-card">
@@ -194,21 +206,18 @@
         </div>
       {/each}
     </div>
-  {/if}
+  </AsyncState>
 </div>
 
-{#if deletingId}
-  <div class="confirm-overlay" onclick={cancelDelete} role="dialog" aria-modal="true" aria-label="Confirm delete">
-    <div class="confirm-dialog" onclick={(e) => e.stopPropagation()}>
-      <h3 class="confirm-title">Cancel scheduled post?</h3>
-      <p class="confirm-message">This scheduled post will be permanently deleted and will not be published.</p>
-      <div class="confirm-actions">
-        <button type="button" class="btn btn-ghost" onclick={cancelDelete}>Keep it</button>
-        <button type="button" class="btn btn-danger" onclick={handleDelete}>Delete</button>
-      </div>
-    </div>
+<Modal bind:open={showDeleteModal} title="Cancel scheduled post?" onclose={() => { deletingId = null; }}>
+  <p class="confirm-message">This scheduled post will be permanently deleted and will not be published.</p>
+  <div class="confirm-actions">
+    <button type="button" class="btn btn-ghost" onclick={() => (showDeleteModal = false)}>Keep it</button>
+    <button type="button" class="btn btn-danger" onclick={handleDelete} disabled={deleting}>
+      {deleting ? 'Deleting…' : 'Delete'}
+    </button>
   </div>
-{/if}
+</Modal>
 
 <style>
   .scheduled-page {
@@ -227,35 +236,6 @@
     font-size: var(--text-xl);
     font-weight: 700;
     color: var(--color-text);
-  }
-
-  .loading-state {
-    display: flex;
-    justify-content: center;
-    padding: var(--space-16);
-  }
-
-  .error-state {
-    text-align: center;
-    padding: var(--space-16) var(--space-4);
-    color: var(--color-text-secondary);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-16) var(--space-4);
-  }
-
-  .empty-text {
-    font-size: var(--text-base);
-    color: var(--color-text-tertiary);
   }
 
   .scheduled-list {
@@ -354,14 +334,29 @@
     background: var(--color-danger-light, rgba(239, 68, 68, 0.1));
   }
 
-  .btn-outline {
-    background: transparent;
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
+  /* Skeleton lines shown inside placeholder cards while loading. */
+  .skel-line,
+  .skel-meta {
+    height: 12px;
+    border-radius: var(--radius-sm);
+    background: var(--color-border);
+    margin-block-end: var(--space-3);
   }
 
-  .btn-outline:hover {
-    background: var(--color-surface);
+  .skel-line.lg { width: 85%; }
+  .skel-line.sm { width: 55%; }
+  .skel-meta { width: 35%; height: 10px; margin-block-end: 0; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .skel-line,
+    .skel-meta {
+      animation: skel-pulse 1.5s ease-in-out infinite;
+    }
+  }
+
+  @keyframes skel-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
   }
 
   /* Edit form */
@@ -420,32 +415,7 @@
     gap: var(--space-2);
   }
 
-  /* Confirm dialog */
-  .confirm-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--color-overlay, rgba(0,0,0,0.5));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-modal, 40);
-  }
-
-  .confirm-dialog {
-    background: var(--color-surface-raised, #fff);
-    border-radius: var(--radius-lg);
-    padding: var(--space-6);
-    max-width: 400px;
-    width: 90%;
-    box-shadow: var(--shadow-xl);
-  }
-
-  .confirm-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    margin-block-end: var(--space-2);
-  }
-
+  /* Confirm dialog (rendered inside the shared Modal) */
   .confirm-message {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);

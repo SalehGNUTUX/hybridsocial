@@ -100,18 +100,6 @@ defmodule Hybridsocial.Content.LinkPreviewsTest do
       base <> path
     end
 
-    defp create_user(handle) do
-      {:ok, identity} =
-        Hybridsocial.Accounts.register_user(%{
-          "handle" => handle,
-          "email" => "#{handle}@test.example",
-          "password" => "Password123456!!",
-          "password_confirmation" => "Password123456!!"
-        })
-
-      identity
-    end
-
     defp create_post(identity, attrs \\ %{}) do
       defaults = %{
         identity_id: identity.id,

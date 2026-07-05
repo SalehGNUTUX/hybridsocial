@@ -3,23 +3,6 @@ defmodule Hybridsocial.Auth.RBACTest do
 
   alias Hybridsocial.Auth.RBAC
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
-  defp make_admin(identity) do
-    {:ok, _} = RBAC.assign_role(identity.id, "owner", identity.id)
-    identity
-  end
-
   describe "has_permission?/2" do
     test "returns true when identity has the permission through a role" do
       user = create_user("perm1", "perm1@test.com")

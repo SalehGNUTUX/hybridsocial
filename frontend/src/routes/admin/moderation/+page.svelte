@@ -12,15 +12,18 @@
     getIpBlocks, createIpBlock, deleteIpBlock,
     getEmailDomainBans, createEmailDomainBan, deleteEmailDomainBan,
     getMediaHashBans, createMediaHashBan, deleteMediaHashBan,
+    getVerifications, approveVerification, rejectVerification,
   } from '$lib/api/admin.js';
   import ModerationQueuePanel from '$lib/components/admin/ModerationQueuePanel.svelte';
   import type {
     AdminReport, ContentFilter, BannedDomain, IpBlock,
     EmailDomainBan, MediaHashBan,
   } from '$lib/api/types.js';
+  import type { VerificationRequest } from '$lib/api/admin.js';
 
   const tabs = [
     { id: 'reports', label: 'Reports' },
+    { id: 'verifications', label: 'Verifications' },
     { id: 'queue', label: 'Queue' },
     { id: 'filters', label: 'Content Filters' },
     { id: 'domains', label: 'Banned Domains' },
@@ -29,7 +32,18 @@
     { id: 'media-hashes', label: 'Media Hashes' },
   ];
 
+  const validTabs = tabs.map((t) => t.id);
+
   let activeTab = $state('reports');
+
+  // Verification requests state
+  let verifications: VerificationRequest[] = $state([]);
+  let verificationsLoading = $state(false);
+  let verificationsLoaded = $state(false);
+  let verificationStatusFilter = $state('pending');
+  // Which request (if any) is mid-rejection, plus the reason being typed.
+  let rejectingId = $state<string | null>(null);
+  let rejectReason = $state('');
 
   // Reports state
   let reports: AdminReport[] = $state([]);
@@ -112,10 +126,17 @@
     // per-post admin view so old bookmarks and cached pages still
     // land somewhere useful.
     if (browser) {
-      const postId = new URL(window.location.href).searchParams.get('post');
+      const params = new URL(window.location.href).searchParams;
+      const postId = params.get('post');
       if (postId) {
         goto(`/admin/posts/${encodeURIComponent(postId)}`, { replaceState: true });
         return;
+      }
+      // Deep-link support so the dashboard's "Verifications" card (and
+      // any other) can open straight to a specific tab.
+      const tab = params.get('tab');
+      if (tab && validTabs.includes(tab)) {
+        activeTab = tab;
       }
     }
 
@@ -131,6 +152,64 @@
       addToast('Failed to load reports', 'error');
     } finally {
       reportsLoading = false;
+    }
+  }
+
+  async function loadVerifications() {
+    verificationsLoading = true;
+    try {
+      // Fetch the full history (all statuses) so the in-page filter can
+      // switch between pending / approved / rejected without refetching.
+      verifications = await getVerifications({ limit: '200' });
+    } catch {
+      addToast('Failed to load verification requests', 'error');
+    } finally {
+      verificationsLoading = false;
+      verificationsLoaded = true;
+    }
+  }
+
+  let filteredVerifications = $derived(
+    verificationStatusFilter === 'all'
+      ? verifications
+      : verifications.filter((v) => v.status === verificationStatusFilter)
+  );
+
+  async function handleApproveVerification(id: string) {
+    try {
+      await approveVerification(id);
+      verifications = verifications.map((v) =>
+        v.id === id ? { ...v, status: 'approved', rejection_reason: null } : v
+      );
+      if (rejectingId === id) rejectingId = null;
+      addToast('Verification approved', 'success');
+    } catch {
+      addToast('Failed to approve verification', 'error');
+    }
+  }
+
+  function startReject(id: string) {
+    rejectingId = id;
+    rejectReason = '';
+  }
+
+  function cancelReject() {
+    rejectingId = null;
+    rejectReason = '';
+  }
+
+  async function confirmReject(id: string) {
+    try {
+      const reason = rejectReason.trim();
+      const updated = await rejectVerification(id, reason || undefined);
+      verifications = verifications.map((v) =>
+        v.id === id ? { ...v, status: 'rejected', rejection_reason: updated.rejection_reason } : v
+      );
+      rejectingId = null;
+      rejectReason = '';
+      addToast('Verification rejected', 'success');
+    } catch {
+      addToast('Failed to reject verification', 'error');
     }
   }
 
@@ -195,7 +274,9 @@
   }
 
   $effect(() => {
-    if (activeTab === 'filters' && !filtersLoaded && !filtersLoading) {
+    if (activeTab === 'verifications' && !verificationsLoaded && !verificationsLoading) {
+      loadVerifications();
+    } else if (activeTab === 'filters' && !filtersLoaded && !filtersLoading) {
       loadFilters();
     } else if (activeTab === 'domains' && !domainsLoaded && !domainsLoading) {
       loadDomains();
@@ -508,6 +589,88 @@
           </td>
         {/snippet}
       </DataTable>
+
+    {:else if activeTab === 'verifications'}
+      <div class="tab-toolbar">
+        <select class="input" style="width: 160px" bind:value={verificationStatusFilter}>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="all">All</option>
+        </select>
+        <span class="retention-note">
+          Users request a verified badge here. Approving grants it; rejecting lets you record a reason
+          the reviewer (and any audit) can refer back to.
+        </span>
+      </div>
+
+      {#if verificationsLoading}
+        <div class="skeleton" style="height: 72px"></div>
+      {:else}
+        <div class="list-items">
+          {#each filteredVerifications as req (req.id)}
+            <div class="verify-item card">
+              <div class="verify-main">
+                <div class="verify-avatar">
+                  {#if req.account?.avatar_url}
+                    <img src={req.account.avatar_url} alt="" class="verify-img" />
+                  {:else}
+                    <span class="verify-initial">
+                      {(req.account?.display_name || req.account?.handle || '?').charAt(0).toUpperCase()}
+                    </span>
+                  {/if}
+                </div>
+                <div class="verify-info">
+                  <div class="verify-identity">
+                    {#if req.account?.id}
+                      <a href="/@{req.account.handle}" class="verify-name">
+                        {req.account.display_name || req.account.handle}
+                      </a>
+                    {:else}
+                      <span class="verify-name">{req.account?.display_name || req.account?.handle || 'Unknown'}</span>
+                    {/if}
+                    <span class="verify-handle">@{req.account?.handle}</span>
+                    <span class="badge-type">{(req.type || '').replace(/_/g, ' ')}</span>
+                    <span class="status-badge status-{req.status}">{req.status}</span>
+                  </div>
+                  {#if req.metadata?.reason}
+                    <p class="verify-reason"><span class="report-meta-label">Reason given:</span> {req.metadata.reason}</p>
+                  {/if}
+                  {#if req.metadata?.domain}
+                    <p class="verify-reason"><span class="report-meta-label">Domain:</span> {req.metadata.domain}</p>
+                  {/if}
+                  {#if req.status === 'rejected' && req.rejection_reason}
+                    <p class="verify-rejection"><span class="report-meta-label">Rejected because:</span> {req.rejection_reason}</p>
+                  {/if}
+                  <span class="verify-date">Requested {formatDate(req.created_at)}</span>
+                </div>
+              </div>
+
+              {#if req.status === 'pending'}
+                {#if rejectingId === req.id}
+                  <form class="verify-reject-form" onsubmit={(e) => { e.preventDefault(); confirmReject(req.id); }}>
+                    <input
+                      class="input"
+                      type="text"
+                      bind:value={rejectReason}
+                      placeholder="Reason for rejection (optional)"
+                    />
+                    <button class="btn btn-sm btn-danger" type="submit">Confirm reject</button>
+                    <button class="btn btn-sm btn-ghost" type="button" onclick={cancelReject}>Cancel</button>
+                  </form>
+                {:else}
+                  <div class="action-buttons">
+                    <button class="btn btn-sm btn-primary" type="button" onclick={() => handleApproveVerification(req.id)}>Approve</button>
+                    <button class="btn btn-sm btn-ghost" type="button" onclick={() => startReject(req.id)}>Reject</button>
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          {:else}
+            <p class="empty-text">No {verificationStatusFilter === 'all' ? '' : verificationStatusFilter} verification requests</p>
+          {/each}
+        </div>
+      {/if}
 
     {:else if activeTab === 'queue'}
       <!-- Auto-flagged content (NSFW heuristics, link-shortener bursts,
@@ -962,5 +1125,112 @@
 
   .report-account-link:hover {
     text-decoration: underline;
+  }
+
+  .status-approved {
+    background: var(--color-success-soft);
+    color: #166534;
+  }
+
+  .status-rejected {
+    background: var(--color-danger-soft);
+    color: #991b1b;
+  }
+
+  /* Verification requests list */
+  .verify-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .verify-main {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .verify-avatar {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--color-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .verify-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .verify-initial {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  .verify-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .verify-identity {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .verify-name {
+    font-weight: 600;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  a.verify-name:hover {
+    text-decoration: underline;
+  }
+
+  .verify-handle {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .verify-reason,
+  .verify-rejection {
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    margin: 0;
+    color: var(--color-text-secondary);
+  }
+
+  .verify-rejection {
+    color: #991b1b;
+  }
+
+  .verify-date {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+
+  .verify-reject-form {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .verify-reject-form .input {
+    min-width: 220px;
   }
 </style>

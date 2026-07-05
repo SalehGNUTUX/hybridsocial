@@ -8,16 +8,7 @@ defmodule HybridsocialWeb.Api.V1.RecoveryControllerTest do
   defp register(handle) do
     uniq = :erlang.unique_integer([:positive])
     email = "#{handle}_#{uniq}@test.com"
-
-    {:ok, identity} =
-      Accounts.register_user(%{
-        "handle" => "#{handle}_#{uniq}",
-        "email" => email,
-        "display_name" => handle,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
+    identity = create_user("#{handle}_#{uniq}", email)
     {identity, email}
   end
 
@@ -35,11 +26,6 @@ defmodule HybridsocialWeb.Api.V1.RecoveryControllerTest do
   end
 
   defp totp_code(secret), do: NimbleTOTP.verification_code(secret)
-
-  defp auth_conn(conn, identity) do
-    {:ok, access_token, _claims} = Hybridsocial.Auth.Token.generate_access_token(identity.id)
-    put_req_header(conn, "authorization", "Bearer #{access_token}")
-  end
 
   describe "POST /api/v1/accounts/recovery_code" do
     test "authenticated user with 2FA enabled can generate a code", %{conn: conn} do

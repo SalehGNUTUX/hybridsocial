@@ -1,42 +1,13 @@
 defmodule HybridsocialWeb.Api.V1.Admin.BackupControllerTest do
   use HybridsocialWeb.ConnCase
 
-  defp create_admin(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    {:ok, _} = Hybridsocial.Auth.RBAC.assign_role(identity.id, "owner", identity.id)
-    Hybridsocial.Accounts.get_identity!(identity.id)
-  end
-
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
-  defp auth_conn(conn, identity) do
-    {:ok, token, _} = Hybridsocial.Auth.Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{token}")
-  end
+  # create_user/create_admin + admin_conn come from
+  # Hybridsocial.AccountsFixtures (auto-imported via ConnCase).
 
   describe "POST /api/v1/admin/backup" do
     setup %{conn: conn} do
       admin = create_admin("bkadmin1", "bkadmin1@test.com")
-      %{conn: auth_conn(conn, admin), admin: admin}
+      %{conn: admin_conn(conn, admin), admin: admin}
     end
 
     test "creates a backup job", %{conn: conn} do
@@ -61,7 +32,7 @@ defmodule HybridsocialWeb.Api.V1.Admin.BackupControllerTest do
   describe "GET /api/v1/admin/backups" do
     setup %{conn: conn} do
       admin = create_admin("bkadmin2", "bkadmin2@test.com")
-      conn = auth_conn(conn, admin)
+      conn = admin_conn(conn, admin)
 
       # Create a backup job directly
       {:ok, backup} =
@@ -80,7 +51,7 @@ defmodule HybridsocialWeb.Api.V1.Admin.BackupControllerTest do
   describe "GET /api/v1/admin/backups/:id" do
     setup %{conn: conn} do
       admin = create_admin("bkadmin3", "bkadmin3@test.com")
-      conn = auth_conn(conn, admin)
+      conn = admin_conn(conn, admin)
 
       {:ok, backup} =
         Hybridsocial.Admin.Backup.create_backup(admin.id, "secret", "full")
@@ -103,7 +74,7 @@ defmodule HybridsocialWeb.Api.V1.Admin.BackupControllerTest do
   describe "non-admin access" do
     test "returns 403 for non-admin users", %{conn: conn} do
       user = create_user("bkregular", "bkregular@test.com")
-      conn = auth_conn(conn, user)
+      conn = admin_conn(conn, user)
 
       conn = get(conn, "/api/v1/admin/backups")
       assert json_response(conn, 403)["error"] == "auth.forbidden"

@@ -33,14 +33,14 @@ defmodule Hybridsocial.Premium do
     end
   end
 
-  def reject_verification(verification_id, _admin_id) do
+  def reject_verification(verification_id, _admin_id, reason \\ nil) do
     case Repo.get(Verification, verification_id) do
       nil ->
         {:error, :not_found}
 
       verification ->
         verification
-        |> Verification.reject_changeset()
+        |> Verification.reject_changeset(reason)
         |> Repo.update()
     end
   end

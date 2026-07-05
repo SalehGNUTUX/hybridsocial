@@ -4,16 +4,12 @@ defmodule HybridsocialWeb.Api.V1.SocialControllerTest do
   alias Hybridsocial.Accounts
   alias Hybridsocial.Social
 
+  # create_user/valid_password come from Hybridsocial.AccountsFixtures
+  # (auto-imported via ConnCase); create_user returns a CONFIRMED user so
+  # login + the RequireConfirmedEmail-gated endpoints work.
   defp create_and_login(conn, handle, email) do
-    {:ok, identity} =
-      Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    {:ok, tokens} = Hybridsocial.Auth.login(email, "password1234567890")
+    identity = create_user(handle, email)
+    {:ok, tokens} = Hybridsocial.Auth.login(email, valid_password())
     {identity, put_req_header(conn, "authorization", "Bearer #{tokens.access_token}")}
   end
 

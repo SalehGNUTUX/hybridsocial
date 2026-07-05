@@ -6,18 +6,6 @@ defmodule Hybridsocial.TrendingTest do
   alias Hybridsocial.Search.TrendingData
   alias Hybridsocial.Repo
 
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
   describe "compute_trending_posts/0" do
     test "computes trending posts from engagement" do
       user1 = create_user("trender1", "trender1@test.com")

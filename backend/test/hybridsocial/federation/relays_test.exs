@@ -3,20 +3,6 @@ defmodule Hybridsocial.Federation.RelaysTest do
 
   alias Hybridsocial.Federation.Relays
 
-  defp create_admin(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "Password123456!!",
-        "password_confirmation" => "Password123456!!"
-      })
-
-    identity
-    |> Ecto.Changeset.change(is_admin: true)
-    |> Hybridsocial.Repo.update!()
-  end
-
   describe "subscribe_to_relay/2" do
     test "creates a relay with pending status" do
       admin = create_admin("relay_admin", "relay_admin@example.com")

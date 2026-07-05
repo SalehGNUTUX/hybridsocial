@@ -3,12 +3,18 @@
   import type { PostDraft } from '$lib/api/types.js';
   import { listDrafts, deleteDraft } from '$lib/api/drafts.js';
   import { relativeTime, fullDateTime } from '$lib/utils/time.js';
-  import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { addToast } from '$lib/stores/toast.js';
+  import AsyncState from '$lib/components/ui/AsyncState.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
 
   let drafts: PostDraft[] = $state([]);
   let loading = $state(true);
   let error = $state('');
-  let deletingId: string | null = $state(null);
+
+  // Delete confirmation
+  let draftToDelete: PostDraft | null = $state(null);
+  let showDeleteModal = $state(false);
+  let deleting = $state(false);
 
   async function load() {
     loading = true;
@@ -31,16 +37,30 @@
     );
   }
 
-  async function remove(draft: PostDraft) {
-    if (deletingId) return;
-    deletingId = draft.id;
+  function confirmDelete(draft: PostDraft) {
+    draftToDelete = draft;
+    showDeleteModal = true;
+  }
+
+  async function handleDelete() {
+    if (!draftToDelete || deleting) return;
+    deleting = true;
+    const target = draftToDelete;
+    const prev = drafts;
+    // Optimistic removal; restore on failure. Note this is a per-row
+    // action, so failures must NOT touch the page-level `error` state
+    // (that would replace the whole list with the error view).
+    drafts = drafts.filter((d) => d.id !== target.id);
     try {
-      await deleteDraft(draft.id);
-      drafts = drafts.filter((d) => d.id !== draft.id);
+      await deleteDraft(target.id);
+      addToast('Draft deleted', 'success');
+      showDeleteModal = false;
+      draftToDelete = null;
     } catch {
-      error = 'Failed to delete draft.';
+      drafts = prev;
+      addToast('Could not delete draft', 'error');
     } finally {
-      deletingId = null;
+      deleting = false;
     }
   }
 
@@ -66,20 +86,34 @@
     <p class="page-sub">Saved post drafts. Resume to continue editing, or delete to discard.</p>
   </div>
 
-  {#if loading}
-    <div class="state-center"><Spinner /></div>
-  {:else if error}
-    <div class="state-center">
-      <p>{error}</p>
-      <button type="button" class="btn btn-outline" onclick={load}>Retry</button>
-    </div>
-  {:else if drafts.length === 0}
-    <div class="state-center empty">
-      <span class="material-symbols-outlined empty-icon">edit_note</span>
-      <p class="empty-text">No drafts yet</p>
-      <p class="empty-sub">Use <strong>Save draft</strong> in the composer to save in-flight posts here.</p>
-    </div>
-  {:else}
+  <AsyncState
+    {loading}
+    {error}
+    isEmpty={drafts.length === 0}
+    onretry={load}
+  >
+    {#snippet skeleton()}
+      <ul class="drafts-list" aria-hidden="true">
+        {#each Array(3) as _, i (i)}
+          <li class="draft-card">
+            <div class="draft-body">
+              <div class="skel-line lg"></div>
+              <div class="skel-line sm"></div>
+              <div class="skel-meta"></div>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/snippet}
+
+    {#snippet empty()}
+      <div class="state-center empty">
+        <span class="material-symbols-outlined empty-icon">edit_note</span>
+        <p class="empty-text">No drafts yet</p>
+        <p class="empty-sub">Use <strong>Save draft</strong> in the composer to save in-flight posts here.</p>
+      </div>
+    {/snippet}
+
     <ul class="drafts-list">
       {#each drafts as draft (draft.id)}
         <li class="draft-card">
@@ -121,20 +155,25 @@
           </div>
           <div class="draft-actions">
             <button type="button" class="btn btn-primary" onclick={() => resume(draft)}>Resume</button>
-            <button
-              type="button"
-              class="btn btn-ghost-danger"
-              disabled={deletingId === draft.id}
-              onclick={() => remove(draft)}
-            >
-              {deletingId === draft.id ? 'Deleting…' : 'Delete'}
+            <button type="button" class="btn btn-ghost draft-delete" onclick={() => confirmDelete(draft)}>
+              Delete
             </button>
           </div>
         </li>
       {/each}
     </ul>
-  {/if}
+  </AsyncState>
 </div>
+
+<Modal bind:open={showDeleteModal} title="Delete draft?" onclose={() => { draftToDelete = null; }}>
+  <p class="confirm-message">This draft will be permanently discarded. This cannot be undone.</p>
+  <div class="confirm-actions">
+    <button type="button" class="btn btn-ghost" onclick={() => (showDeleteModal = false)}>Keep it</button>
+    <button type="button" class="btn btn-danger" onclick={handleDelete} disabled={deleting}>
+      {deleting ? 'Deleting…' : 'Delete'}
+    </button>
+  </div>
+</Modal>
 
 <style>
   .drafts-page {
@@ -279,10 +318,62 @@
     opacity: 0.6;
   }
 
+  .draft-target:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
   .draft-actions {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     flex-shrink: 0;
+  }
+
+  /* Ghost button with a destructive tint; the confirming red button
+     lives in the modal. (`btn-ghost-danger` isn't a global variant.) */
+  .draft-delete {
+    color: var(--color-danger);
+  }
+
+  .draft-delete:hover:not(:disabled) {
+    background: var(--color-danger-light, rgba(239, 68, 68, 0.1));
+  }
+
+  .confirm-message {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    margin-block-end: var(--space-4);
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+  }
+
+  /* Skeleton placeholder lines while drafts load. */
+  .skel-line,
+  .skel-meta {
+    height: 12px;
+    border-radius: var(--radius-sm);
+    background: var(--color-border);
+    margin-block-end: var(--space-3);
+  }
+
+  .skel-line.lg { width: 85%; }
+  .skel-line.sm { width: 55%; }
+  .skel-meta { width: 35%; height: 10px; margin-block-end: 0; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .skel-line,
+    .skel-meta {
+      animation: skel-pulse 1.5s ease-in-out infinite;
+    }
+  }
+
+  @keyframes skel-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
   }
 </style>

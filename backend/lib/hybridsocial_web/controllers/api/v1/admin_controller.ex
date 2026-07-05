@@ -89,6 +89,8 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       |> where([r], r.status == "pending")
       |> Repo.aggregate(:count)
 
+    pending_verifications = Hybridsocial.Premium.pending_verification_count()
+
     # Service health checks
     services = check_services()
 
@@ -97,6 +99,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       total_posts: total_posts,
       known_instances: known_instances,
       open_reports: open_reports,
+      pending_verifications: pending_verifications,
       services: services
     })
   end
@@ -422,11 +425,12 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     end
   end
 
-  def reject_verification(conn, %{"id" => id}) do
+  def reject_verification(conn, %{"id" => id} = params) do
     with :ok <- require_permission(conn, "users.view") do
       admin_id = conn.assigns.current_identity.id
+      reason = params["reason"]
 
-      case Hybridsocial.Premium.reject_verification(id, admin_id) do
+      case Hybridsocial.Premium.reject_verification(id, admin_id, reason) do
         {:ok, verification} ->
           json(conn, %{data: serialize_verification(verification)})
 
@@ -446,6 +450,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       type: verification.type,
       status: verification.status,
       metadata: verification.metadata,
+      rejection_reason: verification.rejection_reason,
       verified_at: verification.verified_at,
       created_at: verification.inserted_at,
       account:

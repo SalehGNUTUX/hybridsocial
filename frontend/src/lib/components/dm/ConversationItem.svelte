@@ -82,7 +82,7 @@
         {:else if conversation.encryption_status === 'at_rest'}
           <span
             class="material-symbols-outlined encryption-icon encryption-at-rest"
-            title="Encrypted on disk. This is not end-to-end ecnryption"
+            title="Encrypted on disk. This is not end-to-end encryption"
             aria-label="Encrypted at rest"
           >lock</span>
         {:else if conversation.encryption_status === 'federated'}
@@ -123,10 +123,16 @@
     cursor: pointer;
     border-radius: var(--radius-lg);
     transition: background var(--transition-fast);
+    min-height: 60px;
   }
 
   .conversation-item:hover {
     background: var(--color-surface);
+  }
+
+  .conversation-item:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
   }
 
   .conversation-item.active {
@@ -149,7 +155,7 @@
   }
 
   .conversation-name {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     font-weight: 600;
     color: var(--color-text);
     overflow: hidden;
@@ -174,7 +180,7 @@
   }
 
   .conversation-message {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--color-text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -198,7 +204,7 @@
     border-radius: var(--radius-full);
     background: var(--color-primary);
     color: var(--color-text-on-primary);
-    font-size: 11px;
+    font-size: var(--text-xs);
     font-weight: 700;
     line-height: 1;
     flex-shrink: 0;

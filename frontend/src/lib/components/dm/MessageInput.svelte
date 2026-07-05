@@ -13,12 +13,14 @@
     maxAttachments = 1,
     replyingTo = null,
     oncancelreply,
+    ontyping,
   }: {
     onsend?: (content: string, mediaIds: string[], replyToId: string | null) => void;
     disabled?: boolean;
     maxAttachments?: number;
     replyingTo?: import('$lib/api/types.js').Message | null;
     oncancelreply?: () => void;
+    ontyping?: () => void;
   } = $props();
 
   // Same gate as PostComposer — reject types up front so we don't
@@ -141,6 +143,19 @@
     if (!textareaEl) return;
     textareaEl.style.height = 'auto';
     textareaEl.style.height = Math.min(textareaEl.scrollHeight, 120) + 'px';
+    pingTyping();
+  }
+
+  // Throttle "I'm typing" pings — at most one every 2.5s while the user
+  // is actively editing, so we hint the other side without hammering the
+  // endpoint on every keystroke.
+  let lastTypingPing = 0;
+  function pingTyping() {
+    if (!content.trim()) return;
+    const now = Date.now();
+    if (now - lastTypingPing < 2500) return;
+    lastTypingPing = now;
+    ontyping?.();
   }
 
   // Allow sending when there's text OR at least one finished attachment.
@@ -317,8 +332,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border: none;
     background: none;
     border-radius: var(--radius-full);
@@ -376,28 +391,34 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border: none;
-    background: var(--color-surface);
+    background: var(--color-surface-container);
     border-radius: var(--radius-full);
     color: var(--color-text-tertiary);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      transform var(--transition-fast);
     flex-shrink: 0;
   }
 
+  /* Once there's something to send, the button becomes a solid accent
+     circle — a clear, discoverable primary action. */
   .send-btn.active {
-    background: var(--color-primary);
+    background: var(--gradient-primary);
     color: var(--color-text-on-primary);
+    box-shadow: 0 2px 8px rgba(0, 106, 105, 0.28);
   }
 
-  .send-btn:hover:not(:disabled) {
-    background: var(--color-primary-hover);
-    color: var(--color-text-on-primary);
+  .send-btn.active:hover:not(:disabled) {
+    transform: scale(1.05);
   }
 
   .send-btn:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
   }
 

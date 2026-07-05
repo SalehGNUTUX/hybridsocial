@@ -14,7 +14,8 @@ defmodule HybridsocialWeb.Api.V1.AuthAuditLogTest do
 
   describe "audit logging for auth events" do
     test "successful login creates audit log", %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      confirm_email(identity)
 
       post(conn, "/api/v1/auth/login", %{
         "email" => "audit@example.com",
@@ -44,7 +45,8 @@ defmodule HybridsocialWeb.Api.V1.AuthAuditLogTest do
     end
 
     test "logout creates audit log", %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      confirm_email(identity)
 
       login_conn =
         post(conn, "/api/v1/auth/login", %{

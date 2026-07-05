@@ -1,31 +1,11 @@
 defmodule HybridsocialWeb.Api.V1.PageControllerTest do
   use HybridsocialWeb.ConnCase, async: false
 
-  alias Hybridsocial.Auth.Token
   alias Hybridsocial.Pages
 
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
-
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "password1234567890",
-        "password_confirmation" => "password1234567890"
-      })
-
-    identity
-  end
-
-  defp authenticate(conn, identity) do
-    {:ok, access_token, _claims} = Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{access_token}")
-  end
 
   defp create_test_page(owner, handle) do
     {:ok, page} =
@@ -50,7 +30,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(owner)
+        |> auth_conn(owner)
         |> post("/api/v1/pages", %{
           "handle" => "new_page",
           "display_name" => "New Page",
@@ -109,7 +89,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(owner)
+        |> auth_conn(owner)
         |> patch("/api/v1/pages/#{page.id}", %{"display_name" => "Updated"})
 
       response = json_response(conn, 200)
@@ -123,7 +103,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(rando)
+        |> auth_conn(rando)
         |> patch("/api/v1/pages/#{page.id}", %{"display_name" => "Hacked"})
 
       assert json_response(conn, 403)
@@ -137,7 +117,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(owner)
+        |> auth_conn(owner)
         |> delete("/api/v1/pages/#{page.id}")
 
       assert response(conn, 204)
@@ -150,7 +130,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(rando)
+        |> auth_conn(rando)
         |> delete("/api/v1/pages/#{page.id}")
 
       assert json_response(conn, 403)
@@ -184,7 +164,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(owner)
+        |> auth_conn(owner)
         |> post("/api/v1/pages/#{page.id}/roles", %{
           "identity_id" => user.id,
           "role" => "editor"
@@ -203,7 +183,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(rando)
+        |> auth_conn(rando)
         |> post("/api/v1/pages/#{page.id}/roles", %{
           "identity_id" => user.id,
           "role" => "editor"
@@ -222,7 +202,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(owner)
+        |> auth_conn(owner)
         |> delete("/api/v1/pages/#{page.id}/roles/#{role.id}")
 
       assert response(conn, 204)
@@ -253,7 +233,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(owner)
+        |> auth_conn(owner)
         |> patch("/api/v1/pages/#{page.id}/branding", %{
           "theme_color" => "#ff0000",
           "logo_url" => "https://example.com/logo.png"
@@ -271,7 +251,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
 
       conn =
         conn
-        |> authenticate(rando)
+        |> auth_conn(rando)
         |> patch("/api/v1/pages/#{page.id}/branding", %{"theme_color" => "#ff0000"})
 
       assert json_response(conn, 403)

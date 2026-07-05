@@ -24,6 +24,10 @@ defmodule Hybridsocial.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import Hybridsocial.DataCase
+
+      # Shared account factories (create_user/create_admin/…). Tests must
+      # use these rather than rolling their own — see the module doc.
+      import Hybridsocial.AccountsFixtures
     end
   end
 

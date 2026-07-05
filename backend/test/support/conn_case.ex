@@ -28,6 +28,11 @@ defmodule HybridsocialWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import HybridsocialWeb.ConnCase
+
+      # Shared account factories + auth_conn/admin_conn helpers. Tests
+      # must use these rather than defining their own — see the module
+      # doc for why (one gate change, one edit).
+      import Hybridsocial.AccountsFixtures
     end
   end
 

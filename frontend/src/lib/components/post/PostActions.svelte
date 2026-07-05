@@ -954,7 +954,22 @@
             {@render reactionGlyph(currentReaction, 'current-reaction')}
           {/if}
         {:else}
-          <span class="material-symbols-outlined action-icon">thumb_up</span>
+          <svg
+            class="action-icon"
+            viewBox="0 0 24 24"
+            width="1em"
+            height="1em"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M8.35 17.5H5.5C4.94772 17.5 4.5 17.0523 4.5 16.5V11.5C4.5 10.9477 4.94772 10.5 5.5 10.5H8.35C8.43284 10.5 8.5 10.5672 8.5 10.65V17.35C8.5 17.4328 8.43284 17.5 8.35 17.5Z" />
+            <path d="M8.5 11.5L10.3944 7.71115C10.4639 7.57229 10.5 7.41918 10.5 7.26393V5.5C10.5 4.94772 10.9477 4.5 11.5 4.5C12.6046 4.5 13.5 5.39543 13.5 6.5V10.5" />
+            <path d="M11.5 10.5H17.4972C18.1637 10.5 18.6437 11.1397 18.4573 11.7796L16.7098 17.7796C16.5855 18.2065 16.1943 18.5 15.7497 18.5H11.9142C11.649 18.5 11.3946 18.3946 11.2071 18.2071L10.7929 17.7929C10.6054 17.6054 10.351 17.5 10.0858 17.5H8.5" />
+          </svg>
         {/if}
         {#if reactionCount > 0}
           <span class="action-count">{reactionCount}</span>
@@ -1005,7 +1020,21 @@
         onkeydown={(e) => handleActionKeydown(e, () => handleReply(new MouseEvent('click')))}
         aria-label="Reply ({replyCount})"
       >
-        <span class="material-symbols-outlined action-icon" class:filled={replyCount > 0}>chat_bubble</span>
+        <svg
+          class="action-icon"
+          class:filled={replyCount > 0}
+          viewBox="0 0 24 24"
+          width="1em"
+          height="1em"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M8 10.5H16M8 14.5H11M21.0039 12C21.0039 16.9706 16.9745 21 12.0039 21C9.9675 21 3.00463 21 3.00463 21C3.00463 21 4.56382 17.2561 3.93982 16.0008C3.34076 14.7956 3.00391 13.4372 3.00391 12C3.00391 7.02944 7.03334 3 12.0039 3C16.9745 3 21.0039 7.02944 21.0039 12Z" />
+        </svg>
         {#if replyCount > 0}
           <span class="action-count">{replyCount}</span>
         {/if}

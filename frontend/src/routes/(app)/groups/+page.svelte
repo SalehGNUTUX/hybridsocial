@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import type { Group } from '$lib/api/types.js';
   import { getGroups, searchGroups } from '$lib/api/groups.js';
-  import GroupCard from '$lib/components/group/GroupCard.svelte';
+  import EntityCard from '$lib/components/entity/EntityCard.svelte';
   import Tabs from '$lib/components/ui/Tabs.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
 
@@ -151,7 +151,16 @@
         {:else}
           <div class="group-grid">
             {#each filteredMy as group (group.id)}
-              <GroupCard {group} onclick={() => openGroup(group.id)} />
+              <EntityCard
+                name={group.name}
+                avatarUrl={group.avatar_url}
+                coverUrl={group.header_url}
+                description={group.description}
+                badge={group.visibility === 'private' ? 'Private' : 'Public'}
+                count={group.member_count}
+                countLabel={group.member_count === 1 ? 'member' : 'members'}
+                onclick={() => openGroup(group.id)}
+              />
             {/each}
           </div>
         {/if}
@@ -168,7 +177,16 @@
       {:else}
         <div class="group-grid">
           {#each discoverGroups as group (group.id)}
-            <GroupCard {group} onclick={() => openGroup(group.id)} />
+            <EntityCard
+              name={group.name}
+              avatarUrl={group.avatar_url}
+              coverUrl={group.header_url}
+              description={group.description}
+              badge={group.visibility === 'private' ? 'Private' : 'Public'}
+              count={group.member_count}
+              countLabel={group.member_count === 1 ? 'member' : 'members'}
+              onclick={() => openGroup(group.id)}
+            />
           {/each}
         </div>
       {/if}

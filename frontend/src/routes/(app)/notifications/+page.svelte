@@ -104,18 +104,16 @@
   // new arrivals; the server-side unread flag flips so the bell
   // doesn't re-light on refresh.
   async function clearOnEntry() {
-    // Optimistically flatten the unread count so the bell badge
-    // drops to 0 immediately — the server request below catches
-    // up asynchronously.
+    // Drop the bell badge to 0 immediately (server catches up below),
+    // but DON'T flip the visible rows to read — they stay highlighted
+    // (tinted row + unread dot) until the user clicks them, so new
+    // arrivals are still spottable this session. The server-side flag
+    // flips so the bell doesn't re-light on refresh.
     markAllLocal();
     try {
       await markAllNotificationsRead();
     } catch {
-      /* If the server call fails the local state is already set;
-         next page load will re-sync from the DB. */
-    } finally {
-      items = items.map((n) => ({ ...n, read: true }));
-      setNotifications(items);
+      /* Local badge state already cleared; next load re-syncs from DB. */
     }
   }
 
@@ -183,11 +181,14 @@
       </div>
     {:else if items.length === 0}
       <div class="notifications-empty">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" stroke-width="1.5" aria-hidden="true">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-        </svg>
-        <p class="empty-text">No notifications yet</p>
+        <div class="notifications-empty-icon" aria-hidden="true">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        </div>
+        <h2 class="notifications-empty-title">You're all caught up</h2>
+        <p class="empty-text">New reactions, replies, and follows will show up here.</p>
       </div>
     {:else}
       <div class="notifications-list">
@@ -255,13 +256,34 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-3);
+    text-align: center;
     padding: var(--space-16) var(--space-4);
   }
 
+  .notifications-empty-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-full);
+    display: grid;
+    place-items: center;
+    color: var(--color-primary);
+    background: var(--color-secondary-container);
+    box-shadow: 0 8px 24px rgba(0, 106, 105, 0.12);
+    margin-block-end: var(--space-5);
+  }
+
+  .notifications-empty-title {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--color-text);
+    margin-block-end: var(--space-2);
+  }
+
   .empty-text {
-    font-size: var(--text-base);
+    font-size: var(--text-sm);
     color: var(--color-text-tertiary);
+    max-width: 320px;
+    line-height: 1.55;
   }
 
   .notifications-skeleton {

@@ -4,6 +4,7 @@
   import { api } from '$lib/api/client.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Dropdown from '$lib/components/ui/Dropdown.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
   import VerifiedBadge from '$lib/components/ui/VerifiedBadge.svelte';
   import RoleBadge from '$lib/components/ui/RoleBadge.svelte';
   import AccountTypeIndicator from '$lib/components/ui/AccountTypeIndicator.svelte';
@@ -42,6 +43,40 @@
       month: 'long',
     })
   );
+
+  // Compact stat figures: 1234 -> "1.2K".
+  const nf = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+  function compact(n: number | null | undefined): string {
+    return nf.format(n ?? 0);
+  }
+
+  // Optional profile extras that the header previously ignored.
+  let location = $derived((account as { location?: string | null }).location?.trim() || '');
+  let fields = $derived(
+    ((account as { profile_fields?: { name: string; value: string }[] }).profile_fields ?? [])
+      .filter((f) => f.name?.trim() || f.value?.trim())
+      .slice(0, 4),
+  );
+  function isUrl(v: string): boolean {
+    return /^https?:\/\//i.test(v.trim());
+  }
+  function fieldHref(v: string): string {
+    return isUrl(v) ? v.trim() : `https://${v.trim()}`;
+  }
+  function fieldDisplay(v: string): string {
+    return v.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  }
+
+  // Deterministic accent hue derived from the account so the fallback
+  // cover (no uploaded header) varies per profile instead of everyone
+  // getting an identical flat panel — while still anchored to the brand
+  // teal in the gradient below.
+  let coverHue = $derived.by(() => {
+    const src = account.id || account.handle || '';
+    let h = 0;
+    for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) & 0xffff;
+    return h % 360;
+  });
 
   let isFollowing = $derived(relationship?.following ?? false);
   let isRequested = $derived(relationship?.requested ?? false);
@@ -136,8 +171,9 @@
         <img src={account.header_url} alt="" class="banner-img" />
       </button>
     {:else}
-      <img src="/images/default-cover.svg" alt="" class="banner-img" />
+      <div class="banner-gradient" style="--cover-h: {coverHue}" aria-hidden="true"></div>
     {/if}
+    <div class="banner-scrim" aria-hidden="true"></div>
   </div>
 
   <div class="profile-info-section">
@@ -233,13 +269,43 @@
     {/if}
 
     <div class="profile-meta">
+      {#if location}
+        <span class="profile-meta-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          {location}
+        </span>
+      {/if}
       <span class="profile-meta-item">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
         </svg>
         Joined {joinDate}
       </span>
     </div>
+
+    {#if fields.length > 0}
+      <dl class="profile-fields">
+        {#each fields as field (field.name + field.value)}
+          <div class="profile-field">
+            <dt class="profile-field-name">{field.name}</dt>
+            <dd class="profile-field-value">
+              {#if isUrl(field.value) || /\.\w{2,}/.test(field.value)}
+                <a href={fieldHref(field.value)} target="_blank" rel="noopener noreferrer ugc" class="profile-field-link">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
+                  {fieldDisplay(field.value)}
+                </a>
+              {:else}
+                {field.value}
+              {/if}
+            </dd>
+          </div>
+        {/each}
+      </dl>
+    {/if}
 
     <!-- Counts come back as `null` when the profile owner has opted
          out of showing them and the viewer isn't them. In that case
@@ -248,12 +314,18 @@
          for people who already know them. -->
     {#if account.following_count !== null && account.followers_count !== null}
       <div class="profile-stats">
-        <a href="/@{account.handle}/following" class="stat-link">
-          <strong>{account.following_count}</strong>
+        {#if account.post_count != null}
+          <div class="stat">
+            <span class="stat-num">{compact(account.post_count)}</span>
+            <span class="stat-label">Posts</span>
+          </div>
+        {/if}
+        <a href="/@{account.handle}/following" class="stat stat-link">
+          <span class="stat-num">{compact(account.following_count)}</span>
           <span class="stat-label">Following</span>
         </a>
-        <a href="/@{account.handle}/followers" class="stat-link">
-          <strong>{account.followers_count}</strong>
+        <a href="/@{account.handle}/followers" class="stat stat-link">
+          <span class="stat-num">{compact(account.followers_count)}</span>
           <span class="stat-label">Followers</span>
         </a>
       </div>
@@ -269,64 +341,82 @@
   />
 {/if}
 
-{#if showReportModal}
-  <div class="report-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label="Report user">
-    <div class="report-dialog" onclick={(e) => e.stopPropagation()}>
-      <h3 class="report-title">Report @{account.acct || account.handle}</h3>
-      <p class="report-subtitle">Why are you reporting this account?</p>
+<Modal bind:open={showReportModal} title={`Report @${account.acct || account.handle}`} onclose={cancelReport}>
+  <p class="report-subtitle">Why are you reporting this account?</p>
 
-      <div class="report-form">
-        <label class="report-label" for="profile-report-category">Category</label>
-        <select id="profile-report-category" class="report-select" bind:value={reportCategory}>
-          {#each reportCategories as cat (cat.value)}
-            <option value={cat.value}>{cat.label}</option>
-          {/each}
-        </select>
+  <div class="report-form">
+    <label class="report-label" for="profile-report-category">Category</label>
+    <select id="profile-report-category" class="report-select" bind:value={reportCategory}>
+      {#each reportCategories as cat (cat.value)}
+        <option value={cat.value}>{cat.label}</option>
+      {/each}
+    </select>
 
-        <label class="report-label" for="profile-report-description">Description (optional)</label>
-        <textarea
-          id="profile-report-description"
-          class="report-textarea"
-          bind:value={reportDescription}
-          placeholder="Provide additional details..."
-          rows="3"
-        ></textarea>
+    <label class="report-label" for="profile-report-description">Description (optional)</label>
+    <textarea
+      id="profile-report-description"
+      class="report-textarea"
+      bind:value={reportDescription}
+      placeholder="Provide additional details..."
+      rows="3"
+    ></textarea>
 
-        {#if reportError}
-          <p class="report-error">{reportError}</p>
-        {/if}
-      </div>
-
-      <div class="report-actions">
-        <button type="button" class="report-cancel" onclick={cancelReport}>Cancel</button>
-        <button type="button" class="report-submit" onclick={submitReport} disabled={reportSubmitting}>
-          {reportSubmitting ? 'Submitting...' : 'Submit report'}
-        </button>
-      </div>
-    </div>
+    {#if reportError}
+      <p class="report-error">{reportError}</p>
+    {/if}
   </div>
-{/if}
+
+  <div class="report-actions">
+    <button type="button" class="report-cancel" onclick={cancelReport}>Cancel</button>
+    <button type="button" class="report-submit" onclick={submitReport} disabled={reportSubmitting}>
+      {reportSubmitting ? 'Submitting...' : 'Submit report'}
+    </button>
+  </div>
+</Modal>
 
 <style>
   .profile-header {
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-md);
     /* No overflow clipping on the card so the moderation popover can
        escape downward. The banner clips itself. */
   }
 
   .profile-banner {
-    height: 180px;
+    position: relative;
+    height: 210px;
     overflow: hidden;
-    border-top-left-radius: var(--radius-xl);
-    border-top-right-radius: var(--radius-xl);
+    border-top-left-radius: var(--radius-2xl);
+    border-top-right-radius: var(--radius-2xl);
   }
 
   .banner-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  /* Per-profile mesh cover for accounts without an uploaded header.
+     Anchored to the brand teal with a deterministic accent hue so
+     every profile still feels on-brand but not identical. */
+  .banner-gradient {
+    width: 100%;
+    height: 100%;
+    background:
+      radial-gradient(120% 140% at 18% 12%, hsl(var(--cover-h) 68% 55% / 0.85) 0%, transparent 45%),
+      radial-gradient(120% 130% at 88% 8%, #0ea5a4 0%, transparent 52%),
+      linear-gradient(135deg, #006a69 0%, hsl(var(--cover-h) 52% 34%) 100%);
+  }
+
+  /* Soft bottom scrim so the card edge and avatar read against busy
+     header photos. */
+  .banner-scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent 55%, rgba(15, 23, 23, 0.28) 100%);
   }
 
   /* Buttonized banner / avatar — reset native button chrome so the
@@ -356,16 +446,6 @@
     outline-offset: 2px;
   }
 
-  .banner-gradient {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-      var(--gradient-direction),
-      var(--gradient-start),
-      var(--gradient-end)
-    );
-  }
-
   .profile-info-section {
     padding: 0 var(--space-6) var(--space-6);
   }
@@ -374,38 +454,55 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    margin-block-start: -40px;
+    margin-block-start: -52px;
   }
 
+  /* Ring + drop shadow lift the avatar off the banner. The inner white
+     border matches the card so the avatar reads as punched through. */
   .profile-avatar-wrapper {
     border: 4px solid var(--color-surface-raised);
     border-radius: var(--radius-full);
     background: var(--color-surface-raised);
+    box-shadow: 0 6px 20px rgba(15, 23, 23, 0.18);
+    transition: transform var(--transition-fast);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .avatar-button:hover {
+      transform: scale(1.03);
+    }
   }
 
   .profile-actions {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding-block-start: var(--space-10);
+    padding-block-start: var(--space-12);
   }
 
   .action-icon-btn {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-full);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .action-icon-btn:hover {
+    background: var(--color-surface-container-low);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
   }
 
   .profile-identity {
-    margin-block-start: var(--space-3);
+    margin-block-start: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 2px;
   }
 
   .profile-display-name {
@@ -413,10 +510,12 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    font-size: var(--text-xl);
-    font-weight: 700;
+    font-family: var(--font-headline, inherit);
+    font-size: var(--text-2xl);
+    font-weight: 800;
+    letter-spacing: -0.01em;
     color: var(--color-text);
-    line-height: 1.3;
+    line-height: 1.2;
   }
 
   /* Group badges into a flex track so the gap is consistent and they
@@ -436,11 +535,13 @@
   .follows-you-badge {
     display: inline-block;
     align-self: flex-start;
+    margin-block-start: var(--space-1);
     font-size: var(--text-xs);
-    color: var(--color-text-secondary);
-    background: var(--color-surface);
-    padding: 2px var(--space-2);
-    border-radius: var(--radius-sm);
+    font-weight: 600;
+    color: var(--color-primary);
+    background: var(--color-secondary-container);
+    padding: 3px var(--space-2);
+    border-radius: var(--radius-full);
   }
 
   .profile-bio {
@@ -467,59 +568,98 @@
     color: var(--color-text-secondary);
   }
 
-  .profile-stats {
-    display: flex;
-    gap: var(--space-5);
-    margin-block-start: var(--space-3);
+  /* Profile fields — verified links / custom key-value rows. */
+  .profile-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--space-2);
+    margin: var(--space-4) 0 0;
   }
 
-  .stat-link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
+  .profile-field {
+    background: var(--color-surface-container-low);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2) var(--space-3);
+    min-width: 0;
+  }
+
+  .profile-field-name {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+  }
+
+  .profile-field-value {
+    margin: 2px 0 0;
     font-size: var(--text-sm);
     color: var(--color-text);
-    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .stat-link:hover {
+  .profile-field-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    color: var(--color-primary);
+    font-weight: 600;
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .profile-field-link:hover {
     text-decoration: underline;
   }
 
-  .stat-link strong {
-    font-weight: 700;
+  .profile-field-link svg {
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  /* Stats bar — bigger figures, hover pill, tabular numerals so the
+     numbers don't jitter. */
+  .profile-stats {
+    display: flex;
+    gap: var(--space-2);
+    margin-block-start: var(--space-4);
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    transition: background var(--transition-fast);
+  }
+
+  .stat-link:hover,
+  .stat-link:focus-visible {
+    background: var(--color-surface-container-low);
+    text-decoration: none;
+    outline: none;
+  }
+
+  .stat-num {
+    font-size: var(--text-lg);
+    font-weight: 800;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
   }
 
   .stat-label {
+    font-size: var(--text-xs);
     color: var(--color-text-secondary);
   }
 
-  /* Report modal */
-  .report-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--color-overlay, rgba(0,0,0,0.5));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-modal, 40);
-  }
-
-  .report-dialog {
-    background: var(--color-surface-raised, #fff);
-    border-radius: var(--radius-lg, 0.75rem);
-    padding: var(--space-6, 1.5rem);
-    max-width: 400px;
-    width: 90%;
-    box-shadow: var(--shadow-xl, 0 10px 15px rgba(0,0,0,0.1));
-  }
-
-  .report-title {
-    font-size: var(--text-lg, 1.125rem);
-    font-weight: 600;
-    margin-block-end: var(--space-1, 0.25rem);
-  }
-
+  /* Report modal (rendered inside the shared Modal) */
   .report-subtitle {
     font-size: var(--text-sm, 0.875rem);
     color: var(--color-text-secondary, #64748b);
@@ -602,11 +742,23 @@
 
   @media (max-width: 480px) {
     .profile-banner {
-      height: 120px;
+      height: 150px;
     }
 
     .profile-info-section {
       padding: 0 var(--space-4) var(--space-4);
+    }
+
+    .profile-avatar-row {
+      margin-block-start: -44px;
+    }
+
+    .profile-display-name {
+      font-size: var(--text-xl);
+    }
+
+    .profile-fields {
+      grid-template-columns: 1fr;
     }
   }
 </style>

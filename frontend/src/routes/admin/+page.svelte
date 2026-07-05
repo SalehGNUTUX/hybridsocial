@@ -4,12 +4,10 @@
   import ServicePanel from '$lib/components/admin/ServicePanel.svelte';
   import { addToast } from '$lib/stores/toast.js';
   import { api } from '$lib/api/client.js';
-  import { getDashboardStats, getVerifications, approveVerification, rejectVerification } from '$lib/api/admin.js';
+  import { getDashboardStats } from '$lib/api/admin.js';
   import type { AdminDashboardStats } from '$lib/api/types.js';
-  import type { VerificationRequest } from '$lib/api/admin.js';
 
   let stats: AdminDashboardStats | null = $state(null);
-  let pendingVerifications: VerificationRequest[] = $state([]);
   let pendingApprovalsCount = $state(0);
   let pendingAppealsCount = $state(0);
   let loading = $state(true);
@@ -89,9 +87,8 @@
 
   onMount(async () => {
     try {
-      const [s, v, pa, ap] = await Promise.all([
+      const [s, pa, ap] = await Promise.all([
         getDashboardStats(),
-        getVerifications({ status: 'pending', limit: '10' }).catch(() => []),
         // Account-registration approvals are surfaced as a stats card
         // and link to /admin/user-management/approvals. We only need
         // the count, but the endpoint returns the full pending list —
@@ -107,7 +104,6 @@
           .catch(() => 0),
       ]);
       stats = s;
-      pendingVerifications = v;
       pendingApprovalsCount = pa;
       pendingAppealsCount = ap;
     } catch (e) {
@@ -126,36 +122,6 @@
   onDestroy(() => {
     if (metricsTimer) clearInterval(metricsTimer);
   });
-
-  async function handleApproveVerification(id: string) {
-    try {
-      await approveVerification(id);
-      pendingVerifications = pendingVerifications.filter(v => v.id !== id);
-      addToast('Verification approved', 'success');
-    } catch {
-      addToast('Failed to approve verification', 'error');
-    }
-  }
-
-  async function handleRejectVerification(id: string) {
-    try {
-      await rejectVerification(id);
-      pendingVerifications = pendingVerifications.filter(v => v.id !== id);
-      addToast('Verification rejected', 'success');
-    } catch {
-      addToast('Failed to reject verification', 'error');
-    }
-  }
-
-  function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-
 </script>
 
 <svelte:head>
@@ -214,6 +180,14 @@
         href="/admin/user-management/appeals"
         alert={pendingAppealsCount > 0}
         alertLabel={`${pendingAppealsCount} pending appeals — needs attention`}
+      />
+      <StatsCard
+        label="Verifications"
+        value={(stats.pending_verifications ?? 0).toLocaleString()}
+        icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+        href="/admin/moderation?tab=verifications"
+        alert={(stats.pending_verifications ?? 0) > 0}
+        alertLabel={`${stats.pending_verifications ?? 0} pending verification requests — needs attention`}
       />
     {/if}
   </div>
@@ -277,45 +251,6 @@
     </div>
   </section>
 
-  <!-- Pending Verification Requests -->
-  {#if pendingVerifications.length > 0}
-    <section class="panel card verification-panel">
-      <h2 class="panel-title">Pending Verification Requests</h2>
-      <div class="verification-list">
-        {#each pendingVerifications as req (req.id)}
-          <div class="verification-item">
-            <div class="verification-user">
-              <div class="verification-avatar">
-                {#if req.account?.avatar_url}
-                  <img src={req.account.avatar_url} alt="" class="verification-img" />
-                {:else}
-                  <span class="verification-initial">{(req.account?.display_name || req.account?.handle || '?').charAt(0).toUpperCase()}</span>
-                {/if}
-              </div>
-              <div class="verification-info">
-                <span class="verification-name">{req.account?.display_name || req.account?.handle}</span>
-                <span class="verification-handle">@{req.account?.handle}</span>
-              </div>
-            </div>
-            <div class="verification-details">
-              <span class="verification-type">{req.type}</span>
-              {#if req.metadata?.reason}
-                <p class="verification-reason">{req.metadata.reason}</p>
-              {/if}
-              {#if req.metadata?.domain}
-                <p class="verification-reason">Domain: {req.metadata.domain}</p>
-              {/if}
-              <span class="verification-date">{formatDate(req.created_at)}</span>
-            </div>
-            <div class="verification-actions">
-              <button class="btn btn-sm btn-primary" onclick={() => handleApproveVerification(req.id)}>Approve</button>
-              <button class="btn btn-sm btn-outline" onclick={() => handleRejectVerification(req.id)}>Reject</button>
-            </div>
-          </div>
-        {/each}
-      </div>
-    </section>
-  {/if}
 </div>
 
 <style>
@@ -334,12 +269,6 @@
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--space-4);
     margin-block-end: var(--space-6);
-  }
-
-  .panel-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    margin-block-end: var(--space-4);
   }
 
   /* Quick actions section: cards in the same visual family as
@@ -377,125 +306,6 @@
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--color-text);
-  }
-
-  /* Verification requests */
-  .verification-panel {
-    margin-block-start: var(--space-4);
-  }
-
-  .verification-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .verification-item {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    padding: var(--space-3);
-    background: var(--color-surface);
-    border-radius: var(--radius-lg);
-  }
-
-  .verification-user {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-shrink: 0;
-  }
-
-  .verification-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-full);
-    background: var(--color-primary-soft);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-
-  .verification-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .verification-initial {
-    font-weight: 600;
-    font-size: var(--text-sm);
-    color: var(--color-primary);
-  }
-
-  .verification-info {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .verification-name {
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-text);
-  }
-
-  .verification-handle {
-    font-size: var(--text-xs);
-    color: var(--color-text-secondary);
-  }
-
-  .verification-details {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .verification-type {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--color-primary);
-    background: var(--color-primary-soft);
-    padding: 1px 6px;
-    border-radius: var(--radius-full);
-  }
-
-  .verification-reason {
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
-    margin-block-start: var(--space-1);
-    line-height: 1.4;
-  }
-
-  .verification-date {
-    font-size: var(--text-xs);
-    color: var(--color-text-tertiary);
-  }
-
-  .verification-actions {
-    display: flex;
-    gap: var(--space-2);
-    flex-shrink: 0;
-  }
-
-  .btn-sm {
-    padding: var(--space-1) var(--space-3);
-    font-size: var(--text-xs);
-    border-radius: var(--radius-md);
-  }
-
-  .btn-primary {
-    background: var(--color-primary);
-    color: var(--color-text-on-primary);
-    border: none;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .btn-primary:hover {
-    background: var(--color-primary-hover);
   }
 
   /* Services */

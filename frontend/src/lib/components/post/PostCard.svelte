@@ -1227,12 +1227,20 @@
 <style>
   .post-card {
     background: var(--color-surface-container-lowest);
-    border: var(--ghost-border);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-xl);
     padding: 24px;
     cursor: pointer;
-    box-shadow: 0 2px 10px rgba(25, 28, 29, 0.14);
-    transition: background-color 300ms ease, box-shadow 300ms ease;
+    /* Layered ambient elevation — a crisp contact shadow plus a soft
+       wide ambient. Reads premium on the mint wash instead of the old
+       single harsh drop shadow. */
+    box-shadow:
+      0 1px 2px rgba(25, 28, 29, 0.04),
+      0 6px 20px rgba(25, 28, 29, 0.05);
+    transition:
+      box-shadow 220ms ease,
+      transform 220ms ease,
+      border-color 220ms ease;
     user-select: text;
   }
 
@@ -1308,8 +1316,30 @@
     font-style: italic;
   }
 
+  /* Feed cards lift with a brand-tinted glow on hover so the whole
+     timeline feels alive and each card reads as clickable. Background
+     stays white (no graying). Detail view + tombstones opt out. */
   .post-card:hover {
-    background: var(--color-surface);
+    transform: translateY(-2px);
+    box-shadow:
+      0 2px 4px rgba(25, 28, 29, 0.05),
+      0 16px 36px rgba(0, 106, 105, 0.11);
+    border-color: rgba(0, 106, 105, 0.18);
+  }
+
+  .post-card.detail:hover,
+  .post-tombstone:hover {
+    transform: none;
+    box-shadow:
+      0 1px 2px rgba(25, 28, 29, 0.04),
+      0 6px 20px rgba(25, 28, 29, 0.05);
+    border-color: var(--color-border);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .post-card:hover {
+      transform: none;
+    }
   }
 
   .post-card:focus-visible {
@@ -2391,12 +2421,17 @@
      border + padding so the player's own rounded glassmorphism
      frame is what the user sees, and force width:100% so the
      flex/grid parent doesn't shrink it to intrinsic size. */
-  .media-audio {
+  /* `.media-item.media-audio` (0-2-0) so it beats `.media-grid-1
+     .media-item` (also 0-2-0, but earlier in source) — otherwise the
+     4/3 image aspect-ratio wins and leaves a tall empty gap under the
+     player. Audio sizes to its own content. */
+  .media-item.media-audio {
     padding: 0;
     display: block;
     width: 100%;
     background: transparent;
     aspect-ratio: auto;
+    max-height: none;
   }
 
   /* Poll */

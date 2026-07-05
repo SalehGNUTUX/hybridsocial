@@ -54,6 +54,17 @@ export function follow(id: string): Promise<Relationship> {
   return api.post(`/api/v1/accounts/${id}/follow`);
 }
 
+/** "Who to follow" suggestions for the current viewer. Server excludes
+ *  accounts the viewer already follows. */
+export function getSuggestions(): Promise<Identity[]> {
+  return api.get('/api/v1/suggestions');
+}
+
+/** Stop following a hashtag by name (case-insensitive on the server). */
+export function unfollowTag(name: string): Promise<{ name: string; following: boolean }> {
+  return api.delete(`/api/v1/followed_tags/${encodeURIComponent(name)}`);
+}
+
 export function unfollow(id: string): Promise<Relationship> {
   return api.post(`/api/v1/accounts/${id}/unfollow`);
 }

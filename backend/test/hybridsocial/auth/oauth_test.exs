@@ -4,17 +4,8 @@ defmodule Hybridsocial.Auth.OAuthTest do
   alias Hybridsocial.Auth.OAuth
   alias Hybridsocial.Accounts
 
-  @user_attrs %{
-    "handle" => "oauthuser",
-    "display_name" => "OAuth User",
-    "email" => "oauth@example.com",
-    "password" => "password1234567890",
-    "password_confirmation" => "password1234567890"
-  }
-
   defp create_user do
-    {:ok, identity} = Accounts.register_user(@user_attrs)
-    identity
+    create_user("oauthuser", "oauth@example.com")
   end
 
   defp create_app(identity_id) do

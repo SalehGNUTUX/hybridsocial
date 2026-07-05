@@ -315,6 +315,7 @@ export interface VerificationRequest {
   type: string;
   status: string;
   metadata: Record<string, unknown>;
+  rejection_reason: string | null;
   verified_at: string | null;
   created_at: string;
   account: {
@@ -333,8 +334,10 @@ export function approveVerification(id: string): Promise<VerificationRequest> {
   return api.post<{ data: VerificationRequest }>(`/api/v1/admin/verifications/${id}/approve`).then((r) => r.data);
 }
 
-export function rejectVerification(id: string): Promise<VerificationRequest> {
-  return api.post<{ data: VerificationRequest }>(`/api/v1/admin/verifications/${id}/reject`).then((r) => r.data);
+export function rejectVerification(id: string, reason?: string): Promise<VerificationRequest> {
+  return api
+    .post<{ data: VerificationRequest }>(`/api/v1/admin/verifications/${id}/reject`, reason ? { reason } : {})
+    .then((r) => r.data);
 }
 
 // Site Pages (legal / about)

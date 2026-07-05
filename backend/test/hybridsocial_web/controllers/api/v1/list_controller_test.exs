@@ -1,31 +1,6 @@
 defmodule HybridsocialWeb.Api.V1.ListControllerTest do
   use HybridsocialWeb.ConnCase, async: false
 
-  alias Hybridsocial.Auth.Token
-
-  # ---------------------------------------------------------------------------
-  # Helpers
-  # ---------------------------------------------------------------------------
-
-  defp create_user(handle, email) do
-    {:ok, identity} =
-      Hybridsocial.Accounts.register_user(%{
-        "handle" => handle,
-        "email" => email,
-        "password" => "Password123456!!",
-        "password_confirmation" => "Password123456!!"
-      })
-
-    identity
-  end
-
-  defp authenticate(conn, identity) do
-    {:ok, access_token, _claims} = Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{access_token}")
-  end
-
   # ---------------------------------------------------------------------------
   # List CRUD
   # ---------------------------------------------------------------------------
@@ -41,7 +16,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/lists")
 
       assert json_response(conn, 200) == []
@@ -53,7 +28,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/lists")
 
       response = json_response(conn, 200)
@@ -68,7 +43,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> post("/api/v1/lists", %{"name" => "New List"})
 
       response = json_response(conn, 201)
@@ -81,7 +56,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> post("/api/v1/lists", %{})
 
       assert json_response(conn, 422)
@@ -95,7 +70,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/lists/#{list.id}")
 
       response = json_response(conn, 200)
@@ -107,7 +82,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/lists/#{Ecto.UUID.generate()}")
 
       assert json_response(conn, 404)
@@ -121,7 +96,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> patch("/api/v1/lists/#{list.id}", %{"name" => "New Name"})
 
       response = json_response(conn, 200)
@@ -135,7 +110,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(bob)
+        |> auth_conn(bob)
         |> patch("/api/v1/lists/#{list.id}", %{"name" => "Hacked"})
 
       assert json_response(conn, 404)
@@ -149,7 +124,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> delete("/api/v1/lists/#{list.id}")
 
       assert response(conn, 204)
@@ -162,7 +137,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(bob)
+        |> auth_conn(bob)
         |> delete("/api/v1/lists/#{list.id}")
 
       assert json_response(conn, 404)
@@ -182,10 +157,10 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> get("/api/v1/lists/#{list.id}/accounts")
 
-      response = json_response(conn, 200)
+      response = json_response(conn, 200)["data"]
       assert length(response) == 1
       assert hd(response)["id"] == bob.id
     end
@@ -199,7 +174,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> post("/api/v1/lists/#{list.id}/accounts", %{"account_ids" => [bob.id]})
 
       assert response(conn, 204)
@@ -216,7 +191,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(bob)
+        |> auth_conn(bob)
         |> post("/api/v1/lists/#{list.id}/accounts", %{"account_ids" => [carol.id]})
 
       assert json_response(conn, 404)
@@ -232,7 +207,7 @@ defmodule HybridsocialWeb.Api.V1.ListControllerTest do
 
       conn =
         conn
-        |> authenticate(alice)
+        |> auth_conn(alice)
         |> delete("/api/v1/lists/#{list.id}/accounts", %{"account_ids" => [bob.id]})
 
       assert response(conn, 204)
