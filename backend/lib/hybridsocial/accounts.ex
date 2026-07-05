@@ -855,8 +855,16 @@ defmodule Hybridsocial.Accounts do
         {:error, :invalid_token}
 
       user ->
-        # Check expiry (1 hour)
-        if DateTime.diff(DateTime.utc_now(), user.reset_token_at) > 3600 do
+        # Token lifetime is configurable (`password_reset_ttl_seconds`,
+        # default 1 hour) so an onboarding/migration batch can issue
+        # longer-lived links without weakening day-to-day resets.
+        ttl =
+          case Hybridsocial.Config.get("password_reset_ttl_seconds", 3600) do
+            n when is_integer(n) and n > 0 -> n
+            _ -> 3600
+          end
+
+        if DateTime.diff(DateTime.utc_now(), user.reset_token_at) > ttl do
           {:error, :token_expired}
         else
           result =
