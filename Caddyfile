@@ -44,36 +44,6 @@
 	}
 }
 
-# ---------- Media domain (no WAF) ----------
-# Only mounted when MEDIA_DOMAIN is set; defaults to an unreachable
-# placeholder so Caddy doesn't bind a wildcard site block.
-{$MEDIA_DOMAIN:media.invalid} {
-	header {
-		X-Content-Type-Options nosniff
-		Content-Security-Policy "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'none'; script-src 'none'"
-		X-Frame-Options DENY
-		-Server
-		-Set-Cookie
-	}
-
-	handle /uploads/* {
-		reverse_proxy backend:4000
-	}
-
-	handle {
-		respond "Not Found" 404
-	}
-
-	encode gzip zstd
-
-	log {
-		output file /var/log/caddy/media-access.log {
-			roll_size 100mb
-			roll_keep 5
-		}
-		format json
-	}
-}
 
 # ---------- Main domain ----------
 {$DOMAIN:localhost} {

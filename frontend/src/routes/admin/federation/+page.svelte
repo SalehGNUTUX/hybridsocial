@@ -328,10 +328,10 @@
     }
   }
 
-  async function handleDeletePolicy(id: string) {
+  async function handleDeletePolicy(domain: string) {
     try {
-      await deleteFederationPolicy(id);
-      policies = policies.filter((p) => p.id !== id);
+      await deleteFederationPolicy(domain);
+      policies = policies.filter((p) => p.domain !== domain);
       addToast('Policy removed', 'success');
     } catch {
       addToast('Failed to remove policy', 'error');
@@ -475,7 +475,7 @@
       </div>
 
       <div class="list-items">
-        {#each policies as policy (policy.id)}
+        {#each policies as policy (policy.domain)}
           <div class="list-item card">
             <div class="list-item-info">
               <strong>{policy.domain}</strong>
@@ -495,7 +495,7 @@
               <button
                 class="btn btn-sm btn-danger"
                 type="button"
-                onclick={() => handleDeletePolicy(policy.id)}
+                onclick={() => handleDeletePolicy(policy.domain)}
               >Remove</button>
             </div>
           </div>
