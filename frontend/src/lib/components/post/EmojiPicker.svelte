@@ -324,6 +324,7 @@
     gap: 6px;
     padding: 8px 10px;
     border-block-end: 1px solid var(--color-border);
+    flex-shrink: 0;
   }
 
   .emoji-search-icon {
@@ -354,6 +355,9 @@
     padding: var(--space-1);
     gap: var(--space-1);
     scrollbar-width: none;
+    /* Keep the tab row at full height; only the grid should flex/scroll,
+       otherwise the category icons get squeezed and clipped. */
+    flex-shrink: 0;
   }
 
   .emoji-tabs::-webkit-scrollbar {
