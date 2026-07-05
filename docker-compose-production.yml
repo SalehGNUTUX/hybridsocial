@@ -122,6 +122,12 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: "ecto://${DB_USER:-hybridsocial}:${DB_PASSWORD:?}@postgresql/${DB_NAME:-hybridsocial_prod}"
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?Run 'sh docker/generate-secrets.sh .env' first}
+      # At-rest encryption master keys. Without these the app crashes on
+      # the first DM (message crypto) and the first write that encrypts a
+      # private key / 2FA secret / email. Generate with `openssl rand -base64 32`.
+      # LOSING EITHER MAKES THE CORRESPONDING DATA UNRECOVERABLE — back them up.
+      MESSAGE_ENCRYPTION_KEY: ${MESSAGE_ENCRYPTION_KEY:?Set MESSAGE_ENCRYPTION_KEY in .env}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?Set DATA_ENCRYPTION_KEY in .env}
       PHX_HOST: ${DOMAIN:?Set DOMAIN in .env}
       VALKEY_URL: "redis://:${VALKEY_PASSWORD:-}@valkey:6379"
       NATS_URL: "nats://nats:4222"

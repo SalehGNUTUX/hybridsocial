@@ -37,6 +37,27 @@ else
   echo "[secrets] CROWDSEC_BOUNCER_CADDY_KEY generated and saved to $ENV_FILE"
 fi
 
+# ---- At-rest encryption keys ----
+# MESSAGE_ENCRYPTION_KEY encrypts DM content; DATA_ENCRYPTION_KEY encrypts
+# actor private keys, 2FA secrets, and emails. Losing either makes the
+# corresponding data unrecoverable, so once set they are never regenerated.
+for var in MESSAGE_ENCRYPTION_KEY DATA_ENCRYPTION_KEY; do
+  if grep -q "^${var}=." "$ENV_FILE" 2>/dev/null; then
+    echo "[secrets] ${var} already set in $ENV_FILE, skipping."
+  else
+    echo "[secrets] Generating ${var}..."
+    VALUE=$(openssl rand -base64 32 | tr -d '\n')
+    if grep -q "^${var}=" "$ENV_FILE" 2>/dev/null; then
+      sed -i "s|^${var}=.*|${var}=$VALUE|" "$ENV_FILE"
+    else
+      echo "" >> "$ENV_FILE"
+      echo "# At-rest encryption key (auto-generated, do NOT delete or rotate casually)" >> "$ENV_FILE"
+      echo "${var}=$VALUE" >> "$ENV_FILE"
+    fi
+    echo "[secrets] ${var} generated and saved to $ENV_FILE"
+  fi
+done
+
 # ---- Instance actor keys ----
 if grep -q "^INSTANCE_PUBLIC_KEY=." "$ENV_FILE" 2>/dev/null; then
   echo "[keys] Instance keys already exist in $ENV_FILE, skipping generation."
