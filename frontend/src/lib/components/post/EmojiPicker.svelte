@@ -20,6 +20,45 @@
   let activeTab = $state<string>(EMOJI_GROUPS[0].id);
   let query = $state('');
 
+  // The picker renders inside the composer's scrollable modal body, which
+  // clips overflow — a tall picker opening upward gets cropped at the modal
+  // edge. Render it position:fixed (escapes ancestor overflow, since the
+  // modal has no transform) and anchor it to the trigger button via JS,
+  // flipping below when there isn't room above.
+  let pickerEl: HTMLDivElement | undefined = $state();
+  let posStyle = $state('');
+
+  function reposition() {
+    const el = pickerEl;
+    if (!el) return;
+    const anchor = (el.parentElement?.querySelector('button') ?? el.parentElement) as HTMLElement | null;
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth || 340;
+    const h = el.offsetHeight || 380;
+    const gap = 8;
+    const margin = 8;
+    const left = Math.max(margin, Math.min(r.left, window.innerWidth - w - margin));
+    const spaceAbove = r.top - margin;
+    const top =
+      spaceAbove >= h || spaceAbove >= window.innerHeight - r.bottom
+        ? Math.max(margin, r.top - h - gap)
+        : Math.min(r.bottom + gap, window.innerHeight - h - margin);
+    posStyle = `left:${Math.round(left)}px;top:${Math.round(top)}px;`;
+  }
+
+  onMount(() => {
+    reposition();
+    requestAnimationFrame(reposition);
+    const onWin = () => reposition();
+    window.addEventListener('resize', onWin);
+    window.addEventListener('scroll', onWin, true);
+    return () => {
+      window.removeEventListener('resize', onWin);
+      window.removeEventListener('scroll', onWin, true);
+    };
+  });
+
   // Custom emojis are folded in as one or more extra tabs grouped by
   // their `category` (Uncategorized when unset). Available to every
   // user — server returns the full catalog regardless of tier.
@@ -110,7 +149,7 @@
   }
 </script>
 
-<div class="emoji-picker" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Emoji picker">
+<div bind:this={pickerEl} class="emoji-picker" style={posStyle} onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Emoji picker">
   <div class="emoji-search">
     <span class="material-symbols-outlined emoji-search-icon" aria-hidden="true">search</span>
     <input
@@ -223,10 +262,9 @@
 
 <style>
   .emoji-picker {
-    position: absolute;
-    inset-block-end: 100%;
-    inset-inline-start: 0;
-    margin-block-end: var(--space-2);
+    /* position:fixed + JS-computed left/top (see reposition()) so the modal's
+       overflow can't crop it; left/top come in via the inline style. */
+    position: fixed;
     width: min(340px, calc(100vw - 32px));
     /* Clamp height to viewport so a tall picker can't pop off the top
        of the screen — symptom from the field report was the search
