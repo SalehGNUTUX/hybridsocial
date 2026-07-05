@@ -134,7 +134,8 @@ services:
       OPENSEARCH_URL: "http://opensearch:9200"
       POOL_SIZE: ${POOL_SIZE:-10}
       UPLOADS_DIR: /app/uploads
-      # Email (optional)
+      # Email — Resend API (preferred) is checked first, then SMTP.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

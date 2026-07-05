@@ -54,6 +54,11 @@ config :ex_aws,
 # Swoosh mailer configuration
 config :hybridsocial, Hybridsocial.Mailer, adapter: Swoosh.Adapters.Local
 
+# HTTP client for API-based mail adapters (Resend). Without this Swoosh
+# defaults to Finch (not a dependency) and API delivery fails; hackney is
+# already pulled in, so use it. Ignored by the Local/Test adapters.
+config :swoosh, :api_client, Swoosh.ApiClient.Hackney
+
 # Valkey (Redis-compatible) cache
 config :hybridsocial, :valkey_url, "redis://localhost:6379"
 
