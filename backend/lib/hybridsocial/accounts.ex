@@ -1186,9 +1186,7 @@ defmodule Hybridsocial.Accounts do
 
       user ->
         user
-        |> Ecto.Changeset.change(email: new_email)
-        |> Ecto.Changeset.validate_format(:email, ~r/@/)
-        |> Ecto.Changeset.unique_constraint(:email)
+        |> User.email_changeset(new_email)
         |> Repo.update()
     end
   end
@@ -1199,9 +1197,7 @@ defmodule Hybridsocial.Accounts do
     with user when not is_nil(user) <- Repo.get_by(User, identity_id: identity_id),
          true <- Bcrypt.verify_pass(password, user.password_hash) do
       user
-      |> Ecto.Changeset.change(email: new_email)
-      |> Ecto.Changeset.validate_format(:email, ~r/@/)
-      |> Ecto.Changeset.unique_constraint(:email)
+      |> User.email_changeset(new_email)
       |> Repo.update()
     else
       nil -> {:error, :not_found}

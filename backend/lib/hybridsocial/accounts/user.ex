@@ -60,6 +60,19 @@ defmodule Hybridsocial.Accounts.User do
     |> put_password_hash()
   end
 
+  @doc """
+  Changeset for changing an existing user's email. Runs the full `validate_email`
+  pipeline so the new address is encrypted AND `email_hash` (the blind index that
+  login and uniqueness rely on) is recomputed. A bare `change(email: ...)` leaves
+  `email_hash` pointing at the old address, which silently breaks login.
+  """
+  def email_changeset(user, new_email) do
+    user
+    |> cast(%{email: new_email}, [:email])
+    |> validate_required([:email])
+    |> validate_email()
+  end
+
   def confirm_changeset(user) do
     user
     |> change(confirmed_at: DateTime.utc_now(), confirmation_token: nil)
