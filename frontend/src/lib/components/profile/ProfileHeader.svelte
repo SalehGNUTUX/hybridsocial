@@ -454,10 +454,10 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    /* Avatar wrapper is 104px + 8px ring = 112px. Overlap the banner by
-       ~40% (rest sits in the card) so it reads as seated in its ring,
-       not straddling/popping out of the seam. */
-    margin-block-start: -44px;
+    /* Avatar wrapper is 104px + 8px ring = 112px. Pull it up by half its
+       height so it straddles the banner seam ~50/50 (the conventional
+       profile placement) instead of sinking low into the card. */
+    margin-block-start: -56px;
   }
 
   /* Ring + drop shadow lift the avatar off the banner. The inner white
@@ -753,7 +753,7 @@
     }
 
     .profile-avatar-row {
-      margin-block-start: -40px;
+      margin-block-start: -56px;
     }
 
     .profile-display-name {
