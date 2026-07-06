@@ -14,8 +14,7 @@ defmodule Hybridsocial.Accounts.BotWebhookDelivery do
   @valid_statuses ~w(pending delivered failed)
 
   schema "bot_webhook_deliveries" do
-    belongs_to :bot_identity, Hybridsocial.Accounts.Identity,
-      foreign_key: :bot_identity_id
+    belongs_to :bot_identity, Hybridsocial.Accounts.Identity, foreign_key: :bot_identity_id
 
     field :webhook_url, :string
     field :event, :string

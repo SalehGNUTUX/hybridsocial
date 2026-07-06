@@ -415,7 +415,9 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
       case Hybridsocial.Premium.approve_verification(id, admin_id) do
         {:ok, verification} ->
-          json(conn, %{data: serialize_verification(Hybridsocial.Repo.preload(verification, :identity))})
+          json(conn, %{
+            data: serialize_verification(Hybridsocial.Repo.preload(verification, :identity))
+          })
 
         {:error, :not_found} ->
           conn |> put_status(:not_found) |> json(%{error: "verification.not_found"})
@@ -432,7 +434,9 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
       case Hybridsocial.Premium.reject_verification(id, admin_id, reason) do
         {:ok, verification} ->
-          json(conn, %{data: serialize_verification(Hybridsocial.Repo.preload(verification, :identity))})
+          json(conn, %{
+            data: serialize_verification(Hybridsocial.Repo.preload(verification, :identity))
+          })
 
         {:error, :not_found} ->
           conn |> put_status(:not_found) |> json(%{error: "verification.not_found"})

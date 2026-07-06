@@ -55,7 +55,9 @@ defmodule Hybridsocial.CryptoTest do
     end
 
     test "differs by value and by context" do
-      refute Crypto.blind_index("a@x.com", "user.email") == Crypto.blind_index("b@x.com", "user.email")
+      refute Crypto.blind_index("a@x.com", "user.email") ==
+               Crypto.blind_index("b@x.com", "user.email")
+
       refute Crypto.blind_index("a@x.com", "user.email") == Crypto.blind_index("a@x.com", "other")
     end
 

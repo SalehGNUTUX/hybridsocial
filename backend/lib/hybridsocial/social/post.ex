@@ -188,7 +188,9 @@ defmodule Hybridsocial.Social.Post do
             |> String.replace(~r/\n{3,}/, "\n\n")
             |> String.trim()
 
-          if cleaned == "", do: put_change(changeset, :content, nil), else: put_change(changeset, :content, cleaned)
+          if cleaned == "",
+            do: put_change(changeset, :content, nil),
+            else: put_change(changeset, :content, cleaned)
 
         _ ->
           changeset

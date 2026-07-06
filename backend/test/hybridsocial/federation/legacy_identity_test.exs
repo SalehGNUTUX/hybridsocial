@@ -95,14 +95,25 @@ defmodule Hybridsocial.Federation.LegacyIdentityTest do
     end
 
     test "false for a remote identity, regardless of URL" do
-      assert LocalUrl.local_identity?(%Identity{is_local: false, ap_actor_url: "https://remote.social/users/bob"}) ==
+      assert LocalUrl.local_identity?(%Identity{
+               is_local: false,
+               ap_actor_url: "https://remote.social/users/bob"
+             }) ==
                false
     end
 
     test "falls back to the URL prefix only when is_local is nil" do
       base = LocalUrl.base_url()
-      assert LocalUrl.local_identity?(%Identity{is_local: nil, ap_actor_url: base <> "/actors/abc"})
-      refute LocalUrl.local_identity?(%Identity{is_local: nil, ap_actor_url: "https://remote.social/users/bob"})
+
+      assert LocalUrl.local_identity?(%Identity{
+               is_local: nil,
+               ap_actor_url: base <> "/actors/abc"
+             })
+
+      refute LocalUrl.local_identity?(%Identity{
+               is_local: nil,
+               ap_actor_url: "https://remote.social/users/bob"
+             })
     end
   end
 

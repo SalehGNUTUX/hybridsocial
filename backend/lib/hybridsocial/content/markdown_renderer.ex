@@ -178,8 +178,8 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
 
   defp restore_hashtags(html, hashtags) do
     Regex.replace(~r/&lt;&lt;&lt;HASHTAG(\d+)&gt;&gt;&gt;|<<<HASHTAG(\d+)>>>/, html, fn _full,
-                                                                                       idx_a,
-                                                                                       idx_b ->
+                                                                                        idx_a,
+                                                                                        idx_b ->
       idx = String.to_integer(if idx_a == "", do: idx_b, else: idx_a)
 
       case Map.get(hashtags, idx) do

@@ -109,7 +109,10 @@ defmodule HybridsocialWeb.Api.V1.ExportController do
       {:error, :invalid_type} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "import.invalid_type", message: "Supported types: follows, blocks, mutes"})
+        |> json(%{
+          error: "import.invalid_type",
+          message: "Supported types: follows, blocks, mutes"
+        })
     end
   end
 

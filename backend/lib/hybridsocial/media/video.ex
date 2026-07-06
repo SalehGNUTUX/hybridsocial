@@ -18,7 +18,8 @@ defmodule Hybridsocial.Media.Video do
     case run_ffprobe(path) do
       {:ok, %{"streams" => streams, "format" => format}} ->
         # Fast-path: header carries the duration (most uploads).
-        duration_from_header = parse_duration(format["duration"] || duration_from_streams(streams))
+        duration_from_header =
+          parse_duration(format["duration"] || duration_from_streams(streams))
 
         # Slow-path: WebM files written by Chrome's MediaRecorder /
         # streaming muxers commonly omit the duration tag. Fall back

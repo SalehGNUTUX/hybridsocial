@@ -78,18 +78,16 @@ defmodule Hybridsocial.Content.LinkPreviews do
   end
 
   defp fetch_remote(url) do
-    cond do
-      youtube_url?(url) ->
-        case fetch_youtube_oembed(url) do
-          {:ok, meta} -> {:ok, meta}
-          # oEmbed can fail when YouTube hides a video (region-blocked,
-          # private, age-gated). Fall through to the normal HTML
-          # parse so we still get *something* in the card.
-          {:error, _} -> fetch_remote_html(url)
-        end
-
-      true ->
-        fetch_remote_html(url)
+    if youtube_url?(url) do
+      case fetch_youtube_oembed(url) do
+        {:ok, meta} -> {:ok, meta}
+        # oEmbed can fail when YouTube hides a video (region-blocked,
+        # private, age-gated). Fall through to the normal HTML
+        # parse so we still get *something* in the card.
+        {:error, _} -> fetch_remote_html(url)
+      end
+    else
+      fetch_remote_html(url)
     end
   end
 
@@ -195,7 +193,13 @@ defmodule Hybridsocial.Content.LinkPreviews do
       "https://www.youtube.com/oembed?format=json&url=" <> URI.encode_www_form(url)
 
     headers = [{"User-Agent", @default_user_agent}, {"Accept", "application/json"}]
-    options = [recv_timeout: @fetch_timeout, timeout: @fetch_timeout, follow_redirect: true, max_redirect: 2]
+
+    options = [
+      recv_timeout: @fetch_timeout,
+      timeout: @fetch_timeout,
+      follow_redirect: true,
+      max_redirect: 2
+    ]
 
     case HTTPoison.get(oembed_url, headers, options) do
       {:ok, %HTTPoison.Response{status_code: status, body: body}}

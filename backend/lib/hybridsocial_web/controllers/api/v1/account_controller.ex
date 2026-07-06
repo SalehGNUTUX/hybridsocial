@@ -167,12 +167,10 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         # above. Empty list, not 404, so the UI can render its own
         # "no posts" state if the profile loaded via a different
         # path. (The /accounts/:id show endpoint already 404s.)
-        cond do
-          viewer_id && either_blocked?(viewer_id, id) ->
-            conn |> put_status(:ok) |> json([])
-
-          true ->
-            do_statuses(conn, id, viewer_id, params)
+        if viewer_id && either_blocked?(viewer_id, id) do
+          conn |> put_status(:ok) |> json([])
+        else
+          do_statuses(conn, id, viewer_id, params)
         end
     end
   end

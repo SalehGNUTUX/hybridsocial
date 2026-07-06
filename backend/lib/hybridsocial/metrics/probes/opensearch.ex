@@ -19,7 +19,8 @@ defmodule Hybridsocial.Metrics.Probes.Opensearch do
 
     try do
       with {:ok, health} <- fetch_json("#{url}/_cluster/health"),
-           {:ok, indices} <- fetch_json("#{url}/_cat/indices?format=json&h=index,docs.count,store.size") do
+           {:ok, indices} <-
+             fetch_json("#{url}/_cat/indices?format=json&h=index,docs.count,store.size") do
         cluster_status =
           case health["status"] do
             "green" -> 0

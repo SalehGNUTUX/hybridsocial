@@ -55,7 +55,9 @@ defmodule Hybridsocial.Metrics.Retention do
 
   defp retention_days do
     case Hybridsocial.Config.get("metrics_retention_days", 30) do
-      n when is_integer(n) and n > 0 -> n
+      n when is_integer(n) and n > 0 ->
+        n
+
       n when is_binary(n) ->
         case Integer.parse(n) do
           {v, _} when v > 0 -> v

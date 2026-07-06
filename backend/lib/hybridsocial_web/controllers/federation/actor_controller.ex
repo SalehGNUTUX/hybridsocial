@@ -74,7 +74,11 @@ defmodule HybridsocialWeb.Federation.ActorController do
 
   defp prefers_html?(conn) do
     accept =
-      conn |> Plug.Conn.get_req_header("accept") |> List.first() |> to_string() |> String.downcase()
+      conn
+      |> Plug.Conn.get_req_header("accept")
+      |> List.first()
+      |> to_string()
+      |> String.downcase()
 
     String.contains?(accept, "text/html") and
       not String.contains?(accept, "application/activity+json") and

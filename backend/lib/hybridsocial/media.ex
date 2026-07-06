@@ -6,7 +6,17 @@ defmodule Hybridsocial.Media do
 
   alias Hybridsocial.Antivirus
   alias Hybridsocial.Repo
-  alias Hybridsocial.Media.{MediaFile, Storage, Validator, Hash, Filter, Audio, Video, ImageOptimizer}
+
+  alias Hybridsocial.Media.{
+    MediaFile,
+    Storage,
+    Validator,
+    Hash,
+    Filter,
+    Audio,
+    Video,
+    ImageOptimizer
+  }
 
   @doc """
   Uploads a file: validates magic bytes, validates size, stores to disk, creates DB record.
@@ -50,7 +60,12 @@ defmodule Hybridsocial.Media do
       try do
         with {:ok, storage_path} <-
                Storage.store(
-                 %{upload | path: final_path, content_type: final_content_type, filename: filtered.filename},
+                 %{
+                   upload
+                   | path: final_path,
+                     content_type: final_content_type,
+                     filename: filtered.filename
+                 },
                  identity_id
                ) do
           base_metadata = %{

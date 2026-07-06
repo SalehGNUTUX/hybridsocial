@@ -23,8 +23,14 @@ defmodule Hybridsocial.Repo.Migrations.WidenLinkPreviewColumns do
     # Truncate any rows that grew past the old limit so the cast
     # back to varchar(255) succeeds.
     execute("UPDATE link_previews SET title = LEFT(title, 255) WHERE length(title) > 255")
-    execute("UPDATE link_previews SET image_url = LEFT(image_url, 255) WHERE length(image_url) > 255")
-    execute("UPDATE link_previews SET site_name = LEFT(site_name, 255) WHERE length(site_name) > 255")
+
+    execute(
+      "UPDATE link_previews SET image_url = LEFT(image_url, 255) WHERE length(image_url) > 255"
+    )
+
+    execute(
+      "UPDATE link_previews SET site_name = LEFT(site_name, 255) WHERE length(site_name) > 255"
+    )
 
     alter table(:link_previews) do
       modify :title, :string

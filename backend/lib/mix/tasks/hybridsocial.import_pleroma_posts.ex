@@ -37,7 +37,10 @@ defmodule Mix.Tasks.Hybridsocial.ImportPleromaPosts do
     author_map = PleromaImport.local_author_map()
 
     summary = PleromaImport.import_posts(notes, author_map)
-    Mix.shell().info("  imported=#{summary.ok}  skipped=#{summary.skipped}  failed=#{length(summary.failed)}")
+
+    Mix.shell().info(
+      "  imported=#{summary.ok}  skipped=#{summary.skipped}  failed=#{length(summary.failed)}"
+    )
 
     summary.failed
     |> Enum.take(20)

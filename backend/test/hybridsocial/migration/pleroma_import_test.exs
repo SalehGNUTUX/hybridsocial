@@ -189,14 +189,23 @@ defmodule Hybridsocial.Migration.PleromaImportTest do
     map = PleromaImport.local_author_map()
     uniq = :erlang.unique_integer([:positive])
 
-    root_note = note_map(au["ap_id"], "https://bassam.social/objects/root#{uniq}", nil, "hello world")
+    root_note =
+      note_map(au["ap_id"], "https://bassam.social/objects/root#{uniq}", nil, "hello world")
+
     assert {:ok, root} = PleromaImport.import_post(root_note, map)
     assert root.identity_id == author.id
     assert root.ap_id == root_note["id"]
     assert root.content =~ "hello world"
     assert root.visibility == "public"
 
-    reply_note = note_map(au["ap_id"], "https://bassam.social/objects/reply#{uniq}", root_note["id"], "a reply")
+    reply_note =
+      note_map(
+        au["ap_id"],
+        "https://bassam.social/objects/reply#{uniq}",
+        root_note["id"],
+        "a reply"
+      )
+
     assert {:ok, reply} = PleromaImport.import_post(reply_note, map)
     assert reply.parent_ap_id == root_note["id"]
 
@@ -208,7 +217,15 @@ defmodule Hybridsocial.Migration.PleromaImportTest do
 
   test "skips notes whose author isn't a local import" do
     map = PleromaImport.local_author_map()
-    note = note_map("https://mastodon.example/users/bob", "https://mastodon.example/objects/x", nil, "hi")
+
+    note =
+      note_map(
+        "https://mastodon.example/users/bob",
+        "https://mastodon.example/objects/x",
+        nil,
+        "hi"
+      )
+
     assert {:skip, _} = PleromaImport.import_post(note, map)
   end
 
@@ -236,7 +253,11 @@ defmodule Hybridsocial.Migration.PleromaImportTest do
   end
 
   test "import_users summarizes outcomes" do
-    users = [pleroma_user("bulk#{:erlang.unique_integer([:positive])}"), pleroma_user("bulk#{:erlang.unique_integer([:positive])}")]
+    users = [
+      pleroma_user("bulk#{:erlang.unique_integer([:positive])}"),
+      pleroma_user("bulk#{:erlang.unique_integer([:positive])}")
+    ]
+
     summary = PleromaImport.import_users(users)
     assert summary.ok == 2
     assert summary.failed == []

@@ -121,13 +121,25 @@ defmodule Hybridsocial.Feeds.Algorithms.Chronological do
   defp resolve_cursor(opts) do
     cond do
       max_id = Keyword.get(opts, :max_id) ->
-        case lookup_post_cursor(max_id), do: (nil -> nil; {ia, id} -> {:older, ia, id})
+        case lookup_post_cursor(max_id),
+          do: (
+            nil -> nil
+            {ia, id} -> {:older, ia, id}
+          )
 
       min_id = Keyword.get(opts, :min_id) ->
-        case lookup_post_cursor(min_id), do: (nil -> nil; {ia, id} -> {:newer, ia, id})
+        case lookup_post_cursor(min_id),
+          do: (
+            nil -> nil
+            {ia, id} -> {:newer, ia, id}
+          )
 
       since_id = Keyword.get(opts, :since_id) ->
-        case lookup_post_cursor(since_id), do: (nil -> nil; {ia, id} -> {:newer, ia, id})
+        case lookup_post_cursor(since_id),
+          do: (
+            nil -> nil
+            {ia, id} -> {:newer, ia, id}
+          )
 
       true ->
         nil

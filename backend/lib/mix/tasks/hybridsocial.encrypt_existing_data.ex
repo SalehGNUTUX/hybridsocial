@@ -27,9 +27,7 @@ defmodule Mix.Tasks.Hybridsocial.EncryptExistingData do
     identities = backfill_keys(Identity)
     groups = backfill_keys(Group)
 
-    Mix.shell().info(
-      "Encrypted: #{users} users, #{identities} identities, #{groups} groups"
-    )
+    Mix.shell().info("Encrypted: #{users} users, #{identities} identities, #{groups} groups")
   end
 
   defp backfill_users do

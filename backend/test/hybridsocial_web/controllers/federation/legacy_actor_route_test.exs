@@ -56,7 +56,10 @@ defmodule HybridsocialWeb.Federation.LegacyActorRouteTest do
 
     conn =
       conn
-      |> put_req_header("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+      |> put_req_header(
+        "accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      )
       |> get("/users/#{nick}")
 
     assert redirected_to(conn) == "/@#{nick}"
@@ -71,7 +74,9 @@ defmodule HybridsocialWeb.Federation.LegacyActorRouteTest do
     assert json["type"] == "OrderedCollection"
   end
 
-  test "GET /users/:nickname 404s for a native user; /actors/<uuid> still serves it", %{conn: conn} do
+  test "GET /users/:nickname 404s for a native user; /actors/<uuid> still serves it", %{
+    conn: conn
+  } do
     uniq = :erlang.unique_integer([:positive])
 
     {:ok, native} =

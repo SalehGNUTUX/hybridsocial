@@ -26,7 +26,10 @@ defmodule HybridsocialWeb.Api.V1.Admin.CustomEmojisController do
   end
 
   def update(conn, %{"id" => id} = params) do
-    case Emojis.update_emoji(id, Map.take(params, ~w(shortcode image_url category enabled premium))) do
+    case Emojis.update_emoji(
+           id,
+           Map.take(params, ~w(shortcode image_url category enabled premium))
+         ) do
       {:ok, emoji} ->
         json(conn, serialize(emoji))
 

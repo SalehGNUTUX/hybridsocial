@@ -82,9 +82,7 @@ defmodule Hybridsocial.Media.ImageOptimizer do
         end
 
       {output, status} ->
-        Logger.warning(
-          "vipsthumbnail exited #{status} on #{input_path}: #{String.trim(output)}"
-        )
+        Logger.warning("vipsthumbnail exited #{status} on #{input_path}: #{String.trim(output)}")
 
         File.rm(output_path)
         {:skip, input_path, content_type, file_size(input_path)}
@@ -140,9 +138,7 @@ defmodule Hybridsocial.Media.ImageOptimizer do
         :persistent_term.put({__MODULE__, :vips_available}, available)
 
         unless available do
-          Logger.warning(
-            "vipsthumbnail not on PATH — image uploads are stored at original size"
-          )
+          Logger.warning("vipsthumbnail not on PATH — image uploads are stored at original size")
         end
 
         available

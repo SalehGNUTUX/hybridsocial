@@ -507,6 +507,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
         # scoped to their audience even though the thread-root check
         # already gated entry.
         ancestors = Enum.filter(ancestors, &Posts.viewer_can_read?(&1, identity_id))
+
         descendants =
           descendants
           |> Enum.filter(&Posts.viewer_can_read?(&1, identity_id))

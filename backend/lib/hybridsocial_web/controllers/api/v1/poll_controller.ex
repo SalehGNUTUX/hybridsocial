@@ -243,28 +243,31 @@ defmodule HybridsocialWeb.Api.V1.PollController do
             |> Repo.all()
 
           identity = Repo.preload(identity, [])
-
-          if identity.private_key do
-            Task.Supervisor.start_child(
-              Hybridsocial.Federation.DeliveryTaskSupervisor,
-              fn ->
-                for option <- options do
-                  activity =
-                    Hybridsocial.Federation.ActivityBuilder.build_poll_vote(
-                      identity,
-                      post,
-                      option
-                    )
-
-                  Hybridsocial.Federation.Publisher.publish(activity, identity)
-                end
-              end
-            )
-          end
+          deliver_poll_votes(identity, post, options)
         end
 
         :ok
     end
+  end
+
+  # Fan a remote poll vote out to the author's inbox as individual
+  # Create activities. No-op unless we hold the voter's signing key.
+  defp deliver_poll_votes(%{private_key: nil}, _post, _options), do: :ok
+
+  defp deliver_poll_votes(identity, post, options) do
+    Task.Supervisor.start_child(
+      Hybridsocial.Federation.DeliveryTaskSupervisor,
+      fn ->
+        for option <- options do
+          activity =
+            Hybridsocial.Federation.ActivityBuilder.build_poll_vote(identity, post, option)
+
+          Hybridsocial.Federation.Publisher.publish(activity, identity)
+        end
+      end
+    )
+
+    :ok
   end
 
   defp remote_post?(%Post{identity: %{ap_actor_url: ap}}) when is_binary(ap) do

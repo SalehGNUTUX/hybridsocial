@@ -179,13 +179,25 @@ defmodule Hybridsocial.Feeds.Algorithms.Trending do
   defp resolve_cursor(opts) do
     cond do
       max_id = Keyword.get(opts, :max_id) ->
-        case lookup_post_cursor(max_id), do: (nil -> nil; {eng, id} -> {:older, eng, id})
+        case lookup_post_cursor(max_id),
+          do: (
+            nil -> nil
+            {eng, id} -> {:older, eng, id}
+          )
 
       min_id = Keyword.get(opts, :min_id) ->
-        case lookup_post_cursor(min_id), do: (nil -> nil; {eng, id} -> {:newer, eng, id})
+        case lookup_post_cursor(min_id),
+          do: (
+            nil -> nil
+            {eng, id} -> {:newer, eng, id}
+          )
 
       since_id = Keyword.get(opts, :since_id) ->
-        case lookup_post_cursor(since_id), do: (nil -> nil; {eng, id} -> {:newer, eng, id})
+        case lookup_post_cursor(since_id),
+          do: (
+            nil -> nil
+            {eng, id} -> {:newer, eng, id}
+          )
 
       true ->
         nil

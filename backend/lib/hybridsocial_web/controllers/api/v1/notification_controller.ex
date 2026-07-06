@@ -29,6 +29,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
     # heuristic. The trailing `next_cursor` is the boundary id for the
     # next request — when nil, the list is exhausted.
     fetched = Notifications.list_notifications(identity.id, opts)
+
     {page, next_cursor} =
       case fetched do
         list when length(list) > limit ->
@@ -184,7 +185,9 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
   defp preload_reaction_types(notifications) do
     pairs =
       notifications
-      |> Enum.filter(&(&1.type == "reaction" and &1.target_type == "post" and not is_nil(&1.target_id)))
+      |> Enum.filter(
+        &(&1.type == "reaction" and &1.target_type == "post" and not is_nil(&1.target_id))
+      )
       |> Enum.map(&{&1.actor_id, &1.target_id})
       |> Enum.uniq()
 
@@ -198,7 +201,10 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
         wanted = MapSet.new(pairs)
 
         Reaction
-        |> where([r], r.identity_id in ^actor_ids and r.post_id in ^post_ids and is_nil(r.target_media_id))
+        |> where(
+          [r],
+          r.identity_id in ^actor_ids and r.post_id in ^post_ids and is_nil(r.target_media_id)
+        )
         |> select([r], {r.identity_id, r.post_id, r.type})
         |> Repo.all()
         |> Enum.filter(fn {aid, pid, _} -> MapSet.member?(wanted, {aid, pid}) end)

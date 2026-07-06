@@ -58,12 +58,9 @@ defmodule HybridsocialWeb.Plugs.RequireConfirmedEmail do
   defp confirmed?(%{id: identity_id}) do
     # Single column lookup; cheap and runs once per authenticated
     # request. Cache layer can be added if it shows up in profiles.
-    case Repo.one(
-           from u in User, where: u.identity_id == ^identity_id, select: u.confirmed_at
-         ) do
+    case Repo.one(from u in User, where: u.identity_id == ^identity_id, select: u.confirmed_at) do
       nil -> false
       %DateTime{} -> true
     end
   end
-
 end

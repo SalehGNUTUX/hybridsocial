@@ -112,14 +112,16 @@ defmodule Hybridsocial.Crypto do
   defp aad(context), do: "hs:aad:v1:" <> context
 
   defp master_key do
-    provider = Application.get_env(:hybridsocial, :crypto_key_provider, Hybridsocial.Crypto.EnvKeyProvider)
+    provider =
+      Application.get_env(:hybridsocial, :crypto_key_provider, Hybridsocial.Crypto.EnvKeyProvider)
 
     case provider.master_key() do
       {:ok, key} when is_binary(key) and byte_size(key) >= 16 ->
         key
 
       {:ok, key} when is_binary(key) ->
-        raise Error, message: "data encryption key too short (#{byte_size(key)} bytes; need >= 16)"
+        raise Error,
+          message: "data encryption key too short (#{byte_size(key)} bytes; need >= 16)"
 
       {:error, reason} ->
         raise Error, message: "no data encryption key configured: #{inspect(reason)}"

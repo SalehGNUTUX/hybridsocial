@@ -48,9 +48,9 @@ defmodule Hybridsocial.Federation.DeliveryStats do
       )
 
     # Schemaless `from d in "federation_deliveries"` returns timestamps as
-     # NaiveDateTime (the DB column is `timestamp without time zone`),
-     # which DateTime.diff/3 won't accept against a `now` DateTime —
-     # 500's the endpoint. naive_to_utc/1 normalizes either shape.
+    # NaiveDateTime (the DB column is `timestamp without time zone`),
+    # which DateTime.diff/3 won't accept against a `now` DateTime —
+    # 500's the endpoint. naive_to_utc/1 normalizes either shape.
     oldest_age_seconds =
       case oldest_pending do
         nil -> 0

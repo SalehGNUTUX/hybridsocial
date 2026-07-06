@@ -93,24 +93,11 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
     # Media attachments
     media_attachments = media_attachments_for(post.id)
 
-    # Per-image reply counts (only emit when the post owns media —
-    # avoids burning a query for every text-only post in a feed).
-    media_reply_counts =
-      if media_attachments != [] do
-        media_reply_counts_for(post.id)
-      else
-        %{}
-      end
-
-    # Per-image reaction counts (Instagram-style heart per image).
-    # Same gating as the reply map — only run the aggregate when the
-    # post actually has media to keep feed pages cheap.
-    media_reaction_counts =
-      if media_attachments != [] do
-        media_reaction_counts_for(post.id)
-      else
-        %{}
-      end
+    # Per-image reply + reaction counts (Instagram-style heart per
+    # image). Only run these aggregates when the post owns media —
+    # avoids burning two queries for every text-only post in a feed.
+    {media_reply_counts, media_reaction_counts} =
+      media_counts_for(post.id, media_attachments)
 
     # When this post is a per-image reply, include the parent's image
     # number (1-based) + preview url so the card can render
@@ -588,6 +575,13 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
   end
 
   # --- Media attachments ---
+
+  # Per-image reply + reaction counts. No media → no queries, empty maps.
+  defp media_counts_for(_post_id, []), do: {%{}, %{}}
+
+  defp media_counts_for(post_id, _media_attachments) do
+    {media_reply_counts_for(post_id), media_reaction_counts_for(post_id)}
+  end
 
   defp media_attachments_for(post_id) do
     MediaFile
