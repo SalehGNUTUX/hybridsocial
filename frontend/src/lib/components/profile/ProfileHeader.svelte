@@ -463,6 +463,11 @@
   /* Ring + drop shadow lift the avatar off the banner. The inner white
      border matches the card so the avatar reads as punched through. */
   .profile-avatar-wrapper {
+    /* flex so the inline-flex Avatar isn't seated on the button's text
+       baseline — that descender space showed up as a fat gap under the
+       image (uneven ring). As a flex item the avatar fills the ring
+       evenly on all sides. */
+    display: flex;
     border: 4px solid var(--color-surface-raised);
     border-radius: var(--radius-full);
     background: var(--color-surface-raised);
