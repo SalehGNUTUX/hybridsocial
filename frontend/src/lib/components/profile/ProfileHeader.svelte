@@ -454,15 +454,20 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    /* Avatar wrapper is 104px + 8px ring = 112px. Overlap the banner by
-       ~40% (rest sits in the card) so it reads as seated in its ring,
-       not straddling/popping out of the seam. */
-    margin-block-start: -44px;
+    /* Avatar wrapper is 104px + 8px ring = 112px. Pull it up by half its
+       height so it straddles the banner seam ~50/50 (the conventional
+       profile placement) instead of sinking low into the card. */
+    margin-block-start: -56px;
   }
 
   /* Ring + drop shadow lift the avatar off the banner. The inner white
      border matches the card so the avatar reads as punched through. */
   .profile-avatar-wrapper {
+    /* flex so the inline-flex Avatar isn't seated on the button's text
+       baseline — that descender space showed up as a fat gap under the
+       image (uneven ring). As a flex item the avatar fills the ring
+       evenly on all sides. */
+    display: flex;
     border: 4px solid var(--color-surface-raised);
     border-radius: var(--radius-full);
     background: var(--color-surface-raised);
@@ -753,7 +758,7 @@
     }
 
     .profile-avatar-row {
-      margin-block-start: -40px;
+      margin-block-start: -56px;
     }
 
     .profile-display-name {
