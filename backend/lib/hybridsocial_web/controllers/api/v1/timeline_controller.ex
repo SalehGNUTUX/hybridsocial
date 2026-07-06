@@ -60,16 +60,19 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         _ -> opts
       end
 
-    entries = Feeds.home_timeline(identity.id, opts)
-
     identity_id = identity.id
+    cache_key = "feed:home:ser:#{identity_id}:#{Keyword.get(opts, :algorithm, "chrono")}"
 
     posts =
-      if Keyword.get(opts, :algorithm) do
-        PostSerializer.serialize_many(entries, current_identity_id: identity_id)
-      else
-        serialize_timeline_entries(entries, identity_id)
-      end
+      cached_feed(cache_key, first_page?(params), fn ->
+        entries = Feeds.home_timeline(identity_id, opts)
+
+        if Keyword.get(opts, :algorithm) do
+          PostSerializer.serialize_many(entries, current_identity_id: identity_id)
+        else
+          serialize_timeline_entries(entries, identity_id)
+        end
+      end)
 
     conn
     |> put_link_headers(posts, "/api/v1/timelines/home")
