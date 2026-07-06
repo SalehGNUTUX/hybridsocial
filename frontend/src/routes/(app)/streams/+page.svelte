@@ -1,16 +1,58 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client.js';
-  import type { Post } from '$lib/api/types.js';
+  import type { Post, MediaAttachment } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
 
   let posts: Post[] = $state([]);
   let loading = $state(true);
   let error = $state('');
 
+  // Per-post caption expand + whether the caption actually overflows the
+  // clamp (so we only show the "Show more" toggle when there's more).
+  let expanded = $state<Record<string, boolean>>({});
+  let overflowing = $state<Record<string, boolean>>({});
+
   // Track which posts we've already reported a view for so we don't
   // double-count the initial `play` event.
   const viewsReported = new Set<string>();
+
+  // Reserve the video box with the real aspect ratio (from media meta,
+  // falling back to 16:9) so a not-yet-loaded video shows a proper frame
+  // instead of collapsing to a thin controls bar.
+  function videoAspect(m: MediaAttachment): string {
+    const o = (m.meta?.original ?? {}) as { width?: number; height?: number };
+    return o.width && o.height ? `${o.width} / ${o.height}` : '16 / 9';
+  }
+
+  // preview_url falls back to the *video* URL for federated videos, which
+  // isn't a valid poster image and actually blocks the browser from
+  // painting the first frame. Only use it when it's a distinct thumbnail.
+  function videoPoster(m: MediaAttachment): string | undefined {
+    if (!m.preview_url || m.preview_url === m.url) return undefined;
+    return m.preview_url;
+  }
+
+  // A #t media fragment makes the browser seek to (and paint) that frame
+  // as a thumbnail once metadata loads — lazily, via the intersection
+  // observer below — so the feed shows first frames instead of blank boxes.
+  function firstFrameSrc(url: string): string {
+    return url.includes('#') ? url : `${url}#t=0.1`;
+  }
+
+  function toggleExpand(id: string) {
+    expanded = { ...expanded, [id]: !expanded[id] };
+  }
+
+  // Measure once (while clamped, since expanded starts false) whether the
+  // caption exceeds the clamp; drives the "Show more" toggle visibility.
+  function measureClamp(node: HTMLElement, id: string) {
+    requestAnimationFrame(() => {
+      const isOver = node.scrollHeight - node.clientHeight > 4;
+      if (overflowing[id] !== isOver) overflowing = { ...overflowing, [id]: isOver };
+    });
+    return {};
+  }
 
   async function loadStreams() {
     loading = true;
@@ -132,10 +174,10 @@
         {@const videoAttachment = post.media_attachments?.find((m) => m.type === 'video')}
         <div class="stream-card">
           {#if videoAttachment}
-            <div class="stream-video-wrapper">
+            <div class="stream-video-wrapper" style="aspect-ratio: {videoAspect(videoAttachment)}">
               <video
-                src={videoAttachment.url}
-                poster={videoAttachment.preview_url || undefined}
+                src={firstFrameSrc(videoAttachment.url)}
+                poster={videoPoster(videoAttachment)}
                 controls
                 playsinline
                 preload="none"
@@ -155,10 +197,21 @@
               </div>
             </div>
           {/if}
-          {#if post.content_html}
-            <div class="stream-content">{@html post.content_html}</div>
-          {:else if post.content}
-            <div class="stream-content"><p>{post.content}</p></div>
+          {#if post.content_html || post.content}
+            <div class="stream-caption">
+              <div
+                class="stream-content"
+                class:clamped={!expanded[post.id]}
+                use:measureClamp={post.id}
+              >
+                {#if post.content_html}{@html post.content_html}{:else}<p>{post.content}</p>{/if}
+              </div>
+              {#if overflowing[post.id]}
+                <button type="button" class="caption-toggle" onclick={() => toggleExpand(post.id)}>
+                  {expanded[post.id] ? 'Show less' : 'Show more'}
+                </button>
+              {/if}
+            </div>
           {/if}
           <div class="stream-actions">
             <a href="/post/{post.id}" class="stream-action-link">
@@ -236,11 +289,17 @@
     position: relative;
     width: 100%;
     background: #000;
+    /* Reserve space so the card doesn't collapse to a controls bar
+       before the video loads. aspect-ratio is set inline from media
+       meta (fallback 16/9); max-height keeps tall portrait clips sane. */
+    aspect-ratio: 16 / 9;
+    max-height: 70vh;
   }
 
   .stream-video {
     width: 100%;
-    max-height: 70vh;
+    height: 100%;
+    object-fit: contain;
     display: block;
   }
 
@@ -281,6 +340,32 @@
     color: var(--color-text);
     line-height: var(--leading-relaxed);
     overflow-wrap: anywhere;
+  }
+
+  /* Clamp long captions (imported posts can be many paragraphs) so a
+     card stays a card. The toggle below reveals the rest. */
+  .stream-content.clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .caption-toggle {
+    display: block;
+    margin: 0 var(--space-4) var(--space-3);
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+  }
+
+  .caption-toggle:hover {
+    color: var(--color-primary);
   }
 
   .stream-content :global(a) {
