@@ -226,16 +226,16 @@
   <form onsubmit={handleSubmit} novalidate>
     {#if !otpRequired}
       <div class="auth-field">
-        <label class="auth-label" for="email">EMAIL</label>
+        <label class="auth-label" for="email">EMAIL OR USERNAME</label>
         <input
           id="email"
-          type="email"
+          type="text"
           class="auth-input"
           placeholder="Email or username"
           bind:value={email}
           required
           disabled={loading}
-          autocomplete="email"
+          autocomplete="username"
         />
       </div>
 

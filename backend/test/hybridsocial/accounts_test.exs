@@ -65,12 +65,35 @@ defmodule Hybridsocial.AccountsTest do
   describe "authenticate_user/2" do
     setup do
       {:ok, identity} = Accounts.register_user(@valid_user_attrs)
+
+      # Confirm the email so the confirmation gate doesn't mask the
+      # credential-check results these tests assert on.
+      Hybridsocial.Accounts.User
+      |> Hybridsocial.Repo.get_by(identity_id: identity.id)
+      |> Hybridsocial.Accounts.User.confirm_changeset()
+      |> Hybridsocial.Repo.update!()
+
       %{identity: identity}
     end
 
     test "succeeds with correct credentials" do
       assert {:ok, user} = Accounts.authenticate_user("test@example.com", "password1234567890")
       assert user.email == "test@example.com"
+    end
+
+    test "succeeds with handle (username) instead of email" do
+      assert {:ok, user} = Accounts.authenticate_user("testuser", "password1234567890")
+      assert user.email == "test@example.com"
+    end
+
+    test "fails with handle + wrong password" do
+      assert {:error, :invalid_credentials} =
+               Accounts.authenticate_user("testuser", "wrong")
+    end
+
+    test "fails with non-existent handle" do
+      assert {:error, :invalid_credentials} =
+               Accounts.authenticate_user("nobody", "password1234567890")
     end
 
     test "fails with wrong password" do

@@ -434,8 +434,35 @@ defmodule Hybridsocial.Accounts do
     end
   end
 
-  def authenticate_user(email, password) do
-    case get_user_by_email(email) do
+  @doc """
+  Look up a local user by their identity handle (username). Only local
+  identities own a user row — remote actors fall through to nil, so they
+  can't be logged into. Handles are globally unique in `identities`, so
+  this resolves to at most one user.
+  """
+  def get_user_by_handle(handle) when is_binary(handle) do
+    case get_identity_by_handle(handle) do
+      nil ->
+        nil
+
+      identity ->
+        User
+        |> where([u], u.identity_id == ^identity.id)
+        |> Repo.one()
+        |> case do
+          nil -> nil
+          user -> Repo.preload(user, :identity)
+        end
+    end
+  end
+
+  def get_user_by_handle(_), do: nil
+
+  # `identifier` is either an email or a handle (username) — the login
+  # form accepts both. Email is tried first (the common case); a handle
+  # input simply misses the email blind index and falls through.
+  def authenticate_user(identifier, password) do
+    case get_user_by_email(identifier) || get_user_by_handle(identifier) do
       nil ->
         # Prevent timing attacks
         Bcrypt.no_user_verify()
