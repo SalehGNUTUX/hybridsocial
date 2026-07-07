@@ -79,8 +79,9 @@ defmodule Hybridsocial.MixProject do
       {:cors_plug, "~> 3.0"},
       # NATS JetStream
       {:gnat, "~> 1.8"},
-      # Markdown (CommonMark + GFM) and HTML sanitization
-      {:earmark, "~> 1.4"},
+      # Markdown (CommonMark + GFM) and HTML sanitization. MDEx (comrak)
+      # replaced Earmark, which is retired/unmaintained with an open CVE.
+      {:mdex, "~> 0.13"},
       {:html_sanitize_ex, "~> 1.4"}
     ]
   end

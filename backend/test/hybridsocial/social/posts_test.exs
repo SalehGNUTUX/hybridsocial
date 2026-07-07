@@ -27,8 +27,11 @@ defmodule Hybridsocial.Social.PostsTest do
           "content" => "Hello <script>alert('xss')</script>"
         })
 
-      assert post.content_html =~ "&lt;script&gt;"
+      # Raw <script> must not survive as an executable element. (The
+      # markdown engine drops the tag and the per-tier sanitizer is
+      # defense-in-depth; any remaining inner text is harmless.)
       refute post.content_html =~ "<script>"
+      refute post.content_html =~ "</script>"
     end
 
     test "fails without content for text post" do
