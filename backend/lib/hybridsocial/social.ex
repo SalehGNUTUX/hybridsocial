@@ -70,7 +70,7 @@ defmodule Hybridsocial.Social do
     if follower && remote?(target) do
       Logger.info("Publishing Follow activity to #{target.ap_actor_url}")
 
-      Task.Supervisor.start_child(Hybridsocial.Federation.DeliveryTaskSupervisor, fn ->
+      Hybridsocial.Federation.deliver_async(fn ->
         activity = ActivityBuilder.build_follow(follower, target.ap_actor_url)
         Publisher.publish(activity, follower)
       end)
@@ -107,7 +107,7 @@ defmodule Hybridsocial.Social do
     with follower when not is_nil(follower) <- Accounts.get_identity(follower_id),
          target when not is_nil(target) <- Accounts.get_identity(followee_id),
          true <- remote?(target) do
-      Task.Supervisor.start_child(Hybridsocial.Federation.DeliveryTaskSupervisor, fn ->
+      Hybridsocial.Federation.deliver_async(fn ->
         follow_activity = ActivityBuilder.build_follow(follower, target.ap_actor_url)
         activity = ActivityBuilder.build_undo(follower, follow_activity)
         Publisher.publish(activity, follower)

@@ -373,22 +373,19 @@ defmodule Hybridsocial.Social.Posts do
   defp maybe_federate_create(%Post{visibility: vis} = post)
        when vis in ["public", "followers", "unlisted", "direct"] do
     if post.identity && post.identity.private_key do
-      Task.Supervisor.start_child(
-        Hybridsocial.Federation.DeliveryTaskSupervisor,
-        fn ->
-          # Direct posts need their mentions preloaded so the activity
-          # builder can target each recipient explicitly; other
-          # visibilities fan out via followers/Public addressing and
-          # don't need them.
-          post =
-            if vis == "direct",
-              do: Hybridsocial.Repo.preload(post, mentions: :identity),
-              else: post
+      Hybridsocial.Federation.deliver_async(fn ->
+        # Direct posts need their mentions preloaded so the activity
+        # builder can target each recipient explicitly; other
+        # visibilities fan out via followers/Public addressing and
+        # don't need them.
+        post =
+          if vis == "direct",
+            do: Hybridsocial.Repo.preload(post, mentions: :identity),
+            else: post
 
-          activity = Hybridsocial.Federation.ActivityBuilder.build_create(post)
-          Hybridsocial.Federation.Publisher.publish(activity, post.identity)
-        end
-      )
+        activity = Hybridsocial.Federation.ActivityBuilder.build_create(post)
+        Hybridsocial.Federation.Publisher.publish(activity, post.identity)
+      end)
     end
 
     :ok
@@ -732,14 +729,11 @@ defmodule Hybridsocial.Social.Posts do
     post = Repo.preload(post, [:identity, mentions: :identity])
 
     if post.identity && post.identity.private_key do
-      Task.Supervisor.start_child(
-        Hybridsocial.Federation.DeliveryTaskSupervisor,
-        fn ->
-          activity = Hybridsocial.Federation.ActivityBuilder.build_update(post)
-          activity = widen_addressing(activity, extra_recipient_ids)
-          Hybridsocial.Federation.Publisher.publish(activity, post.identity)
-        end
-      )
+      Hybridsocial.Federation.deliver_async(fn ->
+        activity = Hybridsocial.Federation.ActivityBuilder.build_update(post)
+        activity = widen_addressing(activity, extra_recipient_ids)
+        Hybridsocial.Federation.Publisher.publish(activity, post.identity)
+      end)
     end
 
     :ok
@@ -857,13 +851,10 @@ defmodule Hybridsocial.Social.Posts do
         :ok
 
       true ->
-        Task.Supervisor.start_child(
-          Hybridsocial.Federation.DeliveryTaskSupervisor,
-          fn ->
-            activity = Hybridsocial.Federation.ActivityBuilder.build_delete(post)
-            Hybridsocial.Federation.Publisher.publish(activity, post.identity)
-          end
-        )
+        Hybridsocial.Federation.deliver_async(fn ->
+          activity = Hybridsocial.Federation.ActivityBuilder.build_delete(post)
+          Hybridsocial.Federation.Publisher.publish(activity, post.identity)
+        end)
 
         :ok
     end
@@ -1153,25 +1144,22 @@ defmodule Hybridsocial.Social.Posts do
   end
 
   defp spawn_federate_reaction(post, identity_id, type) do
-    Task.Supervisor.start_child(
-      Hybridsocial.Federation.DeliveryTaskSupervisor,
-      fn ->
-        identity = Repo.get(Hybridsocial.Accounts.Identity, identity_id)
+    Hybridsocial.Federation.deliver_async(fn ->
+      identity = Repo.get(Hybridsocial.Accounts.Identity, identity_id)
 
-        if identity && is_binary(identity.private_key) do
-          activity =
-            case reaction_emoji_for(type) do
-              nil ->
-                Hybridsocial.Federation.ActivityBuilder.build_like(identity, post)
+      if identity && is_binary(identity.private_key) do
+        activity =
+          case reaction_emoji_for(type) do
+            nil ->
+              Hybridsocial.Federation.ActivityBuilder.build_like(identity, post)
 
-              emoji ->
-                Hybridsocial.Federation.ActivityBuilder.build_emoji_react(identity, post, emoji)
-            end
+            emoji ->
+              Hybridsocial.Federation.ActivityBuilder.build_emoji_react(identity, post, emoji)
+          end
 
-          Hybridsocial.Federation.Publisher.publish(activity, identity)
-        end
+        Hybridsocial.Federation.Publisher.publish(activity, identity)
       end
-    )
+    end)
   end
 
   # Map our internal reaction type to a Unicode emoji for the
@@ -1226,40 +1214,37 @@ defmodule Hybridsocial.Social.Posts do
   end
 
   defp spawn_federate_unreact(post, identity_id, type) do
-    Task.Supervisor.start_child(
-      Hybridsocial.Federation.DeliveryTaskSupervisor,
-      fn ->
-        identity = Repo.get(Hybridsocial.Accounts.Identity, identity_id)
+    Hybridsocial.Federation.deliver_async(fn ->
+      identity = Repo.get(Hybridsocial.Accounts.Identity, identity_id)
 
-        if identity && is_binary(identity.private_key) do
-          inner =
-            case reaction_emoji_for(type) do
-              nil ->
-                Hybridsocial.Federation.ActivityBuilder.build_like(identity, post)
+      if identity && is_binary(identity.private_key) do
+        inner =
+          case reaction_emoji_for(type) do
+            nil ->
+              Hybridsocial.Federation.ActivityBuilder.build_like(identity, post)
 
-              emoji ->
-                Hybridsocial.Federation.ActivityBuilder.build_emoji_react(identity, post, emoji)
-            end
+            emoji ->
+              Hybridsocial.Federation.ActivityBuilder.build_emoji_react(identity, post, emoji)
+          end
 
-          # Wrap in Undo so the remote peer drops the prior reaction.
-          # Reusing the inner activity verbatim keeps the `id` matched
-          # to what was originally delivered, which is what Mastodon's
-          # Undo handler keys off. Preserve the cc so the Undo reaches
-          # every peer that received the original Like.
-          undo = %{
-            "@context" => "https://www.w3.org/ns/activitystreams",
-            "id" => inner["id"] <> "/undo",
-            "type" => "Undo",
-            "actor" => inner["actor"],
-            "to" => inner["to"],
-            "cc" => inner["cc"] || [],
-            "object" => inner
-          }
+        # Wrap in Undo so the remote peer drops the prior reaction.
+        # Reusing the inner activity verbatim keeps the `id` matched
+        # to what was originally delivered, which is what Mastodon's
+        # Undo handler keys off. Preserve the cc so the Undo reaches
+        # every peer that received the original Like.
+        undo = %{
+          "@context" => "https://www.w3.org/ns/activitystreams",
+          "id" => inner["id"] <> "/undo",
+          "type" => "Undo",
+          "actor" => inner["actor"],
+          "to" => inner["to"],
+          "cc" => inner["cc"] || [],
+          "object" => inner
+        }
 
-          Hybridsocial.Federation.Publisher.publish(undo, identity)
-        end
+        Hybridsocial.Federation.Publisher.publish(undo, identity)
       end
-    )
+    end)
   end
 
   def get_reactions(post_id) do

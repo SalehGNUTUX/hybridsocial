@@ -36,7 +36,9 @@ defmodule Hybridsocial.Federation.ActivityBuilderTest do
       assert note["id"] == "http://localhost:4002/posts/#{post.id}"
       assert note["attributedTo"] == "http://localhost:4002/actors/#{identity.id}"
       assert note["content"] != nil
-      assert note["url"] == "http://localhost:4002/posts/#{post.id}"
+      # AP `url` is the human HTML permalink (/post/:id, singular); `id` is
+      # the AP object endpoint (/posts/:id).
+      assert note["url"] == "http://localhost:4002/post/#{post.id}"
       assert note["sensitive"] == false
       assert note["inReplyTo"] == nil
 

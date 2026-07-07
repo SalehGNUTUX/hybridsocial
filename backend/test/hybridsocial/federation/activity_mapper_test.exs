@@ -20,7 +20,9 @@ defmodule Hybridsocial.Federation.ActivityMapperTest do
       result = ActivityMapper.to_post(ap_object)
 
       assert result["ap_id"] == "https://remote.example/objects/note-1"
-      assert result["content"] == "<p>Hello world!</p>"
+      # Remote HTML content is stripped to plaintext for the `content` column;
+      # the rendered HTML lives in `content_html`.
+      assert result["content"] == "Hello world!"
       assert result["content_html"] == "<p>Hello world!</p>"
       assert result["post_type"] == "text"
       assert result["visibility"] == "public"

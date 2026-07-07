@@ -255,17 +255,14 @@ defmodule HybridsocialWeb.Api.V1.PollController do
   defp deliver_poll_votes(%{private_key: nil}, _post, _options), do: :ok
 
   defp deliver_poll_votes(identity, post, options) do
-    Task.Supervisor.start_child(
-      Hybridsocial.Federation.DeliveryTaskSupervisor,
-      fn ->
-        for option <- options do
-          activity =
-            Hybridsocial.Federation.ActivityBuilder.build_poll_vote(identity, post, option)
+    Hybridsocial.Federation.deliver_async(fn ->
+      for option <- options do
+        activity =
+          Hybridsocial.Federation.ActivityBuilder.build_poll_vote(identity, post, option)
 
-          Hybridsocial.Federation.Publisher.publish(activity, identity)
-        end
+        Hybridsocial.Federation.Publisher.publish(activity, identity)
       end
-    )
+    end)
 
     :ok
   end

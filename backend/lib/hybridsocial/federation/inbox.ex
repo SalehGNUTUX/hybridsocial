@@ -170,18 +170,15 @@ defmodule Hybridsocial.Federation.Inbox do
     inbox_url = remote_identity.inbox_url || derive_inbox_url(remote_identity)
 
     if is_binary(inbox_url) and inbox_url != "" do
-      Task.Supervisor.start_child(
-        Hybridsocial.Federation.DeliveryTaskSupervisor,
-        fn ->
-          case Hybridsocial.Federation.Publisher.deliver(accept, inbox_url, local_identity) do
-            {:ok, _} ->
-              Logger.info("Accept{Follow} delivered to #{inbox_url}")
+      Hybridsocial.Federation.deliver_async(fn ->
+        case Hybridsocial.Federation.Publisher.deliver(accept, inbox_url, local_identity) do
+          {:ok, _} ->
+            Logger.info("Accept{Follow} delivered to #{inbox_url}")
 
-            {:error, reason} ->
-              Logger.warning("Accept{Follow} delivery failed to #{inbox_url}: #{inspect(reason)}")
-          end
+          {:error, reason} ->
+            Logger.warning("Accept{Follow} delivery failed to #{inbox_url}: #{inspect(reason)}")
         end
-      )
+      end)
     else
       Logger.warning("No inbox URL for #{remote_identity.ap_actor_url} — Accept not delivered")
     end

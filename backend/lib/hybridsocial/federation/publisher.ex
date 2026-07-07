@@ -267,12 +267,9 @@ defmodule Hybridsocial.Federation.Publisher do
     # Deliver directly via Task.Supervisor for reliability
     Logger.info("Federation delivery queued for #{delivery.target_inbox}")
 
-    Task.Supervisor.start_child(
-      Hybridsocial.Federation.DeliveryTaskSupervisor,
-      fn ->
-        process_delivery(activity, delivery, identity)
-      end
-    )
+    Hybridsocial.Federation.deliver_async(fn ->
+      process_delivery(activity, delivery, identity)
+    end)
   end
 
   defp process_delivery(activity, delivery, identity) do

@@ -27,8 +27,18 @@ defmodule Hybridsocial.FeedsTest do
       post_type: "text"
     }
 
+    # Mirror Posts.create_post: create_changeset never casts published_at
+    # (it's stamped separately), so a raw insert leaves it nil and the
+    # post is filtered out of every timeline as "unpublished". Stamp it
+    # (and last_activity_at) here so these helper posts behave like real
+    # published posts. Tests wanting a scheduled/unpublished post pass
+    # published_at: nil explicitly.
+    now = DateTime.utc_now()
+
     %Post{}
     |> Post.create_changeset(Map.merge(defaults, attrs))
+    |> Ecto.Changeset.put_change(:published_at, Map.get(attrs, :published_at, now))
+    |> Ecto.Changeset.put_change(:last_activity_at, Map.get(attrs, :last_activity_at, now))
     |> Repo.insert!()
   end
 
@@ -404,10 +414,15 @@ defmodule Hybridsocial.FeedsTest do
       refute Visibility.visible_to?(post, nil)
     end
 
-    test "group visibility returns true (stub)" do
+    test "group visibility is visible to group members" do
+      # visible_to? for group posts is no longer a stub — it checks real
+      # membership (Groups.member?). A group post with a group the viewer
+      # belongs to is visible; one with no group_id is not.
       alice = create_user("alice_grp", "alice_grp@example.com")
       bob = create_user("bob_grp", "bob_grp@example.com")
-      post = create_post(alice, %{visibility: "group"})
+      {:ok, group} = Hybridsocial.Groups.create_group(alice.id, %{"name" => "Grp"})
+      {:ok, _} = Hybridsocial.Groups.join_group(group.id, bob.id)
+      post = create_post(alice, %{visibility: "group", group_id: group.id})
 
       assert Visibility.visible_to?(post, bob.id)
     end

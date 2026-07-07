@@ -11,6 +11,30 @@ defmodule Hybridsocial.Federation do
   # How long before we re-fetch a remote actor (24 hours)
   @stale_after_seconds 86_400
 
+  @doc """
+  Spawn a fire-and-forget ActivityPub delivery task on the
+  `DeliveryTaskSupervisor`, unless federation delivery is disabled.
+
+  In the test env (`federation_delivery_enabled: false`) this no-ops:
+  the delivery closures do `Repo` work and outlive the test, so once the
+  test checks its SQL-sandbox connection back in they crash with a
+  `DBConnection.OwnershipError`. Tests that specifically exercise
+  delivery flip the flag on. Defaults to enabled, so prod is unchanged.
+
+  Returns `:ok` when disabled so callers stay fire-and-forget.
+  """
+  def deliver_async(fun) when is_function(fun, 0) do
+    if delivery_enabled?() do
+      Task.Supervisor.start_child(Hybridsocial.Federation.DeliveryTaskSupervisor, fun)
+    else
+      :ok
+    end
+  end
+
+  @doc "Whether async federation delivery should actually run (off in tests)."
+  def delivery_enabled?,
+    do: Application.get_env(:hybridsocial, :federation_delivery_enabled, true)
+
   # --- Remote Actor Cache ---
 
   @doc """

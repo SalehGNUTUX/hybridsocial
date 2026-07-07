@@ -149,7 +149,10 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
   # we lift hashtags out of the source *before* Earmark runs, swap in
   # a marker that has no markdown-special characters, then splice the
   # rendered anchors back in after sanitization.
-  @hashtag_re ~r/(^|[^\p{L}\p{M}\p{N}_>"\/])#(\p{L}[\p{L}\p{M}\p{N}_]{0,100})/u
+  # The prefix class also excludes `[` so a hashtag used as markdown link
+  # text — `[#tag](url)` — is left for Earmark to render as the link; stashing
+  # it would splice a `/tags/…` anchor inside the link's <a>, nesting anchors.
+  @hashtag_re ~r/(^|[^\p{L}\p{M}\p{N}_>"\/\[])#(\p{L}[\p{L}\p{M}\p{N}_]{0,100})/u
 
   defp stash_hashtags(text) do
     # Walk the regex matches in order, replacing each `prefix#tag`

@@ -49,7 +49,7 @@ defmodule Hybridsocial.Emails.Defaults do
   defp login_notification_subject, do: "{{instance_name}} — new login to your account"
 
   defp notification_digest_subject,
-    do: "{{instance_name}} — you have {{count}} new notifications"
+    do: "{{instance_name}} — you have {{count}} new {{noun}}"
 
   defp account_approved_subject, do: "{{instance_name}} — your account is approved"
   defp account_rejected_subject, do: "{{instance_name}} — your account application"
@@ -192,7 +192,7 @@ defmodule Hybridsocial.Emails.Defaults do
   defp notification_digest_html do
     content = """
     <h1 style="margin:0 0 16px 0;font-size:20px;font-weight:700;">Your {{instance_name}} digest</h1>
-    <p style="margin:0 0 16px 0;">Hi @{{user.handle}}, you have {{count}} new notifications:</p>
+    <p style="margin:0 0 16px 0;">Hi @{{user.handle}}, you have {{count}} new {{noun}}:</p>
     {{summary_html}}
     #{button("Open {{instance_name}}", "{{app_url}}")}
     """

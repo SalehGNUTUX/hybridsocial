@@ -99,9 +99,11 @@ defmodule HybridsocialWeb.Api.V1.ExportControllerTest do
         |> auth_conn(identity)
         |> post("/api/v1/import", %{"type" => "follows", "data" => csv_data})
 
+      # import_follows is async now: it queues the handles and returns
+      # {queued, started}; the actual follows happen in a background task.
       response = json_response(conn, 200)
-      assert response["imported"] == 1
-      assert response["failed"] == 1
+      assert response["queued"] == 2
+      assert response["started"] == true
     end
   end
 end

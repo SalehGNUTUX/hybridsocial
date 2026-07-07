@@ -107,7 +107,9 @@ defmodule Hybridsocial.Accounts.User do
     |> validate_length(:email, max: 254)
     |> update_change(:email, &String.downcase/1)
     |> put_email_hash()
-    |> unique_constraint(:email_hash, name: :users_email_hash_index)
+    # Surface the uniqueness error on :email (the field the API/UI knows)
+    # rather than :email_hash (the internal blind index it's enforced on).
+    |> unique_constraint(:email, name: :users_email_hash_index)
   end
 
   # Blind index of the (normalized) email — the searchable/unique key.

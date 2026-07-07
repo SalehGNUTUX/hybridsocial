@@ -199,10 +199,18 @@ defmodule HybridsocialWeb.CrawlerController do
   # ---------------------------------------------------------------------------
 
   defp public_posts_query do
+    # Local posts only, keyed off the author's is_local flag. We can NOT
+    # use is_nil(ap_id): every local post is stamped with a self-hosted
+    # ap_id at creation, so that check excluded the whole local corpus and
+    # left the sitemap permanently empty. Also drop unpublished
+    # (scheduled/draft) and admin-hidden posts — they're not crawlable.
     Post
+    |> join(:inner, [p], i in Hybridsocial.Accounts.Identity, on: i.id == p.identity_id)
     |> where([p], p.visibility == "public")
     |> where([p], is_nil(p.deleted_at))
-    |> where([p], is_nil(p.ap_id))
+    |> where([p], is_nil(p.hidden_at))
+    |> where([p], not is_nil(p.published_at))
+    |> where([_p, i], i.is_local == true)
   end
 
   defp discoverable_profiles_query do
