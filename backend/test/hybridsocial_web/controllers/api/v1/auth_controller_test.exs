@@ -153,6 +153,15 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
         |> post("/api/v1/auth/logout")
 
       assert json_response(conn, 200)["message"] == "auth.logged_out"
+
+      # The access token must stop working immediately after logout — the
+      # auth plug enforces revocation on top of the (still-unexpired) JWT.
+      me_conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/auth/me")
+
+      assert json_response(me_conn, 401)["error"] == "auth.unauthorized"
     end
   end
 

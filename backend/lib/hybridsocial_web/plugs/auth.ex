@@ -16,6 +16,7 @@ defmodule HybridsocialWeb.Plugs.Auth do
 
     with {:ok, token} <- extract_token(conn),
          {:ok, claims} <- Token.verify_access_token(token),
+         true <- session_active?(token),
          identity when not is_nil(identity) <- fetch_identity(claims["sub"]) do
       # Update last activity (async, throttled via cache)
       token_hash = Token.hash_token(token)
@@ -27,6 +28,28 @@ defmodule HybridsocialWeb.Plugs.Auth do
     else
       _ ->
         conn
+    end
+  end
+
+  # Enforce server-side revocation on top of the stateless JWT: a token
+  # whose oauth_tokens row was revoked (logout / revoke session / revoke
+  # all devices) or has no live row must stop working, even though the JWT
+  # itself can't be un-issued. Positive-cached in Valkey so the common
+  # path stays DB-free; revocation invalidates the key for instant effect.
+  defp session_active?(token) do
+    token_hash = Token.hash_token(token)
+
+    case TokenCache.session_active_cached(token_hash) do
+      true ->
+        true
+
+      _ ->
+        if Hybridsocial.Auth.access_token_active?(token_hash) do
+          TokenCache.cache_session_active(token_hash)
+          true
+        else
+          false
+        end
     end
   end
 

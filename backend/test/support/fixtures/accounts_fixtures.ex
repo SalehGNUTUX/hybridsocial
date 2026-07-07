@@ -88,6 +88,20 @@ defmodule Hybridsocial.AccountsFixtures do
   @doc "Attach a bearer access token for `identity` to the conn."
   def auth_conn(conn, identity) do
     {:ok, token, _} = Token.generate_access_token(identity.id)
+    now = DateTime.utc_now()
+
+    # Real login persists an oauth_tokens row per access token, and the auth
+    # plug now enforces revocation by requiring a live, non-revoked row — so
+    # a bare JWT with no row 401s. Mirror login and create the row.
+    %OAuthToken{}
+    |> OAuthToken.changeset(%{
+      identity_id: identity.id,
+      token_hash: Token.hash_token(token),
+      scopes: ["read", "write"],
+      expires_at: DateTime.add(now, Token.access_token_ttl(), :second)
+    })
+    |> Repo.insert!()
+
     Plug.Conn.put_req_header(conn, "authorization", "Bearer #{token}")
   end
 

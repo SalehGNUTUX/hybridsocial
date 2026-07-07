@@ -153,24 +153,26 @@ defmodule Hybridsocial.FeedsTest do
       bob = create_user("bob_page", "bob_page@example.com")
       create_follow(alice, bob)
 
-      post1 = create_post(bob, %{content: "Post 1"})
-      post2 = create_post(bob, %{content: "Post 2"})
+      # The cursor is ordering-based, NOT UUID-based: max_id resolves the
+      # boundary post's sort key (last_activity_at/published_at, id) and
+      # returns rows strictly older than it. So pin distinct timestamps and
+      # assert by recency, not by UUID value (which is random and unrelated
+      # to feed order). See [[feedback_uuid_cursor_pagination]].
+      older = DateTime.add(DateTime.utc_now(), -60, :second)
+      newer = DateTime.utc_now()
+      post1 = create_post(bob, %{content: "Post 1", published_at: older, last_activity_at: older})
+      post2 = create_post(bob, %{content: "Post 2", published_at: newer, last_activity_at: newer})
 
-      # max_id filters by UUID comparison — get all entries first, then verify
-      # that requesting with a specific max_id returns fewer results
-      all_entries = Feeds.home_timeline(alice.id)
-      all_ids = Enum.map(all_entries, fn e -> e.data.id end)
-
+      all_ids = Feeds.home_timeline(alice.id) |> Enum.map(& &1.data.id)
       assert post1.id in all_ids
       assert post2.id in all_ids
 
-      # Using the "larger" UUID as max_id should exclude it
-      [larger, smaller] = Enum.sort([post1.id, post2.id], :desc)
-      entries = Feeds.home_timeline(alice.id, max_id: larger)
-      filtered_ids = Enum.map(entries, fn e -> e.data.id end)
+      # Paginating from the newer post returns strictly-older rows: post1, not post2.
+      filtered_ids =
+        Feeds.home_timeline(alice.id, max_id: post2.id) |> Enum.map(& &1.data.id)
 
-      assert smaller in filtered_ids
-      refute larger in filtered_ids
+      assert post1.id in filtered_ids
+      refute post2.id in filtered_ids
     end
 
     test "respects limit option" do

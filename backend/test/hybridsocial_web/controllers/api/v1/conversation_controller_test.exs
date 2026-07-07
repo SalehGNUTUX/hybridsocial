@@ -1,19 +1,16 @@
 defmodule HybridsocialWeb.Api.V1.ConversationControllerTest do
   use HybridsocialWeb.ConnCase, async: false
 
-  alias Hybridsocial.Auth.Token
   alias Hybridsocial.Messaging
 
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
 
-  defp authenticate(conn, identity) do
-    {:ok, access_token, _claims} = Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{access_token}")
-  end
+  # Delegate to the shared fixture so the access token gets a live
+  # oauth_tokens row — the auth plug now enforces revocation and 401s a
+  # bare JWT with no session row.
+  defp authenticate(conn, identity), do: auth_conn(conn, identity)
 
   # ---------------------------------------------------------------------------
   # Conversations
