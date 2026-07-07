@@ -46,27 +46,28 @@ defmodule Hybridsocial.Release do
     total = length(ids)
     IO.puts("[backfill] #{total} remote #{if all?, do: "(all)", else: "(missing)"} identities")
 
+    # Concurrent with a hard per-identity budget: most of these 5000+ peers
+    # are dead/slow, and a single unresponsive host would otherwise block a
+    # sequential run for its full connect timeout. async_stream kills any
+    # task past `timeout` (on_timeout: :kill_task) and isolates crashes, so
+    # one bad actor can't stall or abort the batch.
     refreshed =
       ids
-      |> Enum.with_index(1)
-      |> Enum.reduce(0, fn {id, idx}, acc ->
-        # Crash-safe per identity: a raise in one actor fetch (bad URL,
-        # TLS error, unexpected payload) must not abort the whole run.
-        result =
-          try do
-            case Repo.get(Identity, id) do
-              nil -> :error
-              identity -> Inbox.reenrich_remote_identity(identity)
-            end
-          rescue
-            e -> {:error, e}
-          catch
-            kind, reason -> {:error, {kind, reason}}
+      |> Task.async_stream(
+        fn id ->
+          case Repo.get(Identity, id) do
+            nil -> :error
+            identity -> Inbox.reenrich_remote_identity(identity)
           end
-
-        Process.sleep(250)
-        if rem(idx, 25) == 0, do: IO.puts("[backfill]   #{idx}/#{total}")
-        if match?({:ok, _}, result), do: acc + 1, else: acc
+        end,
+        max_concurrency: 20,
+        timeout: 15_000,
+        on_timeout: :kill_task,
+        ordered: false
+      )
+      |> Enum.reduce(0, fn
+        {:ok, {:ok, _}}, acc -> acc + 1
+        _other, acc -> acc
       end)
 
     IO.puts("[backfill] done: #{refreshed}/#{total} refreshed")
