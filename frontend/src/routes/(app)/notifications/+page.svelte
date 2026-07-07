@@ -90,7 +90,10 @@
     try {
       await markAllNotificationsRead();
       items = items.map((n) => ({ ...n, read: true }));
-      setNotifications(items);
+      // markAllLocal (rather than setNotifications) so the read-all
+      // also broadcasts to sibling tabs — see cross-tab sync in
+      // stores/notifications.ts (issue #8).
+      markAllLocal();
     } catch {
       // Handle error silently
     }

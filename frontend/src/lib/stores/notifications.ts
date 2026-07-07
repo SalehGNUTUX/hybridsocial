@@ -23,6 +23,115 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let onlineListener: (() => void) | null = null;
 
+// ---------------------------------------------------------------------------
+// Cross-tab sync (issue #8)
+//
+// Every tab holds its own SSE connection and its own in-memory copy of this
+// store, so *arriving* notifications fan out fine — but read-state doesn't.
+// Opening /notifications in tab A clears the badge there and flips the
+// server-side flags, while tab B keeps showing a stale unread count until a
+// full reload. Same for clicking a single notification.
+//
+// A BroadcastChannel mirrors the three mutations that matter across tabs:
+//   add       — a notification arrived (fallback for tabs whose SSE the
+//               browser killed while hidden; duplicates are dropped by id)
+//   read      — one notification was marked read
+//   read-all  — the badge was cleared (page visit or "mark all read")
+//
+// Receivers apply the mutation *without* re-broadcasting — a receiver that
+// echoed the message back out would bounce it between tabs forever.
+// ---------------------------------------------------------------------------
+type SyncMessage =
+  | { type: 'add'; notification: Notification }
+  | { type: 'read'; id: string }
+  | { type: 'read-all' };
+
+const SYNC_CHANNEL_NAME = 'hybridsocial:notifications';
+let syncChannel: BroadcastChannel | null = null;
+
+function broadcast(msg: SyncMessage): void {
+  try {
+    syncChannel?.postMessage(msg);
+  } catch {
+    // Channel closed mid-flight (tab tearing down) — nothing to sync.
+  }
+}
+
+function openSyncChannel(): void {
+  if (syncChannel || typeof BroadcastChannel === 'undefined') return;
+  syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+  syncChannel.onmessage = (event: MessageEvent<SyncMessage>) => {
+    const msg = event.data;
+    if (!msg || typeof msg !== 'object') return;
+    switch (msg.type) {
+      case 'add':
+        // Shape-check before touching the store: BroadcastChannel is
+        // same-origin only, so this isn't a trust boundary — but a
+        // malformed message from a future caller shouldn't throw here
+        // or corrupt the badge.
+        if (!msg.notification || typeof msg.notification !== 'object'
+          || typeof msg.notification.id !== 'string') return;
+        // No sound here — if this tab's SSE is alive it already played
+        // (and deduped); if the SSE is dead the tab is almost certainly
+        // hidden, and a bell from a background tab is just confusing.
+        applyAdd(msg.notification);
+        break;
+      case 'read':
+        if (typeof msg.id !== 'string') return;
+        applyRead(msg.id);
+        break;
+      case 'read-all':
+        applyReadAll();
+        break;
+    }
+  };
+}
+
+function closeSyncChannel(): void {
+  if (syncChannel) {
+    syncChannel.close();
+    syncChannel = null;
+  }
+}
+
+// Store mutations, shared by local callers and the sync receiver.
+// Deliberately broadcast-free — the exported wrappers below broadcast.
+
+function applyAdd(notification: Notification): void {
+  notificationStore.update((s) => {
+    // Dedupe by id: with one SSE stream per tab, the same notification
+    // can reach a tab twice (own SSE + another tab's broadcast).
+    if (s.items.some((n) => n.id === notification.id)) return s;
+    return {
+      items: [notification, ...s.items],
+      unreadCount: notification.read ? s.unreadCount : s.unreadCount + 1,
+      loading: s.loading
+    };
+  });
+}
+
+function applyRead(id: string): void {
+  notificationStore.update((s) => {
+    const item = s.items.find((n) => n.id === id);
+    // Already read locally (e.g. this tab's markAllLocal ran first) —
+    // don't decrement the badge a second time.
+    if (item?.read) return s;
+    return {
+      items: s.items.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      unreadCount: Math.max(0, s.unreadCount - 1),
+      loading: s.loading
+    };
+  });
+}
+
+function applyReadAll(): void {
+  notificationStore.update((s) => ({
+    items: s.items.map((n) => ({ ...n, read: true })),
+    unreadCount: 0,
+    loading: s.loading
+  }));
+}
+
 // EventSource fires `onerror` for any transient blip — tab going to
 // background, browser cell-network handoff, server graceful restart,
 // SPA navigation. None of those are "the server is down". The banner
@@ -134,19 +243,15 @@ export async function hydrateUnreadCount(): Promise<void> {
 }
 
 export function addNotification(notification: Notification): void {
-  notificationStore.update((s) => ({
-    items: [notification, ...s.items],
-    unreadCount: notification.read ? s.unreadCount : s.unreadCount + 1,
-    loading: s.loading
-  }));
+  applyAdd(notification);
+  // Fallback path for sibling tabs whose SSE the browser paused while
+  // hidden — tabs with a live stream drop the duplicate by id.
+  broadcast({ type: 'add', notification });
 }
 
 export function markRead(id: string): void {
-  notificationStore.update((s) => ({
-    items: s.items.map((n) => (n.id === id ? { ...n, read: true } : n)),
-    unreadCount: Math.max(0, s.unreadCount - 1),
-    loading: s.loading
-  }));
+  applyRead(id);
+  broadcast({ type: 'read', id });
 }
 
 /**
@@ -157,11 +262,8 @@ export function markRead(id: string): void {
  * items the user hasn't clicked individually.
  */
 export function markAllLocal(): void {
-  notificationStore.update((s) => ({
-    items: s.items.map((n) => ({ ...n, read: true })),
-    unreadCount: 0,
-    loading: s.loading,
-  }));
+  applyReadAll();
+  broadcast({ type: 'read-all' });
 }
 
 export function clearAll(): void {
@@ -172,6 +274,7 @@ export function connectNotificationStream(apiBase: string): void {
   if (!browser) return;
   stopReconnectTimer();
   closeEventSource();
+  openSyncChannel();
 
   // Listen once for the browser's "back online" event — as soon as
   // the OS reports connectivity we retry immediately instead of
@@ -214,6 +317,11 @@ export function connectNotificationStream(apiBase: string): void {
         reconnectAttempts = 0;
         connectNotificationStream(apiBase);
         scheduleOfflineFlip();
+        // The stream was down while we were hidden, so anything that
+        // fired in the meantime was missed — and if the page was frozen,
+        // BroadcastChannel messages from sibling tabs were missed too.
+        // Pull the authoritative unread count so the badge catches up.
+        hydrateUnreadCount();
       }
     };
     document.addEventListener('visibilitychange', visibilityListener);
@@ -284,6 +392,7 @@ function closeEventSource(): void {
 export function disconnectNotificationStream(): void {
   stopReconnectTimer();
   closeEventSource();
+  closeSyncChannel();
   if (offlineGraceTimer) {
     clearTimeout(offlineGraceTimer);
     offlineGraceTimer = null;
