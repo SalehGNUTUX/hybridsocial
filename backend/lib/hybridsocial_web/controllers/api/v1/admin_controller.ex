@@ -3064,6 +3064,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       display_name: identity.display_name,
       bio: identity.bio,
       avatar_url: identity.avatar_url,
+      header_url: identity.header_url,
       type: HybridsocialWeb.Helpers.Account.api_type(identity.type),
       domain: domain,
       is_local: is_local,

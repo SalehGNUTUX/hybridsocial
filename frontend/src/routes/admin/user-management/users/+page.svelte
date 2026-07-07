@@ -89,6 +89,9 @@
   let profileDisplayName = $state('');
   let profileBio = $state('');
   let profileSubmitting = $state(false);
+  // Which profile image is mid-clear (null = none), so we can disable just
+  // that button and show its spinner.
+  let profileMediaClearing = $state<null | 'avatar_url' | 'header_url'>(null);
 
   const tierOptions: { value: string; label: string; description: string }[] = [
     { value: 'free', label: 'Free (L0)', description: 'Default — unverified account' },
@@ -568,6 +571,29 @@
       addToast(e?.message || 'Failed to update profile', 'error');
     } finally {
       profileSubmitting = false;
+    }
+  }
+
+  // Clear a user's avatar or header (hero) image. Sends null for the one
+  // field so display_name/bio are untouched, then reflects the change in
+  // both the open modal and the table row (which renders the avatar).
+  async function handleClearProfileMedia(field: 'avatar_url' | 'header_url') {
+    if (!profileTarget) return;
+    const label = field === 'avatar_url' ? 'Profile picture' : 'Banner';
+    profileMediaClearing = field;
+    try {
+      const res = await editUserProfile(profileTarget.id, { [field]: null });
+      const updated = (res as any).data as AdminUser | undefined;
+      const targetId = profileTarget.id;
+      profileTarget = { ...profileTarget, [field]: updated?.[field] ?? null };
+      users = users.map((u) =>
+        u.id === targetId ? { ...u, [field]: updated?.[field] ?? null } : u,
+      );
+      addToast(`${label} cleared for @${profileTarget.handle}`, 'success');
+    } catch (e: any) {
+      addToast(e?.message || `Failed to clear ${label.toLowerCase()}`, 'error');
+    } finally {
+      profileMediaClearing = null;
     }
   }
 
@@ -1184,6 +1210,41 @@
         placeholder="(none)"
       ></textarea>
     </div>
+    <div class="form-group">
+      <span class="form-label">Profile images</span>
+      <div class="media-clear-row">
+        {#if profileTarget.avatar_url}
+          <img src={profileTarget.avatar_url} alt="" class="media-clear-thumb media-clear-avatar" />
+        {:else}
+          <span class="media-clear-empty">none</span>
+        {/if}
+        <span class="media-clear-label">Profile picture</span>
+        <button
+          class="btn btn-sm btn-danger"
+          type="button"
+          disabled={!profileTarget.avatar_url || profileMediaClearing !== null}
+          onclick={() => handleClearProfileMedia('avatar_url')}
+        >
+          {profileMediaClearing === 'avatar_url' ? 'Clearing…' : 'Clear'}
+        </button>
+      </div>
+      <div class="media-clear-row">
+        {#if profileTarget.header_url}
+          <img src={profileTarget.header_url} alt="" class="media-clear-thumb media-clear-header" />
+        {:else}
+          <span class="media-clear-empty">none</span>
+        {/if}
+        <span class="media-clear-label">Banner (hero)</span>
+        <button
+          class="btn btn-sm btn-danger"
+          type="button"
+          disabled={!profileTarget.header_url || profileMediaClearing !== null}
+          onclick={() => handleClearProfileMedia('header_url')}
+        >
+          {profileMediaClearing === 'header_url' ? 'Clearing…' : 'Clear'}
+        </button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" type="button" onclick={() => (profileModalOpen = false)}>Cancel</button>
       <button
@@ -1441,6 +1502,53 @@
 <style>
   .users-page {
     max-width: 1200px;
+  }
+
+  /* Clear-avatar / clear-banner rows in the Edit Profile modal. */
+  .media-clear-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 0.75rem);
+    padding: var(--space-2, 0.5rem) 0;
+  }
+
+  .media-clear-thumb {
+    object-fit: cover;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .media-clear-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full, 999px);
+  }
+
+  .media-clear-header {
+    width: 72px;
+    height: 40px;
+    border-radius: var(--radius-md, 0.5rem);
+  }
+
+  .media-clear-empty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md, 0.5rem);
+    background: var(--color-bg-tertiary);
+    border: 1px dashed var(--color-border);
+    color: var(--color-text-tertiary);
+    font-size: var(--text-xs, 0.75rem);
+    flex-shrink: 0;
+  }
+
+  .media-clear-label {
+    flex: 1;
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--color-text-secondary);
   }
 
   .page-header {
