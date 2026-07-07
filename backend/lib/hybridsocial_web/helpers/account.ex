@@ -40,6 +40,33 @@ defmodule HybridsocialWeb.Helpers.Account do
   end
 
   @doc """
+  The host of a remote identity's origin instance, or `nil` for local
+  identities. Used by the frontend both to flag an account as remote and
+  to label the "view on original instance" link.
+  """
+  def remote_domain(%Hybridsocial.Accounts.Identity{is_local: true}), do: nil
+
+  def remote_domain(%Hybridsocial.Accounts.Identity{ap_actor_url: ap_url})
+      when is_binary(ap_url) do
+    host = URI.parse(ap_url).host
+
+    if host in [nil, HybridsocialWeb.Endpoint.host()], do: nil, else: host
+  end
+
+  def remote_domain(_), do: nil
+
+  @doc """
+  The human HTML profile URL to link to for a remote identity (AP `url`,
+  falling back to its AP id), or `nil` for local identities.
+  """
+  def profile_url(%Hybridsocial.Accounts.Identity{is_local: true}), do: nil
+
+  def profile_url(%Hybridsocial.Accounts.Identity{} = identity),
+    do: identity.profile_url || identity.ap_actor_url
+
+  def profile_url(_), do: nil
+
+  @doc """
   Translates the internal identity type to its public API name.
   `"organization"` becomes `"page"`; everything else passes through
   unchanged. Accepts both strings and atoms.
@@ -71,7 +98,12 @@ defmodule HybridsocialWeb.Helpers.Account do
       handle: identity.handle,
       acct: build_acct(identity),
       display_name: identity.display_name,
-      avatar_url: identity.avatar_url
+      avatar_url: identity.avatar_url,
+      # Custom emojis so `:shortcode:` in the display_name renders wherever
+      # an account appears in a list (post author, notifications, etc.).
+      emojis: identity.emojis || [],
+      domain: remote_domain(identity),
+      url: profile_url(identity)
     }
   end
 end

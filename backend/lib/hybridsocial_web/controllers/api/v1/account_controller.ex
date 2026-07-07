@@ -459,6 +459,12 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
       bio_html: Hybridsocial.Accounts.bio_html(identity),
       avatar_url: identity.avatar_url,
       header_url: identity.header_url,
+      # Custom emojis (from the remote actor's tag) for the name/bio, and the
+      # remote origin + link for "view on original instance".
+      emojis: identity.emojis || [],
+      domain: HybridsocialWeb.Helpers.Account.remote_domain(identity),
+      url: HybridsocialWeb.Helpers.Account.profile_url(identity),
+      is_local: identity.is_local,
       is_locked: identity.is_locked,
       is_bot: identity.is_bot,
       is_admin: identity.is_admin,

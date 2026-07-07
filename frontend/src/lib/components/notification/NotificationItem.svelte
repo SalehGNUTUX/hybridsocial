@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Notification } from '$lib/api/types.js';
   import { relativeTime } from '$lib/utils/time.js';
+  import DisplayName from '$lib/components/DisplayName.svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import { premiumCatalog, ensurePremiumCatalog } from '$lib/stores/reaction-catalog.js';
 
@@ -220,7 +221,7 @@
 
   <div class="notification-body">
     <p class="notification-text">
-      <a href="/@{notification.account.handle}" class="notification-actor-name" onclick={stopBubble}>{actorName}</a>
+      <a href="/@{notification.account.handle}" class="notification-actor-name" onclick={stopBubble}><DisplayName name={actorName} emojis={notification.account.emojis} /></a>
       {description}
     </p>
 

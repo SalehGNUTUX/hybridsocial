@@ -30,6 +30,11 @@ defmodule Hybridsocial.Accounts.Identity do
     field :header_url, :string
     field :display_name, :string
     field :bio, :string
+    # Custom emoji manifest mirrored from a remote actor's AP `tag`, used to
+    # render `:shortcode:` in the display_name/bio. Empty for local users.
+    field :emojis, {:array, :map}, default: []
+    # Remote actor's human HTML profile URL (AP `url`), for "view on original".
+    field :profile_url, :string
     field :metadata, :map, default: %{}
     field :is_locked, :boolean, default: false
     # Who can invite this identity into a group or organization

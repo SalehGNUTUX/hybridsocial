@@ -1072,6 +1072,8 @@ defmodule Hybridsocial.Federation.Inbox do
           bio: profile[:bio],
           avatar_url: profile[:avatar_url],
           header_url: profile[:header_url],
+          emojis: profile[:emojis] || [],
+          profile_url: profile[:profile_url] || identity.profile_url,
           inbox_url: profile[:inbox_url] || identity.inbox_url,
           outbox_url: profile[:outbox_url] || identity.outbox_url,
           followers_url: profile[:followers_url] || identity.followers_url
@@ -1082,6 +1084,33 @@ defmodule Hybridsocial.Federation.Inbox do
         {:ok, identity}
     end
   end
+
+  @doc """
+  Re-fetch a remote actor and refresh its profile fields, including the
+  `emojis` and `profile_url` columns that older federated rows predate.
+  Used by the one-off backfill task. No-op for local identities and on a
+  failed fetch (keeps existing values).
+  """
+  def reenrich_remote_identity(%Identity{is_local: false} = identity) do
+    case fetch_remote_actor_profile(identity.ap_actor_url) do
+      %{display_name: name} = profile when is_binary(name) ->
+        identity
+        |> Ecto.Changeset.change(%{
+          display_name: profile[:display_name] || identity.display_name,
+          bio: profile[:bio] || identity.bio,
+          avatar_url: profile[:avatar_url] || identity.avatar_url,
+          header_url: profile[:header_url] || identity.header_url,
+          emojis: profile[:emojis] || [],
+          profile_url: profile[:profile_url] || identity.profile_url
+        })
+        |> Repo.update()
+
+      _ ->
+        {:ok, identity}
+    end
+  end
+
+  def reenrich_remote_identity(identity), do: {:ok, identity}
 
   defp create_remote_identity(ap_id) do
     domain = ActivityMapper.extract_domain(ap_id)
@@ -1103,6 +1132,8 @@ defmodule Hybridsocial.Federation.Inbox do
       bio: remote_profile[:bio],
       avatar_url: remote_profile[:avatar_url],
       header_url: remote_profile[:header_url],
+      emojis: remote_profile[:emojis] || [],
+      profile_url: remote_profile[:profile_url],
       inbox_url: remote_profile[:inbox_url] || "#{ap_id}/inbox",
       outbox_url: remote_profile[:outbox_url] || "#{ap_id}/outbox",
       followers_url: remote_profile[:followers_url] || "#{ap_id}/followers"
@@ -1119,6 +1150,8 @@ defmodule Hybridsocial.Federation.Inbox do
       :bio,
       :avatar_url,
       :header_url,
+      :emojis,
+      :profile_url,
       :inbox_url,
       :outbox_url,
       :followers_url
@@ -1252,6 +1285,10 @@ defmodule Hybridsocial.Federation.Inbox do
       bio: actor["summary"],
       avatar_url: get_in(actor, ["icon", "url"]),
       header_url: get_in(actor, ["image", "url"]),
+      # Custom emoji manifest for the display_name/bio, and the human HTML
+      # profile URL (for "view on original instance").
+      emojis: ActivityMapper.extract_emojis(actor["tag"]),
+      profile_url: ActivityMapper.normalize_profile_url(actor["url"]),
       inbox_url: actor["inbox"],
       outbox_url: actor["outbox"],
       followers_url: actor["followers"]

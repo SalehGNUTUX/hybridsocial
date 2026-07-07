@@ -4,6 +4,7 @@
   import { search } from '$lib/api/search.js';
   import { api } from '$lib/api/client.js';
   import Tabs from '$lib/components/ui/Tabs.svelte';
+  import DisplayName from '$lib/components/DisplayName.svelte';
   import FeedList from '$lib/components/feed/FeedList.svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -162,7 +163,7 @@
               <a href="/{account.acct || account.handle}" class="account-item">
                 <Avatar src={account.avatar_url} name={account.display_name || account.acct || account.handle} size="md" />
                 <div class="account-info">
-                  <span class="account-name">{account.display_name || account.acct || account.handle}</span>
+                  <span class="account-name"><DisplayName name={account.display_name || account.acct || account.handle} emojis={account.emojis} /></span>
                   <span class="account-handle">@{account.acct || account.handle}</span>
                   {#if account.bio}
                     <p class="account-bio">{@html account.bio}</p>

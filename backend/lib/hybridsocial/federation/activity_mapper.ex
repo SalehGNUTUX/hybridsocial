@@ -94,10 +94,24 @@ defmodule Hybridsocial.Federation.ActivityMapper do
   # "https://example/emoji/blob_smile.png", "static_url" => ...}`.
   # Strips surrounding colons from `name` and drops entries missing
   # an image URL (some peers ship malformed Emoji objects).
-  defp extract_emojis(nil), do: []
-  defp extract_emojis(tag) when is_list(tag), do: Enum.flat_map(tag, &emoji_entry/1)
-  defp extract_emojis(tag) when is_map(tag), do: emoji_entry(tag)
-  defp extract_emojis(_), do: []
+  @doc """
+  Pull custom-emoji entries out of an AP `tag` value (a list, a single map,
+  or nil), normalized to `%{"shortcode" => _, "url" => _, "static_url" => _}`.
+  Shared by post ingest (`to_post/1`) and actor ingest (profile emojis).
+  """
+  def extract_emojis(nil), do: []
+  def extract_emojis(tag) when is_list(tag), do: Enum.flat_map(tag, &emoji_entry/1)
+  def extract_emojis(tag) when is_map(tag), do: emoji_entry(tag)
+  def extract_emojis(_), do: []
+
+  @doc """
+  Best-effort normalization of an AP actor `url` (which may be a string, a
+  Link object, or a list of them) into a single http(s) URL string, or nil.
+  """
+  def normalize_profile_url(url) when is_binary(url), do: if(http_url?(url), do: url, else: nil)
+  def normalize_profile_url(%{"href" => href}), do: normalize_profile_url(href)
+  def normalize_profile_url([first | _]), do: normalize_profile_url(first)
+  def normalize_profile_url(_), do: nil
 
   defp emoji_entry(%{"type" => "Emoji", "name" => name} = tag) when is_binary(name) do
     shortcode = name |> String.trim() |> String.trim(":")

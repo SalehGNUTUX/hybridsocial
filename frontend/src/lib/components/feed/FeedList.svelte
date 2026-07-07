@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { Post, FeedEntry, BoostEntry } from '$lib/api/types.js';
+  import DisplayName from '$lib/components/DisplayName.svelte';
   import PostCard from '$lib/components/post/PostCard.svelte';
   import SkeletonPost from './SkeletonPost.svelte';
   import { matchFilters } from '$lib/stores/content-filters.js';
@@ -212,7 +213,7 @@
         {#if boost}
           <div class="boost-label">
             <span class="material-symbols-outlined boost-icon">cached</span>
-            <span>{boost.account?.display_name || boost.account?.handle || 'Someone'} boosted</span>
+            <span><DisplayName name={boost.account?.display_name || boost.account?.handle || 'Someone'} emojis={boost.account?.emojis} /> boosted</span>
           </div>
         {/if}
         <PostCard {post} {compact} {filterContext} {viewerContext} />

@@ -9,6 +9,8 @@
   import RoleBadge from '$lib/components/ui/RoleBadge.svelte';
   import AccountTypeIndicator from '$lib/components/ui/AccountTypeIndicator.svelte';
   import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
+  import DisplayName from '$lib/components/DisplayName.svelte';
+  import { renderCustomEmojis } from '$lib/utils/custom-emoji.js';
   import { filterBadges, type Badge } from '$lib/utils/badges.js';
 
   import type { Snippet } from 'svelte';
@@ -240,7 +242,9 @@
 
     <div class="profile-identity">
       <h1 class="profile-display-name">
-        <span class="profile-display-name-text">{account.display_name || account.handle}</span>
+        <span class="profile-display-name-text">
+          <DisplayName name={account.display_name} fallback={account.handle} emojis={account.emojis} />
+        </span>
         <span class="profile-badges">
           {#if badgeView.showVerifiedMark}
             <VerifiedBadge size="md" />
@@ -258,12 +262,27 @@
       {#if relationship?.followed_by && !isOwnProfile}
         <span class="follows-you-badge">Follows you</span>
       {/if}
+      {#if account.domain && account.url}
+        <a
+          class="profile-remote-link"
+          href={account.url}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          title={`View this profile on ${account.domain}`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+          View on {account.domain}
+        </a>
+      {/if}
     </div>
 
     {#if account.bio_html}
       <!-- bio_html is server-sanitized via HtmlSanitizeEx.basic_html
-           (remote bios) or escaped + nl→<br> (local plaintext bios). -->
-      <div class="profile-bio">{@html account.bio_html}</div>
+           (remote bios) or escaped + nl→<br> (local plaintext bios), then
+           custom `:shortcode:` emojis are swapped in from the actor manifest. -->
+      <div class="profile-bio">{@html renderCustomEmojis(account.bio_html, account.emojis)}</div>
     {:else if account.bio}
       <p class="profile-bio">{account.bio}</p>
     {/if}
@@ -538,6 +557,21 @@
   .profile-handle {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
+  }
+
+  .profile-remote-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    margin-block-start: 2px;
+    font-size: var(--text-sm);
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .profile-remote-link:hover {
+    text-decoration: underline;
   }
 
   .follows-you-badge {

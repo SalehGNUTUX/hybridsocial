@@ -569,3 +569,17 @@ a.mention:hover,
 a.hashtag:hover {
   text-decoration: underline;
 }
+
+/* Custom (federated) emoji images. Rendered inline wherever a display
+   name, bio, or other text references a `:shortcode:` we have a manifest
+   for. PostCard keeps a slightly larger post-content-scoped rule; this is
+   the baseline used by names, bios, hover cards, notifications, etc. */
+img.custom-emoji {
+  display: inline-block;
+  height: 1.2em;
+  width: auto;
+  max-width: 100%;
+  vertical-align: middle;
+  margin: 0 1px;
+  object-fit: contain;
+}

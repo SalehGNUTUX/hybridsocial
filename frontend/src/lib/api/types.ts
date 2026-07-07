@@ -40,6 +40,9 @@ export interface Identity {
   /** Server-rendered safe HTML for the bio. Remote bios go through
    *  HtmlSanitizeEx.basic_html; local bios are escaped + nl→<br>. */
   bio_html?: string | null;
+  /** Custom emojis (from a remote actor's tag) referenced by
+   *  `:shortcode:` in the display_name/bio. Empty/absent for locals. */
+  emojis?: PostEmoji[];
   avatar_url: string | null;
   header_url: string | null;
   is_locked: boolean;

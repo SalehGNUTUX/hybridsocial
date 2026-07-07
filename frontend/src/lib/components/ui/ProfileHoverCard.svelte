@@ -4,6 +4,7 @@
   import { get } from 'svelte/store';
   import type { Identity, Relationship } from '$lib/api/types.js';
   import AccountTypeIndicator from '$lib/components/ui/AccountTypeIndicator.svelte';
+  import DisplayName from '$lib/components/DisplayName.svelte';
   import {
     follow as apiFollow,
     unfollow as apiUnfollow,
@@ -175,7 +176,7 @@
         <div class="hc-info">
           <div class="hc-name-row">
             <a href="/@{account.handle}" class="hc-name-link" onclick={(e) => e.stopPropagation()}>
-              <div class="hc-name">{account.display_name || account.handle}</div>
+              <div class="hc-name"><DisplayName name={account.display_name} fallback={account.handle} emojis={account.emojis} /></div>
               <AccountTypeIndicator account={account} />
             </a>
             {#if !isOwnAccount}

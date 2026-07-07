@@ -17,6 +17,7 @@
   import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
   import { stripTrailingHashtags } from '$lib/utils/hashtag-footer.js';
   import { renderCustomEmojis } from '$lib/utils/custom-emoji.js';
+  import DisplayName from '$lib/components/DisplayName.svelte';
   import { filterBadges, type Badge } from '$lib/utils/badges.js';
 
   // Seeded PRNG from post ID for deterministic wave patterns
@@ -688,7 +689,7 @@
         <div class="post-author-info">
           <div class="post-author-name-row">
             <ProfileHoverCard handle={post.account.acct || post.account.handle}>
-              <a href="/@{post.account.handle}" class="post-display-name">{displayName}</a>
+              <a href="/@{post.account.handle}" class="post-display-name"><DisplayName name={displayName} emojis={post.account.emojis} /></a>
             </ProfileHoverCard>
             {#if accountBadgeView.showVerifiedMark}
               <VerifiedBadge size="sm" />

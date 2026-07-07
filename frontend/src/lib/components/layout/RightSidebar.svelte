@@ -5,7 +5,8 @@
   import { getPromotedUsers, getPromotionPricing, purchasePromotion, formatPrice } from '$lib/api/promotions.js';
   import type { PromotedUser, PromotionPricing } from '$lib/api/promotions.js';
   import { getSuggestions, follow, unfollow, unfollowTag, getRelationships } from '$lib/api/accounts.js';
-  import type { Identity } from '$lib/api/types.js';
+  import type { Identity, PostEmoji } from '$lib/api/types.js';
+  import DisplayName from '$lib/components/DisplayName.svelte';
 
   // A person shown in "Recommended Accounts". Merged from promoted
   // users, the server's /suggestions endpoint, and any passed-in prop.
@@ -15,6 +16,7 @@
     acct?: string;
     display_name: string | null;
     avatar_url: string | null;
+    emojis?: PostEmoji[];
     promoted?: boolean;
   }
 
@@ -97,6 +99,7 @@
     acct?: string;
     display_name: string | null;
     avatar_url: string | null;
+    emojis?: PostEmoji[];
     bio: string | null;
     joined_at: string;
   }
@@ -180,7 +183,8 @@
         handle: s.handle,
         acct: s.acct,
         display_name: s.display_name,
-        avatar_url: s.avatar_url
+        avatar_url: s.avatar_url,
+        emojis: s.emojis
       }));
       pricing = pricingData;
       newUsers = newUsersData;
@@ -440,7 +444,7 @@
                 </div>
                 <div class="suggestion-info">
                   <span class="suggestion-name">
-                    {person.display_name}
+                    <DisplayName name={person.display_name} fallback={person.handle} emojis={person.emojis} />
                     {#if person.promoted}
                       <span class="promoted-badge">Promoted</span>
                     {/if}
@@ -484,7 +488,7 @@
                     <img src={user.avatar_url || '/images/default-avatar.svg'} alt="" loading="lazy" class="new-user-img" />
                   </div>
                   <div class="new-user-info">
-                    <span class="new-user-name">{user.display_name || user.handle}</span>
+                    <span class="new-user-name"><DisplayName name={user.display_name} fallback={user.handle} emojis={user.emojis} /></span>
                     <span class="new-user-meta">@{user.acct || user.handle} &middot; {timeAgo(user.joined_at)}</span>
                   </div>
                 </a>

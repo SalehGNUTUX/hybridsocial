@@ -228,4 +228,57 @@ defmodule Hybridsocial.Federation.ActivityMapperTest do
       assert ActivityMapper.extract_domain(nil) == nil
     end
   end
+
+  describe "extract_emojis/1" do
+    test "pulls custom emojis from an actor/post tag list" do
+      tag = [
+        %{"type" => "Mention", "name" => "@bob"},
+        %{
+          "type" => "Emoji",
+          "name" => ":freebsd:",
+          "icon" => %{"type" => "Image", "url" => "https://remote.example/e/freebsd.png"}
+        }
+      ]
+
+      assert ActivityMapper.extract_emojis(tag) == [
+               %{
+                 "shortcode" => "freebsd",
+                 "url" => "https://remote.example/e/freebsd.png",
+                 "static_url" => "https://remote.example/e/freebsd.png"
+               }
+             ]
+    end
+
+    test "drops emoji entries without an http(s) icon url" do
+      tag = [
+        %{"type" => "Emoji", "name" => ":x:", "icon" => %{"url" => "data:image/png;base64,AAA"}}
+      ]
+
+      assert ActivityMapper.extract_emojis(tag) == []
+    end
+
+    test "tolerates nil / non-list tags" do
+      assert ActivityMapper.extract_emojis(nil) == []
+      assert ActivityMapper.extract_emojis("nope") == []
+    end
+  end
+
+  describe "normalize_profile_url/1" do
+    test "keeps an http(s) string" do
+      assert ActivityMapper.normalize_profile_url("https://host/@bob") == "https://host/@bob"
+    end
+
+    test "unwraps a Link object and a list" do
+      assert ActivityMapper.normalize_profile_url(%{"href" => "https://host/@bob"}) ==
+               "https://host/@bob"
+
+      assert ActivityMapper.normalize_profile_url(["https://host/@bob", "x"]) ==
+               "https://host/@bob"
+    end
+
+    test "rejects non-http and unknown shapes" do
+      assert ActivityMapper.normalize_profile_url("javascript:alert(1)") == nil
+      assert ActivityMapper.normalize_profile_url(nil) == nil
+    end
+  end
 end
