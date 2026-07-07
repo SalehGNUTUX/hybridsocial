@@ -55,12 +55,23 @@ defmodule Hybridsocial.Release do
       ids
       |> Task.async_stream(
         fn id ->
-          case Repo.get(Identity, id) do
-            nil -> :error
-            identity -> Inbox.reenrich_remote_identity(identity)
+          # Self-contained crash safety: a raise here (malformed actor,
+          # TLS error) becomes a caught :error instead of an unhandled task
+          # exit that async_stream would surface and abort the batch on.
+          try do
+            case Repo.get(Identity, id) do
+              nil -> :error
+              identity -> Inbox.reenrich_remote_identity(identity)
+            end
+          rescue
+            _ -> :error
+          catch
+            _, _ -> :error
           end
         end,
-        max_concurrency: 20,
+        # Keep under the prod DB pool (POOL_SIZE, default 10) so concurrent
+        # Repo.get/update don't starve the pool.
+        max_concurrency: 8,
         timeout: 15_000,
         on_timeout: :kill_task,
         ordered: false

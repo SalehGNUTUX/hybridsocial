@@ -1279,12 +1279,20 @@ defmodule Hybridsocial.Federation.Inbox do
     end
   end
 
+  # An AP actor's icon/image is usually %{"url" => "..."} but peers ship it
+  # as a bare URL string, a list, or junk. get_in/2 raises on a non-map
+  # ("Access ... got: <string>"), so extract defensively.
+  defp actor_media_url(%{"url" => url}) when is_binary(url), do: url
+  defp actor_media_url([first | _]), do: actor_media_url(first)
+  defp actor_media_url(url) when is_binary(url), do: url
+  defp actor_media_url(_), do: nil
+
   defp parse_actor_profile(actor) do
     %{
       display_name: actor["name"],
       bio: actor["summary"],
-      avatar_url: get_in(actor, ["icon", "url"]),
-      header_url: get_in(actor, ["image", "url"]),
+      avatar_url: actor_media_url(actor["icon"]),
+      header_url: actor_media_url(actor["image"]),
       # Custom emoji manifest for the display_name/bio, and the human HTML
       # profile URL (for "view on original instance").
       emojis: ActivityMapper.extract_emojis(actor["tag"]),
