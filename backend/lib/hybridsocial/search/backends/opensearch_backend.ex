@@ -210,7 +210,7 @@ defmodule Hybridsocial.Search.Backends.OpensearchBackend do
 
   @impl true
   def healthy? do
-    case HTTPoison.get(opensearch_url() <> "/_cluster/health", [], recv_timeout: 5_000) do
+    case Hybridsocial.HTTP.get(opensearch_url() <> "/_cluster/health", [], recv_timeout: 5_000) do
       {:ok, %{status_code: 200}} -> true
       _ -> false
     end

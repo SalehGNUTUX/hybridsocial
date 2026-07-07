@@ -2,7 +2,7 @@ defmodule Hybridsocial.Payments.Stripe do
   @moduledoc """
   Stripe payment gateway implementation.
 
-  Communicates with the Stripe API using HTTPoison. Configuration values are
+  Communicates with the Stripe API using Req. Configuration values are
   read from `Hybridsocial.Config` at runtime with `System.get_env/1` fallbacks,
   so operators can set credentials either through the admin panel or environment
   variables.
@@ -52,8 +52,8 @@ defmodule Hybridsocial.Payments.Stripe do
         "line_items[0][quantity]" => "1"
       })
 
-    case HTTPoison.post("#{@base_url}/v1/checkout/sessions", body, auth_headers()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+    case Hybridsocial.HTTP.post("#{@base_url}/v1/checkout/sessions", body, auth_headers()) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, %{"id" => session_id, "url" => url}} ->
             {:ok, %{session_id: session_id, url: url}}
@@ -67,11 +67,11 @@ defmodule Hybridsocial.Payments.Stripe do
             {:error, :json_decode_error}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("Stripe create_checkout failed (#{status}): #{resp_body}")
         {:error, {:stripe_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("Stripe HTTP error: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end
@@ -81,8 +81,8 @@ defmodule Hybridsocial.Payments.Stripe do
   def verify_payment(payment_intent_id) do
     url = "#{@base_url}/v1/payment_intents/#{payment_intent_id}"
 
-    case HTTPoison.get(url, auth_headers()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+    case Hybridsocial.HTTP.get(url, auth_headers()) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, %{"status" => status, "amount" => amount, "currency" => currency}} ->
             {:ok, %{status: status, amount: amount, currency: currency}}
@@ -96,11 +96,11 @@ defmodule Hybridsocial.Payments.Stripe do
             {:error, :json_decode_error}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("Stripe verify_payment failed (#{status}): #{resp_body}")
         {:error, {:stripe_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("Stripe HTTP error: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end
@@ -110,15 +110,15 @@ defmodule Hybridsocial.Payments.Stripe do
   def cancel_subscription(subscription_id) do
     url = "#{@base_url}/v1/subscriptions/#{subscription_id}"
 
-    case HTTPoison.delete(url, auth_headers()) do
-      {:ok, %HTTPoison.Response{status_code: 200}} ->
+    case Hybridsocial.HTTP.delete(url, auth_headers()) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200}} ->
         :ok
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("Stripe cancel_subscription failed (#{status}): #{resp_body}")
         {:error, {:stripe_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("Stripe HTTP error: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end
@@ -148,18 +148,18 @@ defmodule Hybridsocial.Payments.Stripe do
       |> maybe_put("reason", Map.get(opts, :reason))
       |> URI.encode_query()
 
-    case HTTPoison.post("#{@base_url}/v1/refunds", body, auth_headers()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+    case Hybridsocial.HTTP.post("#{@base_url}/v1/refunds", body, auth_headers()) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, refund_data} -> {:ok, refund_data}
           {:error, reason} -> {:error, {:json_decode_error, reason}}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("Stripe refund failed (#{status}): #{resp_body}")
         {:error, {:stripe_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("Stripe HTTP error: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end

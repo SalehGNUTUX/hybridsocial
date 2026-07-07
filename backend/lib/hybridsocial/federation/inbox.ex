@@ -1173,7 +1173,7 @@ defmodule Hybridsocial.Federation.Inbox do
         {"User-Agent", "HybridSocial/0.1.0"}
       ]
 
-      case HTTPoison.get(url, headers, recv_timeout: 10_000, timeout: 10_000) do
+      case Hybridsocial.HTTP.get(url, headers, recv_timeout: 10_000, timeout: 10_000) do
         {:ok, %{status_code: 200, body: body}} ->
           case Jason.decode(body) do
             {:ok, account} ->
@@ -1209,7 +1209,11 @@ defmodule Hybridsocial.Federation.Inbox do
       {"User-Agent", "HybridSocial/0.1.0"}
     ]
 
-    case HTTPoison.get(url, headers, recv_timeout: 10_000, timeout: 10_000, follow_redirect: true) do
+    case Hybridsocial.HTTP.get(url, headers,
+           recv_timeout: 10_000,
+           timeout: 10_000,
+           follow_redirect: true
+         ) do
       {:ok, %{status_code: 200, body: body}} ->
         Jason.decode(body)
 

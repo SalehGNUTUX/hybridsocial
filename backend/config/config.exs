@@ -49,15 +49,17 @@ config :phoenix, :json_library, Jason
 config :ex_aws,
   access_key_id: [{:system, "S3_ACCESS_KEY_ID"}, :instance_role],
   secret_access_key: [{:system, "S3_SECRET_ACCESS_KEY"}, :instance_role],
-  region: {:system, "S3_REGION"}
+  region: {:system, "S3_REGION"},
+  # Req/Finch instead of the default hackney (dropped for its CVEs).
+  http_client: Hybridsocial.ExAwsHttp
 
 # Swoosh mailer configuration
 config :hybridsocial, Hybridsocial.Mailer, adapter: Swoosh.Adapters.Local
 
-# HTTP client for API-based mail adapters (Resend). Without this Swoosh
-# defaults to Finch (not a dependency) and API delivery fails; hackney is
-# already pulled in, so use it. Ignored by the Local/Test adapters.
-config :swoosh, :api_client, Swoosh.ApiClient.Hackney
+# HTTP client for API-based mail adapters (Resend). Req (bundled with the
+# app) instead of hackney, which was dropped for its CVEs. Ignored by the
+# Local/Test adapters.
+config :swoosh, :api_client, Swoosh.ApiClient.Req
 
 # Valkey (Redis-compatible) cache
 config :hybridsocial, :valkey_url, "redis://localhost:6379"

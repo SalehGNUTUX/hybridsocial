@@ -80,7 +80,7 @@ defmodule Hybridsocial.Federation do
   defp fetch_and_cache_remote_actor(ap_id) do
     headers = [{"Accept", "application/activity+json"}]
 
-    case HTTPoison.get(ap_id, headers) do
+    case Hybridsocial.HTTP.get(ap_id, headers) do
       {:ok, %{status_code: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, data} ->

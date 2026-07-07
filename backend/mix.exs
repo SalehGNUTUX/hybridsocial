@@ -63,7 +63,6 @@ defmodule Hybridsocial.MixProject do
       {:ex_aws, "~> 2.5"},
       {:ex_aws_s3, "~> 2.5"},
       {:sweet_xml, "~> 0.7"},
-      {:hackney, "~> 1.20"},
       # Email
       {:swoosh, "~> 1.17"},
       {:gen_smtp, "~> 1.0"},
@@ -71,8 +70,9 @@ defmodule Hybridsocial.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
-      # Federation / HTTP
-      {:httpoison, "~> 2.0"},
+      # Federation / HTTP (Req over Finch; replaced HTTPoison/hackney,
+      # which was unmaintained and carried SSRF/CRLF CVEs)
+      {:req, "~> 0.5"},
       # Valkey/Redis cache
       {:redix, "~> 1.5"},
       # CORS

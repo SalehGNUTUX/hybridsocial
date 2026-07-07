@@ -219,14 +219,14 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   end
 
   defp os_fetch_json(url) do
-    case HTTPoison.get(url, [], recv_timeout: 5_000, timeout: 5_000) do
+    case Hybridsocial.HTTP.get(url, [], recv_timeout: 5_000, timeout: 5_000) do
       {:ok, %{status_code: 200, body: body}} -> Jason.decode!(body)
       _ -> nil
     end
   end
 
   defp os_fetch_indices(url) do
-    case HTTPoison.get("#{url}/_cat/indices?format=json", [],
+    case Hybridsocial.HTTP.get("#{url}/_cat/indices?format=json", [],
            recv_timeout: 5_000,
            timeout: 5_000
          ) do
@@ -284,7 +284,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   end
 
   defp nats_monitoring_fetch(host, port, path) do
-    case HTTPoison.get("http://#{host}:#{port}#{path}", [],
+    case Hybridsocial.HTTP.get("http://#{host}:#{port}#{path}", [],
            recv_timeout: 3_000,
            timeout: 3_000
          ) do

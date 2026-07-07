@@ -37,7 +37,7 @@ defmodule Hybridsocial.Federation.SignedFetch do
   @user_agent "HybridSocial/1.0 (+https://hybridsocial)"
 
   @doc """
-  Issues a signed GET. `opts` are passed through to HTTPoison.get/3
+  Issues a signed GET. `opts` are passed through to Req.get/3
   with two added defaults (Accept, User-Agent) that callers can
   override by passing `headers: [...]`.
   """
@@ -52,7 +52,7 @@ defmodule Hybridsocial.Federation.SignedFetch do
 
     headers = base_headers ++ signature_headers(url) ++ extra_headers
 
-    HTTPoison.get(url, headers, httpoison_opts)
+    Hybridsocial.HTTP.get(url, headers, httpoison_opts)
   end
 
   defp signature_headers(url) do

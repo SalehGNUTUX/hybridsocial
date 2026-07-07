@@ -50,7 +50,7 @@ defmodule Hybridsocial.Federation.HTTPSignature do
   Signs a GET request (no body, no Digest header) with the given private
   key. Use for "authorized-fetch" — many Mastodon instances require it
   for actor + object dereferences. Returns the headers to attach to the
-  outbound HTTPoison.get call.
+  outbound Req.get call.
   """
   def sign_get(url, private_key_pem, key_id) do
     date = Calendar.strftime(DateTime.utc_now(), "%a, %d %b %Y %H:%M:%S GMT")
@@ -233,7 +233,7 @@ defmodule Hybridsocial.Federation.HTTPSignature do
         {"Accept", "application/activity+json"}
       ]
 
-      case HTTPoison.get(actor_url, headers,
+      case Hybridsocial.HTTP.get(actor_url, headers,
              timeout: 5_000,
              recv_timeout: 5_000,
              max_body_length: 100_000

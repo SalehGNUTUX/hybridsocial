@@ -32,7 +32,7 @@ defmodule Hybridsocial.Content.Translation do
         api_key: api_key
       })
 
-    case HTTPoison.post("#{url}/translate", body, [{"Content-Type", "application/json"}],
+    case Hybridsocial.HTTP.post("#{url}/translate", body, [{"Content-Type", "application/json"}],
            recv_timeout: 10_000
          ) do
       {:ok, %{status_code: 200, body: resp}} ->
@@ -60,7 +60,10 @@ defmodule Hybridsocial.Content.Translation do
         "auth_key" => api_key
       })
 
-    case HTTPoison.post(url, body, [{"Content-Type", "application/x-www-form-urlencoded"}],
+    case Hybridsocial.HTTP.post(
+           url,
+           body,
+           [{"Content-Type", "application/x-www-form-urlencoded"}],
            recv_timeout: 10_000
          ) do
       {:ok, %{status_code: 200, body: resp}} ->

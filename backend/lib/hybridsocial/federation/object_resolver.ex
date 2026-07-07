@@ -63,24 +63,24 @@ defmodule Hybridsocial.Federation.ObjectResolver do
              recv_timeout: 15_000,
              timeout: 15_000
            ) do
-        {:ok, %HTTPoison.Response{status_code: status, body: body}}
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: body}}
         when status in 200..299 ->
           case Jason.decode(body) do
             {:ok, object} -> {:ok, object}
             {:error, _} -> {:error, :invalid_json}
           end
 
-        {:ok, %HTTPoison.Response{status_code: 404}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: 404}} ->
           {:error, :not_found}
 
-        {:ok, %HTTPoison.Response{status_code: 410}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: 410}} ->
           {:error, :gone}
 
-        {:ok, %HTTPoison.Response{status_code: status}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status}} ->
           Logger.warning("Failed to fetch AP object #{url}: HTTP #{status}")
           {:error, {:http_error, status}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           Logger.warning("Failed to fetch AP object #{url}: #{inspect(reason)}")
           {:error, {:fetch_failed, reason}}
       end

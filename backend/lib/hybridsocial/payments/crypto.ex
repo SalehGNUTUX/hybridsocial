@@ -3,7 +3,7 @@ defmodule Hybridsocial.Payments.Crypto do
   Cryptocurrency payment gateway implementation.
 
   Designed for BTCPay Server or compatible self-hosted crypto payment
-  processors. Communicates via the BTCPay Greenfield API over HTTPoison.
+  processors. Communicates via the BTCPay Greenfield API over Req.
   Configuration is read from `Hybridsocial.Config` at runtime.
   """
 
@@ -56,8 +56,8 @@ defmodule Hybridsocial.Payments.Crypto do
         "currency" => Map.get(opts, :currency, "USD")
       })
 
-    case HTTPoison.post(url, body, auth_headers()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+    case Hybridsocial.HTTP.post(url, body, auth_headers()) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, %{"id" => invoice_id, "checkoutLink" => checkout_url}} ->
             {:ok, %{session_id: invoice_id, url: checkout_url}}
@@ -70,11 +70,11 @@ defmodule Hybridsocial.Payments.Crypto do
             {:error, {:json_decode_error, reason}}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("Crypto create_checkout failed (#{status}): #{resp_body}")
         {:error, {:crypto_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("Crypto HTTP error: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end
@@ -84,8 +84,8 @@ defmodule Hybridsocial.Payments.Crypto do
   def verify_payment(invoice_id) do
     url = "#{base_url()}/api/v1/stores/#{store_id()}/invoices/#{invoice_id}"
 
-    case HTTPoison.get(url, auth_headers()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+    case Hybridsocial.HTTP.get(url, auth_headers()) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, %{"status" => status, "amount" => amount, "currency" => currency}} ->
             {:ok,
@@ -103,11 +103,11 @@ defmodule Hybridsocial.Payments.Crypto do
             {:error, {:json_decode_error, reason}}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("Crypto verify_payment failed (#{status}): #{resp_body}")
         {:error, {:crypto_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("Crypto HTTP error: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end
@@ -161,18 +161,18 @@ defmodule Hybridsocial.Payments.Crypto do
         "description" => Map.get(opts, :reason, "Refund")
       })
 
-    case HTTPoison.post(url, body, auth_headers()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+    case Hybridsocial.HTTP.post(url, body, auth_headers()) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, refund_data} -> {:ok, refund_data}
           {:error, reason} -> {:error, {:json_decode_error, reason}}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("Crypto refund failed (#{status}): #{resp_body}")
         {:error, {:crypto_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("Crypto HTTP error: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end

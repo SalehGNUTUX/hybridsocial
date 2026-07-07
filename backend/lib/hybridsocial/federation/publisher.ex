@@ -141,14 +141,17 @@ defmodule Hybridsocial.Federation.Publisher do
       started_at_ns = System.monotonic_time(:nanosecond)
 
       result =
-        case HTTPoison.post(inbox_url, body, headers, recv_timeout: 15_000, timeout: 15_000) do
+        case Hybridsocial.HTTP.post(inbox_url, body, headers,
+               recv_timeout: 15_000,
+               timeout: 15_000
+             ) do
           {:ok, %{status_code: status}} when status in 200..299 ->
             {:ok, status}
 
           {:ok, %{status_code: status, body: resp_body}} ->
             {:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}
 
-          {:error, %HTTPoison.Error{reason: reason}} ->
+          {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
             {:error, "Connection error: #{inspect(reason)}"}
         end
 
@@ -195,14 +198,14 @@ defmodule Hybridsocial.Federation.Publisher do
         | Enum.map(sig_headers, fn {k, v} -> {k, v} end)
       ]
 
-      case HTTPoison.post(inbox_url, body, headers, recv_timeout: 15_000, timeout: 15_000) do
+      case Hybridsocial.HTTP.post(inbox_url, body, headers, recv_timeout: 15_000, timeout: 15_000) do
         {:ok, %{status_code: status}} when status in 200..299 ->
           {:ok, status}
 
         {:ok, %{status_code: status, body: resp_body}} ->
           {:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           {:error, "Connection error: #{inspect(reason)}"}
       end
     else

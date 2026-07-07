@@ -6,7 +6,7 @@ defmodule Hybridsocial.Search.OpenSearchTest do
   @test_index "hybridsocial_test_opensearch"
 
   setup do
-    case HTTPoison.get("http://localhost:9200") do
+    case Hybridsocial.HTTP.get("http://localhost:9200") do
       {:ok, %{status_code: 200}} ->
         # Clean up test index before each test
         OpenSearch.delete_index(@test_index)
@@ -136,7 +136,7 @@ defmodule Hybridsocial.Search.OpenSearchTest do
       # Wait for indexing to complete
       :timer.sleep(1500)
       # Force refresh
-      HTTPoison.post("http://localhost:9200/#{@test_index}/_refresh", "", [
+      Hybridsocial.HTTP.post("http://localhost:9200/#{@test_index}/_refresh", "", [
         {"Content-Type", "application/json"}
       ])
 

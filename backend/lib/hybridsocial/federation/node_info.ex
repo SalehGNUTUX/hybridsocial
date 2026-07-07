@@ -249,18 +249,18 @@ defmodule Hybridsocial.Federation.NodeInfo do
       follow_redirect: true
     ]
 
-    case HTTPoison.get(url, headers, options) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} when is_binary(body) ->
+    case Hybridsocial.HTTP.get(url, headers, options) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: body}} when is_binary(body) ->
         case Jason.decode(body) do
           {:ok, decoded} when is_map(decoded) -> {:ok, decoded}
           {:ok, _} -> {:error, :not_a_json_object}
           {:error, _} -> {:error, :invalid_json}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status}} ->
         {:error, {:http_status, status}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         {:error, reason}
     end
   end

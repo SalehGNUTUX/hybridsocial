@@ -165,6 +165,6 @@ defmodule Hybridsocial.Search.OpenSearch do
         b -> Jason.encode!(b)
       end
 
-    HTTPoison.request(method, url, encoded_body, headers, recv_timeout: 15_000)
+    Hybridsocial.HTTP.request(method, url, encoded_body, headers, recv_timeout: 15_000)
   end
 end
