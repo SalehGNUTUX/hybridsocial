@@ -508,6 +508,8 @@ export interface AdminUser {
   email: string | null;
   display_name: string | null;
   bio: string | null;
+  avatar_url: string | null;
+  header_url: string | null;
   is_admin: boolean;
   is_bot: boolean;
   is_locked: boolean;

@@ -154,6 +154,29 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
 
       assert %{"data" => _data, "message" => "account.warned"} = json_response(conn, 200)
     end
+
+    test "PUT /api/v1/admin/users/:id/profile clears avatar and header", %{conn: conn, user: user} do
+      # Give the user an avatar + header, then null them via the endpoint.
+      {:ok, _} =
+        Hybridsocial.Accounts.admin_update_identity(user, %{
+          "avatar_url" => "https://cdn.example/a.png",
+          "header_url" => "https://cdn.example/h.png"
+        })
+
+      conn =
+        put(conn, "/api/v1/admin/users/#{user.id}/profile", %{
+          "avatar_url" => nil,
+          "header_url" => nil
+        })
+
+      assert %{"data" => data} = json_response(conn, 200)
+      assert data["avatar_url"] == nil
+      assert data["header_url"] == nil
+
+      reloaded = Hybridsocial.Accounts.get_identity(user.id)
+      assert reloaded.avatar_url == nil
+      assert reloaded.header_url == nil
+    end
   end
 
   describe "admin content filters" do

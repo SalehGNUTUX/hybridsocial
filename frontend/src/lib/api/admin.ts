@@ -117,7 +117,13 @@ export function changeUserTier(id: string, tier: string): Promise<{ data: AdminU
 // on the backend, which skips that rule.
 export function editUserProfile(
   id: string,
-  attrs: { display_name?: string | null; bio?: string | null },
+  attrs: {
+    display_name?: string | null;
+    bio?: string | null;
+    // Pass null to clear the user's avatar / header (hero) image.
+    avatar_url?: string | null;
+    header_url?: string | null;
+  },
 ): Promise<{ data: AdminUser }> {
   return api.put(`/api/v1/admin/users/${id}/profile`, attrs);
 }
