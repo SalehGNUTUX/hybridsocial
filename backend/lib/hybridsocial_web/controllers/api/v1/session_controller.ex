@@ -106,7 +106,7 @@ defmodule HybridsocialWeb.Api.V1.SessionController do
         # Fetch from ip-api.com (free tier, http only)
         result =
           try do
-            case HTTPoison.get(
+            case Hybridsocial.HTTP.get(
                    "http://ip-api.com/json/#{ip}?fields=status,country,city",
                    [],
                    recv_timeout: 3_000,

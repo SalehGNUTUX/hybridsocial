@@ -143,12 +143,12 @@ defmodule Hybridsocial.Moderation.WebhookDeliveryWorker do
   end
 
   defp post(url, body, headers) do
-    case HTTPoison.post(url, body, headers,
+    case Hybridsocial.HTTP.post(url, body, headers,
            timeout: @http_timeout_ms,
            recv_timeout: @http_timeout_ms
          ) do
-      {:ok, %HTTPoison.Response{status_code: status}} -> {:ok, status}
-      {:error, %HTTPoison.Error{reason: reason}} -> {:error, reason}
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status}} -> {:ok, status}
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} -> {:error, reason}
     end
   end
 end

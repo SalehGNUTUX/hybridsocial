@@ -13,8 +13,15 @@ defmodule Hybridsocial.Feeds.AlgorithmTest do
       post_type: "text"
     }
 
+    # create_changeset never casts published_at (Posts.create_post stamps
+    # it after), so a raw insert leaves it nil and the post is filtered out
+    # of every timeline as unpublished. Stamp it here to mirror a real post.
+    now = DateTime.utc_now()
+
     %Post{}
     |> Post.create_changeset(Map.merge(defaults, attrs))
+    |> Ecto.Changeset.put_change(:published_at, Map.get(attrs, :published_at, now))
+    |> Ecto.Changeset.put_change(:last_activity_at, Map.get(attrs, :last_activity_at, now))
     |> Repo.insert!()
   end
 

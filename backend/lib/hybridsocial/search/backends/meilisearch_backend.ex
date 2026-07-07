@@ -173,7 +173,7 @@ defmodule Hybridsocial.Search.Backends.MeilisearchBackend do
     url = meili_url() <> "/health"
     headers = auth_headers()
 
-    case HTTPoison.get(url, headers, recv_timeout: 5_000) do
+    case Hybridsocial.HTTP.get(url, headers, recv_timeout: 5_000) do
       {:ok, %{status_code: 200}} -> true
       _ -> false
     end
@@ -191,7 +191,7 @@ defmodule Hybridsocial.Search.Backends.MeilisearchBackend do
     headers = [{"Content-Type", "application/json"} | auth_headers()]
     encoded = Jason.encode!(body)
 
-    case HTTPoison.post(url, encoded, headers, recv_timeout: 15_000) do
+    case Hybridsocial.HTTP.post(url, encoded, headers, recv_timeout: 15_000) do
       {:ok, %{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, %{"hits" => hits}} -> {:ok, hits}

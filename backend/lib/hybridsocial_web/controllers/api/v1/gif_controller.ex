@@ -20,12 +20,12 @@ defmodule HybridsocialWeb.Api.V1.GifController do
         url =
           "#{@giphy_trending_url}?api_key=#{URI.encode_www_form(key)}&limit=#{@default_limit}&rating=pg-13"
 
-        case HTTPoison.get(url, [], recv_timeout: 10_000, timeout: 10_000) do
-          {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        case Hybridsocial.HTTP.get(url, [], recv_timeout: 10_000, timeout: 10_000) do
+          {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: body}} ->
             gifs = body |> Jason.decode!() |> Map.get("data", []) |> Enum.map(&serialize_gif/1)
             json(conn, gifs)
 
-          {:ok, %HTTPoison.Response{status_code: status}} ->
+          {:ok, %Hybridsocial.HTTP.Response{status_code: status}} ->
             conn
             |> put_status(:bad_gateway)
             |> json(%{error: "giphy_error", error_description: "GIPHY returned status #{status}"})
@@ -58,12 +58,12 @@ defmodule HybridsocialWeb.Api.V1.GifController do
           url =
             "#{@giphy_search_url}?api_key=#{URI.encode_www_form(key)}&q=#{URI.encode_www_form(query)}&limit=#{@default_limit}&rating=pg-13"
 
-          case HTTPoison.get(url, [], recv_timeout: 10_000, timeout: 10_000) do
-            {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+          case Hybridsocial.HTTP.get(url, [], recv_timeout: 10_000, timeout: 10_000) do
+            {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: body}} ->
               gifs = body |> Jason.decode!() |> Map.get("data", []) |> Enum.map(&serialize_gif/1)
               json(conn, gifs)
 
-            {:ok, %HTTPoison.Response{status_code: status}} ->
+            {:ok, %Hybridsocial.HTTP.Response{status_code: status}} ->
               conn
               |> put_status(:bad_gateway)
               |> json(%{

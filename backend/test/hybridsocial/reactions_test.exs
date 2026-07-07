@@ -3,6 +3,16 @@ defmodule Hybridsocial.ReactionsTest do
 
   alias Hybridsocial.Reactions
 
+  # A seed migration inserts exactly 7 premium reactions (the @max_premium
+  # cap), and migrations commit outside the sandbox, so every test sees
+  # those rows as baseline. Clear them inside each test's sandbox
+  # transaction (rolled back after) so create_premium/list_enabled tests
+  # start from an empty premium table.
+  setup do
+    Repo.delete_all(Hybridsocial.Reactions.PremiumReactionEmoji)
+    :ok
+  end
+
   describe "default_reaction?/1" do
     test "returns true for the seven standard shortcodes" do
       for code <- ~w(like love care angry sad lol wow) do

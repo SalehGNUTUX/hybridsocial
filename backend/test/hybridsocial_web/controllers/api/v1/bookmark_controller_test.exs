@@ -62,15 +62,15 @@ defmodule HybridsocialWeb.Api.V1.BookmarkControllerTest do
 
       conn = get(conn, "/api/v1/bookmarks")
       response = json_response(conn, 200)
-      assert is_list(response["posts"])
-      assert length(response["posts"]) == 1
-      assert hd(response["posts"])["content"] == "Bookmarked post"
+      assert is_list(response["data"])
+      assert length(response["data"]) == 1
+      assert hd(response["data"])["content"] == "Bookmarked post"
     end
 
     test "returns empty list when no bookmarks", %{conn: conn} do
       conn = get(conn, "/api/v1/bookmarks")
       response = json_response(conn, 200)
-      assert response["posts"] == []
+      assert response["data"] == []
     end
   end
 end

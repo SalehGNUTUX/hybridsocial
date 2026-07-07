@@ -107,15 +107,15 @@ defmodule Hybridsocial.Content.LinkPreviews do
         max_redirect: 3
       ]
 
-      case HTTPoison.get(url, headers, options) do
-        {:ok, %HTTPoison.Response{status_code: status, body: body}}
+      case Hybridsocial.HTTP.get(url, headers, options) do
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: body}}
         when status >= 200 and status < 300 ->
           {:ok, parse_meta_tags(body)}
 
-        {:ok, %HTTPoison.Response{status_code: status}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status}} ->
           {:error, {:http_error, status}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           {:error, reason}
       end
     end
@@ -201,8 +201,8 @@ defmodule Hybridsocial.Content.LinkPreviews do
       max_redirect: 2
     ]
 
-    case HTTPoison.get(oembed_url, headers, options) do
-      {:ok, %HTTPoison.Response{status_code: status, body: body}}
+    case Hybridsocial.HTTP.get(oembed_url, headers, options) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: body}}
       when status >= 200 and status < 300 ->
         case Jason.decode(body) do
           {:ok, json} ->
@@ -221,13 +221,13 @@ defmodule Hybridsocial.Content.LinkPreviews do
             {:error, :invalid_oembed_response}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status}} ->
         # 401/403 = embedding disabled; 404 = video taken down / private.
         # Either way, oEmbed isn't going to help — let the caller fall
         # back to the HTML path.
         {:error, {:http_error, status}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         {:error, reason}
     end
   end

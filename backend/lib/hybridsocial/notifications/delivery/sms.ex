@@ -70,7 +70,7 @@ defmodule Hybridsocial.Notifications.Delivery.Sms do
         body: body
       })
 
-    case HTTPoison.post(url, request_body, headers, recv_timeout: 10_000, timeout: 10_000) do
+    case Hybridsocial.HTTP.post(url, request_body, headers, recv_timeout: 10_000, timeout: 10_000) do
       {:ok, %{status_code: status}} when status in 200..299 ->
         :ok
 

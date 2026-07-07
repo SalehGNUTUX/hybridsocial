@@ -2,7 +2,7 @@ defmodule Hybridsocial.Payments.Paypal do
   @moduledoc """
   PayPal payment gateway implementation.
 
-  Communicates with the PayPal REST API (v2) using HTTPoison. Supports both
+  Communicates with the PayPal REST API (v2) using Req. Supports both
   sandbox and live modes, configurable at runtime through the `paypal_mode`
   setting.
   """
@@ -44,18 +44,18 @@ defmodule Hybridsocial.Payments.Paypal do
       {"Content-Type", "application/x-www-form-urlencoded"}
     ]
 
-    case HTTPoison.post(url, body, headers) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+    case Hybridsocial.HTTP.post(url, body, headers) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, %{"access_token" => token}} -> {:ok, token}
           {:error, reason} -> {:error, {:json_decode_error, reason}}
         end
 
-      {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
         Logger.error("PayPal token exchange failed (#{status}): #{resp_body}")
         {:error, {:paypal_error, status, resp_body}}
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
+      {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
         Logger.error("PayPal HTTP error during token exchange: #{inspect(reason)}")
         {:error, {:http_error, reason}}
     end
@@ -91,8 +91,8 @@ defmodule Hybridsocial.Payments.Paypal do
 
       url = "#{base_url()}/v1/billing/subscriptions"
 
-      case HTTPoison.post(url, body, auth_headers(token)) do
-        {:ok, %HTTPoison.Response{status_code: status, body: resp_body}}
+      case Hybridsocial.HTTP.post(url, body, auth_headers(token)) do
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}}
         when status in [200, 201] ->
           case Jason.decode(resp_body) do
             {:ok, %{"id" => sub_id, "links" => links}} ->
@@ -111,11 +111,11 @@ defmodule Hybridsocial.Payments.Paypal do
               {:error, {:json_decode_error, reason}}
           end
 
-        {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
           Logger.error("PayPal create_checkout failed (#{status}): #{resp_body}")
           {:error, {:paypal_error, status, resp_body}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           Logger.error("PayPal HTTP error: #{inspect(reason)}")
           {:error, {:http_error, reason}}
       end
@@ -127,8 +127,8 @@ defmodule Hybridsocial.Payments.Paypal do
     with {:ok, token} <- get_access_token() do
       url = "#{base_url()}/v2/checkout/orders/#{order_id}"
 
-      case HTTPoison.get(url, auth_headers(token)) do
-        {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+      case Hybridsocial.HTTP.get(url, auth_headers(token)) do
+        {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
           case Jason.decode(resp_body) do
             {:ok, %{"status" => status, "purchase_units" => [unit | _]}} ->
               amount = get_in(unit, ["amount", "value"]) || "0"
@@ -149,11 +149,11 @@ defmodule Hybridsocial.Payments.Paypal do
               {:error, {:json_decode_error, reason}}
           end
 
-        {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
           Logger.error("PayPal verify_payment failed (#{status}): #{resp_body}")
           {:error, {:paypal_error, status, resp_body}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           Logger.error("PayPal HTTP error: #{inspect(reason)}")
           {:error, {:http_error, reason}}
       end
@@ -166,15 +166,15 @@ defmodule Hybridsocial.Payments.Paypal do
       url = "#{base_url()}/v1/billing/subscriptions/#{subscription_id}/cancel"
       body = Jason.encode!(%{"reason" => "Cancelled by user"})
 
-      case HTTPoison.post(url, body, auth_headers(token)) do
-        {:ok, %HTTPoison.Response{status_code: 204}} ->
+      case Hybridsocial.HTTP.post(url, body, auth_headers(token)) do
+        {:ok, %Hybridsocial.HTTP.Response{status_code: 204}} ->
           :ok
 
-        {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
           Logger.error("PayPal cancel_subscription failed (#{status}): #{resp_body}")
           {:error, {:paypal_error, status, resp_body}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           Logger.error("PayPal HTTP error: #{inspect(reason)}")
           {:error, {:http_error, reason}}
       end
@@ -203,8 +203,8 @@ defmodule Hybridsocial.Payments.Paypal do
 
       url = "#{base_url()}/v1/notifications/verify-webhook-signature"
 
-      case HTTPoison.post(url, verify_body, auth_headers(token)) do
-        {:ok, %HTTPoison.Response{status_code: 200, body: resp_body}} ->
+      case Hybridsocial.HTTP.post(url, verify_body, auth_headers(token)) do
+        {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: resp_body}} ->
           case Jason.decode(resp_body) do
             {:ok, %{"verification_status" => "SUCCESS"}} ->
               Jason.decode(payload)
@@ -216,11 +216,11 @@ defmodule Hybridsocial.Payments.Paypal do
               {:error, {:json_decode_error, reason}}
           end
 
-        {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
           Logger.error("PayPal webhook verification failed (#{status}): #{resp_body}")
           {:error, {:paypal_error, status, resp_body}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           Logger.error("PayPal HTTP error: #{inspect(reason)}")
           {:error, {:http_error, reason}}
       end
@@ -238,19 +238,19 @@ defmodule Hybridsocial.Payments.Paypal do
         |> maybe_put("note_to_payer", Map.get(opts, :reason))
         |> Jason.encode!()
 
-      case HTTPoison.post(url, body, auth_headers(token)) do
-        {:ok, %HTTPoison.Response{status_code: status, body: resp_body}}
+      case Hybridsocial.HTTP.post(url, body, auth_headers(token)) do
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}}
         when status in [200, 201] ->
           case Jason.decode(resp_body) do
             {:ok, refund_data} -> {:ok, refund_data}
             {:error, reason} -> {:error, {:json_decode_error, reason}}
           end
 
-        {:ok, %HTTPoison.Response{status_code: status, body: resp_body}} ->
+        {:ok, %Hybridsocial.HTTP.Response{status_code: status, body: resp_body}} ->
           Logger.error("PayPal refund failed (#{status}): #{resp_body}")
           {:error, {:paypal_error, status, resp_body}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
           Logger.error("PayPal HTTP error: #{inspect(reason)}")
           {:error, {:http_error, reason}}
       end

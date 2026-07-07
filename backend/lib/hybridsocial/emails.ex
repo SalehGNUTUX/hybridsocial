@@ -205,6 +205,9 @@ defmodule Hybridsocial.Emails do
       "instance_name" => instance_name(),
       "user" => user_assigns(user),
       "count" => count,
+      # Pluralize the noun so a single-item digest reads "1 new
+      # notification", not "1 new notifications".
+      "noun" => if(count == 1, do: "notification", else: "notifications"),
       "summary_html" => summary_html,
       "app_url" => base_url()
     }

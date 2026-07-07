@@ -3,7 +3,6 @@ defmodule HybridsocialWeb.Api.V1.TimelineControllerTest do
 
   alias Hybridsocial.Repo
   alias Hybridsocial.Social.{Post, Follow}
-  alias Hybridsocial.Auth.Token
 
   setup do
     try do
@@ -27,8 +26,15 @@ defmodule HybridsocialWeb.Api.V1.TimelineControllerTest do
       post_type: "text"
     }
 
+    # create_changeset never casts published_at (Posts.create_post stamps
+    # it after), so a raw insert leaves it nil and the post is filtered out
+    # of every timeline as unpublished. Stamp it here to mirror a real post.
+    now = DateTime.utc_now()
+
     %Post{}
     |> Post.create_changeset(Map.merge(defaults, attrs))
+    |> Ecto.Changeset.put_change(:published_at, Map.get(attrs, :published_at, now))
+    |> Ecto.Changeset.put_change(:last_activity_at, Map.get(attrs, :last_activity_at, now))
     |> Repo.insert!()
   end
 
@@ -42,12 +48,10 @@ defmodule HybridsocialWeb.Api.V1.TimelineControllerTest do
     |> Repo.insert!()
   end
 
-  defp authenticate(conn, identity) do
-    {:ok, access_token, _claims} = Token.generate_access_token(identity.id)
-
-    conn
-    |> put_req_header("authorization", "Bearer #{access_token}")
-  end
+  # Delegate to the shared fixture so the access token gets a live
+  # oauth_tokens row — the auth plug now enforces revocation and 401s a
+  # bare JWT with no session row.
+  defp authenticate(conn, identity), do: auth_conn(conn, identity)
 
   # ---------------------------------------------------------------------------
   # Home Timeline

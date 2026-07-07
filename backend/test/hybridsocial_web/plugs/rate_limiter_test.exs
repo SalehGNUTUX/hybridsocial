@@ -7,11 +7,13 @@ defmodule HybridsocialWeb.Plugs.RateLimiterTest do
     # Enable rate limiting for these tests
     Application.put_env(:hybridsocial, :rate_limiting_enabled, true)
 
-    # Clean up the ETS table between tests
-    case :ets.whereis(:rate_limiter) do
-      :undefined -> :ok
-      _ -> :ets.delete_all_objects(:rate_limiter)
-    end
+    # The anonymous limit comes from Config (default 240). Start the config
+    # store (not started in test env) and pin a small limit so the loops
+    # below can exceed it. Flush any stale Valkey counters from prior runs
+    # since the rate-limiter cache is not sandboxed.
+    start_supervised!(Hybridsocial.Config.Store)
+    Hybridsocial.Config.set("rate_limit_anonymous", 5)
+    Hybridsocial.Cache.flush_pattern("ratelimit:*")
 
     on_exit(fn ->
       Application.put_env(:hybridsocial, :rate_limiting_enabled, false)
@@ -31,8 +33,8 @@ defmodule HybridsocialWeb.Plugs.RateLimiterTest do
     end
 
     test "returns 429 when limit is exceeded", %{conn: conn} do
-      # Anonymous limit is 60/min
-      for _ <- 1..60 do
+      # Anonymous limit pinned to 5 in setup; exceed it.
+      for _ <- 1..6 do
         conn
         |> Map.put(:remote_ip, {10, 0, 0, 1})
         |> RateLimiter.call([])
@@ -51,7 +53,7 @@ defmodule HybridsocialWeb.Plugs.RateLimiterTest do
     end
 
     test "includes Retry-After header when rate limited", %{conn: conn} do
-      for _ <- 1..60 do
+      for _ <- 1..6 do
         conn
         |> Map.put(:remote_ip, {10, 0, 0, 2})
         |> RateLimiter.call([])

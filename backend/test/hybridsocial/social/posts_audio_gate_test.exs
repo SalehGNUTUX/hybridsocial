@@ -9,8 +9,15 @@ defmodule Hybridsocial.Social.PostsAudioGateTest do
   # post audio — fine for dev but the opposite of what we're
   # trying to exercise here.
   setup do
+    # Config.Store is deliberately NOT started in the test supervision
+    # tree (see application.ex) — tests that read/write runtime config
+    # must start it themselves. Without this, Config.set below exits with
+    # "no process". async: false makes the shared named GenServer safe.
+    start_supervised!(Hybridsocial.Config.Store)
     Config.set("tiers_enabled", true)
-    on_exit(fn -> Config.set("tiers_enabled", false) end)
+    # No on_exit reset: start_supervised! tears the store down after each
+    # test, so state can't leak — and a Config.set in on_exit would race a
+    # dead store ("no process").
     :ok
   end
 

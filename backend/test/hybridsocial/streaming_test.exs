@@ -1,17 +1,26 @@
 defmodule Hybridsocial.StreamingTest do
-  use Hybridsocial.DataCase, async: true
+  # async: false — these tests broadcast to shared global PubSub topics
+  # (e.g. "timeline:public"). Run concurrently, one test's broadcast lands
+  # in another's mailbox and trips refute_receive.
+  use Hybridsocial.DataCase, async: false
 
   alias Hybridsocial.Streaming
 
   describe "broadcast_post/1" do
-    test "broadcasts public post to public timeline" do
+    # broadcast_post fans out to followers via a real DB query on
+    # account_id, so it must be a valid identity UUID (not "user-1").
+    setup do
+      %{identity: create_user("streamer", "streamer@test.com")}
+    end
+
+    test "broadcasts public post to public timeline", %{identity: identity} do
       Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "timeline:public")
 
       post = %{
         id: "post-1",
         content: "Hello world",
         visibility: "public",
-        account_id: "user-1",
+        account_id: identity.id,
         tags: []
       }
 
@@ -19,14 +28,14 @@ defmodule Hybridsocial.StreamingTest do
       assert_receive %{event: "update", payload: ^post}
     end
 
-    test "broadcasts post to author's user topic" do
-      Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "user:user-1")
+    test "broadcasts post to author's user topic", %{identity: identity} do
+      Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "user:#{identity.id}")
 
       post = %{
         id: "post-2",
         content: "Hello",
         visibility: "public",
-        account_id: "user-1",
+        account_id: identity.id,
         tags: []
       }
 
@@ -34,14 +43,14 @@ defmodule Hybridsocial.StreamingTest do
       assert_receive %{event: "update", payload: ^post}
     end
 
-    test "broadcasts post to group topic" do
+    test "broadcasts post to group topic", %{identity: identity} do
       Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "group:group-1")
 
       post = %{
         id: "post-3",
         content: "Group post",
         visibility: "public",
-        account_id: "user-1",
+        account_id: identity.id,
         group_id: "group-1",
         tags: []
       }
@@ -50,14 +59,14 @@ defmodule Hybridsocial.StreamingTest do
       assert_receive %{event: "update", payload: ^post}
     end
 
-    test "broadcasts post to hashtag topics" do
+    test "broadcasts post to hashtag topics", %{identity: identity} do
       Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "hashtag:elixir")
 
       post = %{
         id: "post-4",
         content: "Tagged post",
         visibility: "public",
-        account_id: "user-1",
+        account_id: identity.id,
         tags: ["elixir"]
       }
 
@@ -65,14 +74,14 @@ defmodule Hybridsocial.StreamingTest do
       assert_receive %{event: "update", payload: ^post}
     end
 
-    test "does not broadcast private posts to public timeline" do
+    test "does not broadcast private posts to public timeline", %{identity: identity} do
       Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "timeline:public")
 
       post = %{
         id: "post-5",
         content: "Private post",
         visibility: "private",
-        account_id: "user-1",
+        account_id: identity.id,
         tags: []
       }
 

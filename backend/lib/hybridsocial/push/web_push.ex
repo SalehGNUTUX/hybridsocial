@@ -2,7 +2,7 @@ defmodule Hybridsocial.Push.WebPush do
   @moduledoc """
   Web Push notification sending with VAPID authentication.
   Uses RFC 8291 (aes128gcm) content encoding and RFC 8292 (VAPID) auth.
-  Built on top of :crypto, JOSE (already a dep via Joken), and HTTPoison.
+  Built on top of :crypto, JOSE (already a dep via Joken), and Req.
   """
 
   @doc """
@@ -22,7 +22,7 @@ defmodule Hybridsocial.Push.WebPush do
         |> Map.put("TTL", "86400")
         |> Map.to_list()
 
-      HTTPoison.post(subscription.endpoint, encrypted_body, headers, recv_timeout: 15_000)
+      Hybridsocial.HTTP.post(subscription.endpoint, encrypted_body, headers, recv_timeout: 15_000)
     end
   end
 

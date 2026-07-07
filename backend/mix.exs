@@ -42,7 +42,7 @@ defmodule Hybridsocial.MixProject do
     [
       {:phoenix, "~> 1.8.5"},
       {:phoenix_ecto, "~> 4.5"},
-      {:ecto_sql, "~> 3.13"},
+      {:ecto_sql, "~> 3.14"},
       {:postgrex, ">= 0.0.0"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
@@ -63,7 +63,6 @@ defmodule Hybridsocial.MixProject do
       {:ex_aws, "~> 2.5"},
       {:ex_aws_s3, "~> 2.5"},
       {:sweet_xml, "~> 0.7"},
-      {:hackney, "~> 1.20"},
       # Email
       {:swoosh, "~> 1.17"},
       {:gen_smtp, "~> 1.0"},
@@ -71,16 +70,18 @@ defmodule Hybridsocial.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
-      # Federation / HTTP
-      {:httpoison, "~> 2.0"},
+      # Federation / HTTP (Req over Finch; replaced HTTPoison/hackney,
+      # which was unmaintained and carried SSRF/CRLF CVEs)
+      {:req, "~> 0.5"},
       # Valkey/Redis cache
       {:redix, "~> 1.5"},
       # CORS
       {:cors_plug, "~> 3.0"},
       # NATS JetStream
       {:gnat, "~> 1.8"},
-      # Markdown (CommonMark + GFM) and HTML sanitization
-      {:earmark, "~> 1.4"},
+      # Markdown (CommonMark + GFM) and HTML sanitization. MDEx (comrak)
+      # replaced Earmark, which is retired/unmaintained with an open CVE.
+      {:mdex, "~> 0.13"},
       {:html_sanitize_ex, "~> 1.4"}
     ]
   end

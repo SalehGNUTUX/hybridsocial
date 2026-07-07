@@ -39,7 +39,11 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
 
   describe "POST /api/v1/auth/login" do
     setup %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      # register_user leaves the email unconfirmed; login 403s on an
+      # unconfirmed email (email confirmation defaults on). Confirm it,
+      # matching a real actor who has clicked the confirmation link.
+      confirm_email(identity)
       %{conn: conn}
     end
 
@@ -55,7 +59,8 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
       assert response["access_token"] != nil
       assert response["refresh_token"] != nil
       assert response["token_type"] == "Bearer"
-      assert response["expires_in"] == 900
+      # Access-token TTL is Token.access_token_ttl() (7 days = 604800s).
+      assert response["expires_in"] == Hybridsocial.Auth.Token.access_token_ttl()
     end
 
     test "rejects invalid password", %{conn: conn} do
@@ -71,7 +76,11 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
 
   describe "POST /api/v1/auth/refresh" do
     test "issues new tokens with valid refresh token", %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      # register_user leaves the email unconfirmed; login 403s on an
+      # unconfirmed email (email confirmation defaults on). Confirm it,
+      # matching a real actor who has clicked the confirmation link.
+      confirm_email(identity)
 
       login_conn =
         post(conn, "/api/v1/auth/login", %{
@@ -92,7 +101,11 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
 
   describe "GET /api/v1/auth/me" do
     test "returns current user when authenticated", %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      # register_user leaves the email unconfirmed; login 403s on an
+      # unconfirmed email (email confirmation defaults on). Confirm it,
+      # matching a real actor who has clicked the confirmation link.
+      confirm_email(identity)
 
       login_conn =
         post(conn, "/api/v1/auth/login", %{
@@ -120,7 +133,11 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
 
   describe "POST /api/v1/auth/logout" do
     test "revokes token", %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      # register_user leaves the email unconfirmed; login 403s on an
+      # unconfirmed email (email confirmation defaults on). Confirm it,
+      # matching a real actor who has clicked the confirmation link.
+      confirm_email(identity)
 
       login_conn =
         post(conn, "/api/v1/auth/login", %{
@@ -136,12 +153,25 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
         |> post("/api/v1/auth/logout")
 
       assert json_response(conn, 200)["message"] == "auth.logged_out"
+
+      # The access token must stop working immediately after logout — the
+      # auth plug enforces revocation on top of the (still-unexpired) JWT.
+      me_conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/auth/me")
+
+      assert json_response(me_conn, 401)["error"] == "auth.unauthorized"
     end
   end
 
   describe "2FA setup flow" do
     setup %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      # register_user leaves the email unconfirmed; login 403s on an
+      # unconfirmed email (email confirmation defaults on). Confirm it,
+      # matching a real actor who has clicked the confirmation link.
+      confirm_email(identity)
 
       login_conn =
         post(conn, "/api/v1/auth/login", %{
@@ -195,7 +225,11 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
 
   describe "2FA login flow" do
     setup %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      # register_user leaves the email unconfirmed; login 403s on an
+      # unconfirmed email (email confirmation defaults on). Confirm it,
+      # matching a real actor who has clicked the confirmation link.
+      confirm_email(identity)
 
       # Login, setup, and enable 2FA
       login_conn =
@@ -264,7 +298,11 @@ defmodule HybridsocialWeb.Api.V1.AuthControllerTest do
 
   describe "DELETE /api/v1/auth/2fa" do
     setup %{conn: conn} do
-      {:ok, _} = Accounts.register_user(@valid_attrs)
+      {:ok, identity} = Accounts.register_user(@valid_attrs)
+      # register_user leaves the email unconfirmed; login 403s on an
+      # unconfirmed email (email confirmation defaults on). Confirm it,
+      # matching a real actor who has clicked the confirmation link.
+      confirm_email(identity)
 
       login_conn =
         post(conn, "/api/v1/auth/login", %{

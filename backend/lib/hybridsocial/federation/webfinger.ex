@@ -50,7 +50,7 @@ defmodule Hybridsocial.Federation.WebFinger do
         {"User-Agent", "HybridSocial (+https://#{HybridsocialWeb.Endpoint.host()})"}
       ]
 
-      case HTTPoison.get(url, headers, recv_timeout: 10_000, timeout: 10_000) do
+      case Hybridsocial.HTTP.get(url, headers, recv_timeout: 10_000, timeout: 10_000) do
         {:ok, %{status_code: 200, body: body}} ->
           case Jason.decode(body) do
             {:ok, data} ->

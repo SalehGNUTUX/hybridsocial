@@ -331,7 +331,10 @@ defmodule HybridsocialWeb.Federation.InboxControllerTest do
           "signature",
           ~s|keyId="https://attacker.example/users/x#main-key",algorithm="rsa-sha256",headers="(request-target) host date digest",signature="ZmFrZQ=="|
         )
-        |> post("/actors/#{local.id}/inbox", activity)
+        # Post the raw body we hashed for the digest, not the map (which
+        # would be re-encoded and fail the digest check before signature
+        # verification — the check we're actually asserting on).
+        |> post("/actors/#{local.id}/inbox", body)
 
       assert json_response(conn, 401)["error"] == "Invalid HTTP signature"
     end

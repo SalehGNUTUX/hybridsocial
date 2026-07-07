@@ -67,11 +67,11 @@ defmodule Hybridsocial.Moderation.Filters.CustomEngine do
       {"accept", "application/json"}
     ]
 
-    case HTTPoison.post(url, body, headers, recv_timeout: 5_000, timeout: 5_000) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+    case Hybridsocial.HTTP.post(url, body, headers, recv_timeout: 5_000, timeout: 5_000) do
+      {:ok, %Hybridsocial.HTTP.Response{status_code: 200, body: response_body}} ->
         parse_webhook_response(response_body, text)
 
-      {:ok, %HTTPoison.Response{status_code: status}} ->
+      {:ok, %Hybridsocial.HTTP.Response{status_code: status}} ->
         Logger.warning(
           "Content filter webhook returned non-200 status: #{status}, falling back to default"
         )

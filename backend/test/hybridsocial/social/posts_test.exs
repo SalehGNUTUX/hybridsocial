@@ -27,8 +27,11 @@ defmodule Hybridsocial.Social.PostsTest do
           "content" => "Hello <script>alert('xss')</script>"
         })
 
-      assert post.content_html =~ "&lt;script&gt;"
+      # Raw <script> must not survive as an executable element. (The
+      # markdown engine drops the tag and the per-tier sanitizer is
+      # defense-in-depth; any remaining inner text is harmless.)
       refute post.content_html =~ "<script>"
+      refute post.content_html =~ "</script>"
     end
 
     test "fails without content for text post" do
@@ -316,13 +319,14 @@ defmodule Hybridsocial.Social.PostsTest do
   describe "extract_hashtags/1" do
     test "extracts hashtags from content" do
       tags = Posts.extract_hashtags("Hello #world and #elixir!")
-      assert "world" in tags
-      assert "elixir" in tags
+      # extract_hashtags returns {normalized, original_display} pairs.
+      assert {"world", "world"} in tags
+      assert {"elixir", "elixir"} in tags
     end
 
     test "deduplicates and lowercases" do
       tags = Posts.extract_hashtags("#Elixir #elixir #ELIXIR")
-      assert tags == ["elixir"]
+      assert tags == [{"elixir", "Elixir"}]
     end
 
     test "returns empty list for nil" do

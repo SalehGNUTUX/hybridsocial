@@ -142,34 +142,81 @@ defmodule HybridsocialWeb.MediaProxyController do
       {"Accept", "*/*"}
     ]
 
-    opts = [
-      stream_to: self(),
-      async: :once,
-      recv_timeout: @fetch_timeout_ms,
-      timeout: @fetch_timeout_ms,
-      follow_redirect: true,
-      max_redirect: 3
-    ]
-
     with {:ok, tmp_path} <- new_tmp_path(),
          {:ok, file} <- File.open(tmp_path, [:write, :binary, :raw]) do
-      case HTTPoison.get(url, headers, opts) do
-        {:ok, %HTTPoison.AsyncResponse{id: id}} ->
-          result =
-            recv_stream(id, file, tmp_path, %{
-              status: nil,
-              content_type: "application/octet-stream",
-              size: 0
-            })
+      # Stream the body straight to the tmp file (no in-memory buffering),
+      # aborting the moment we cross the size cap so a hostile upstream
+      # can't exhaust disk. Req's `into` fun runs per chunk; returning
+      # :halt stops the download and releases the socket.
+      collector = fn {:data, chunk}, {req, resp} ->
+        written = resp.private[:bytes] || 0
 
-          File.close(file)
-          finalize_stream(result, tmp_path)
+        cond do
+          resp.status not in 200..299 ->
+            {:halt, {req, resp}}
 
-        {:error, %HTTPoison.Error{reason: reason}} ->
-          File.close(file)
-          File.rm(tmp_path)
-          {:error, reason}
+          written + byte_size(chunk) > @max_file_bytes ->
+            {:halt, {req, put_resp_private(resp, :too_large, true)}}
+
+          true ->
+            case IO.binwrite(file, chunk) do
+              :ok -> {:cont, {req, put_resp_private(resp, :bytes, written + byte_size(chunk))}}
+              _ -> {:halt, {req, put_resp_private(resp, :write_error, true)}}
+            end
+        end
       end
+
+      result =
+        case Req.request(
+               method: :get,
+               url: url,
+               headers: headers,
+               redirect: true,
+               max_redirects: 3,
+               receive_timeout: @fetch_timeout_ms,
+               connect_options: [timeout: @fetch_timeout_ms],
+               decode_body: false,
+               retry: false,
+               into: collector
+             ) do
+          {:ok, resp} ->
+            cond do
+              resp.status not in 200..299 ->
+                {:error, {:http_error, resp.status}}
+
+              resp.private[:too_large] ->
+                {:error, :too_large}
+
+              resp.private[:write_error] ->
+                {:error, :write_failed}
+
+              true ->
+                {:ok,
+                 %{
+                   tmp_path: tmp_path,
+                   content_type: content_type_from(resp),
+                   byte_size: resp.private[:bytes] || 0
+                 }}
+            end
+
+          {:error, exception} ->
+            {:error, Map.get(exception, :reason, exception)}
+        end
+
+      File.close(file)
+      finalize_stream(result, tmp_path)
+    end
+  end
+
+  defp put_resp_private(resp, key, value) do
+    %{resp | private: Map.put(resp.private, key, value)}
+  end
+
+  defp content_type_from(resp) do
+    case resp.headers["content-type"] do
+      [ct | _] -> ct
+      ct when is_binary(ct) -> ct
+      _ -> "application/octet-stream"
     end
   end
 
@@ -197,75 +244,6 @@ defmodule HybridsocialWeb.MediaProxyController do
   defp finalize_stream({:error, _} = err, tmp_path) do
     File.rm(tmp_path)
     err
-  end
-
-  defp recv_stream(id, file, tmp_path, state) do
-    receive do
-      %HTTPoison.AsyncStatus{id: ^id, code: code} when code in 200..299 ->
-        :hackney.stream_next(id)
-        recv_stream(id, file, tmp_path, %{state | status: code})
-
-      %HTTPoison.AsyncStatus{id: ^id, code: code} ->
-        cancel_async(id)
-        {:error, {:http_error, code}}
-
-      %HTTPoison.AsyncHeaders{id: ^id, headers: headers} ->
-        ct = header_value(headers, "content-type") || state.content_type
-        :hackney.stream_next(id)
-        recv_stream(id, file, tmp_path, %{state | content_type: ct})
-
-      %HTTPoison.AsyncChunk{id: ^id, chunk: chunk} ->
-        new_size = state.size + byte_size(chunk)
-
-        if new_size > @max_file_bytes do
-          cancel_async(id)
-          {:error, :too_large}
-        else
-          case IO.binwrite(file, chunk) do
-            :ok ->
-              :hackney.stream_next(id)
-              recv_stream(id, file, tmp_path, %{state | size: new_size})
-
-            err ->
-              cancel_async(id)
-              {:error, err}
-          end
-        end
-
-      %HTTPoison.AsyncRedirect{id: ^id} ->
-        # follow_redirect: true means hackney handles the actual
-        # redirect for us — we just keep draining the new request.
-        :hackney.stream_next(id)
-        recv_stream(id, file, tmp_path, state)
-
-      %HTTPoison.AsyncEnd{id: ^id} ->
-        {:ok, %{tmp_path: tmp_path, content_type: state.content_type, byte_size: state.size}}
-
-      %HTTPoison.Error{id: ^id, reason: reason} ->
-        {:error, reason}
-    after
-      @fetch_timeout_ms ->
-        cancel_async(id)
-        {:error, :timeout}
-    end
-  end
-
-  defp cancel_async(id) do
-    # hackney exposes the cancel; ignore failures — we're already
-    # on an error path and just want the socket released.
-    try do
-      :hackney.stop_async(id)
-    catch
-      _, _ -> :ok
-    end
-  end
-
-  defp header_value(headers, name) do
-    target = String.downcase(name)
-
-    Enum.find_value(headers, fn {k, v} ->
-      if String.downcase(to_string(k)) == target, do: v
-    end)
   end
 
   # tmp_path comes from new_tmp_path/0 (random bytes under

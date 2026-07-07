@@ -27,8 +27,18 @@ defmodule Hybridsocial.FeedsTest do
       post_type: "text"
     }
 
+    # Mirror Posts.create_post: create_changeset never casts published_at
+    # (it's stamped separately), so a raw insert leaves it nil and the
+    # post is filtered out of every timeline as "unpublished". Stamp it
+    # (and last_activity_at) here so these helper posts behave like real
+    # published posts. Tests wanting a scheduled/unpublished post pass
+    # published_at: nil explicitly.
+    now = DateTime.utc_now()
+
     %Post{}
     |> Post.create_changeset(Map.merge(defaults, attrs))
+    |> Ecto.Changeset.put_change(:published_at, Map.get(attrs, :published_at, now))
+    |> Ecto.Changeset.put_change(:last_activity_at, Map.get(attrs, :last_activity_at, now))
     |> Repo.insert!()
   end
 
@@ -143,24 +153,26 @@ defmodule Hybridsocial.FeedsTest do
       bob = create_user("bob_page", "bob_page@example.com")
       create_follow(alice, bob)
 
-      post1 = create_post(bob, %{content: "Post 1"})
-      post2 = create_post(bob, %{content: "Post 2"})
+      # The cursor is ordering-based, NOT UUID-based: max_id resolves the
+      # boundary post's sort key (last_activity_at/published_at, id) and
+      # returns rows strictly older than it. So pin distinct timestamps and
+      # assert by recency, not by UUID value (which is random and unrelated
+      # to feed order). See [[feedback_uuid_cursor_pagination]].
+      older = DateTime.add(DateTime.utc_now(), -60, :second)
+      newer = DateTime.utc_now()
+      post1 = create_post(bob, %{content: "Post 1", published_at: older, last_activity_at: older})
+      post2 = create_post(bob, %{content: "Post 2", published_at: newer, last_activity_at: newer})
 
-      # max_id filters by UUID comparison — get all entries first, then verify
-      # that requesting with a specific max_id returns fewer results
-      all_entries = Feeds.home_timeline(alice.id)
-      all_ids = Enum.map(all_entries, fn e -> e.data.id end)
-
+      all_ids = Feeds.home_timeline(alice.id) |> Enum.map(& &1.data.id)
       assert post1.id in all_ids
       assert post2.id in all_ids
 
-      # Using the "larger" UUID as max_id should exclude it
-      [larger, smaller] = Enum.sort([post1.id, post2.id], :desc)
-      entries = Feeds.home_timeline(alice.id, max_id: larger)
-      filtered_ids = Enum.map(entries, fn e -> e.data.id end)
+      # Paginating from the newer post returns strictly-older rows: post1, not post2.
+      filtered_ids =
+        Feeds.home_timeline(alice.id, max_id: post2.id) |> Enum.map(& &1.data.id)
 
-      assert smaller in filtered_ids
-      refute larger in filtered_ids
+      assert post1.id in filtered_ids
+      refute post2.id in filtered_ids
     end
 
     test "respects limit option" do
@@ -404,10 +416,15 @@ defmodule Hybridsocial.FeedsTest do
       refute Visibility.visible_to?(post, nil)
     end
 
-    test "group visibility returns true (stub)" do
+    test "group visibility is visible to group members" do
+      # visible_to? for group posts is no longer a stub — it checks real
+      # membership (Groups.member?). A group post with a group the viewer
+      # belongs to is visible; one with no group_id is not.
       alice = create_user("alice_grp", "alice_grp@example.com")
       bob = create_user("bob_grp", "bob_grp@example.com")
-      post = create_post(alice, %{visibility: "group"})
+      {:ok, group} = Hybridsocial.Groups.create_group(alice.id, %{"name" => "Grp"})
+      {:ok, _} = Hybridsocial.Groups.join_group(group.id, bob.id)
+      post = create_post(alice, %{visibility: "group", group_id: group.id})
 
       assert Visibility.visible_to?(post, bob.id)
     end

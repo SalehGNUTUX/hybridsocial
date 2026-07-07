@@ -22,7 +22,7 @@ defmodule Hybridsocial.EmailsTest do
       email = Emails.confirmation_email(user)
 
       assert email.to == [{"Test User", "test@example.com"}]
-      assert email.subject =~ "Confirm your email"
+      assert email.subject =~ "confirm your email"
       assert email.text_body =~ "confirm-token-123"
       assert email.text_body =~ "confirm"
     end
@@ -34,7 +34,7 @@ defmodule Hybridsocial.EmailsTest do
       email = Emails.password_reset_email(user)
 
       assert email.to == [{"Test User", "test@example.com"}]
-      assert email.subject =~ "Reset your password"
+      assert email.subject =~ "reset your password"
       assert email.text_body =~ "reset-token-456"
     end
   end
@@ -45,7 +45,7 @@ defmodule Hybridsocial.EmailsTest do
       email = Emails.login_notification_email(user, "192.168.1.1", "Mozilla/5.0")
 
       assert email.to == [{"Test User", "test@example.com"}]
-      assert email.subject =~ "New login"
+      assert email.subject =~ "new login"
       assert email.text_body =~ "192.168.1.1"
       assert email.text_body =~ "Mozilla/5.0"
     end

@@ -151,7 +151,7 @@ defmodule Hybridsocial.Content.ScheduledPostsTest do
 
       assert post.published_at == nil
 
-      {count, _} = ScheduledPosts.publish_due_posts()
+      count = ScheduledPosts.publish_due_posts()
       assert count >= 1
 
       updated = Repo.get!(Hybridsocial.Social.Post, post.id)
@@ -167,7 +167,7 @@ defmodule Hybridsocial.Content.ScheduledPostsTest do
           "scheduled_at" => future_time(7200)
         })
 
-      {count, _} = ScheduledPosts.publish_due_posts()
+      count = ScheduledPosts.publish_due_posts()
       assert count == 0
     end
   end

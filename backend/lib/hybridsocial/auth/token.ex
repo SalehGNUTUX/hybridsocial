@@ -2,15 +2,16 @@ defmodule Hybridsocial.Auth.Token do
   @moduledoc """
   JWT token generation and verification using Joken.
 
-  Access tokens are 7 days — long enough that a returning user
-  after a week of inactivity is still authenticated without a
-  round trip, short enough that a leaked token has a bounded
-  blast radius. Refresh tokens are 90 days and rotate on every
-  use, so an active user effectively never logs out.
+  Access tokens are 15 minutes. They're stateless JWTs, so the short
+  life bounds the blast radius of a leak and the window in which a
+  revoked-but-not-yet-expired token could still be replayed. Clients
+  refresh transparently on 401. Refresh tokens are 90 days and rotate
+  on every use, so an active user effectively never logs out, and a
+  refresh is the checkpoint where server-side revocation is enforced.
   """
   use Joken.Config
 
-  @access_token_ttl 7 * 24 * 3600
+  @access_token_ttl 15 * 60
   @refresh_token_ttl 90 * 24 * 3600
 
   @impl true

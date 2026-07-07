@@ -7,8 +7,26 @@ defmodule Hybridsocial.Auth do
   alias Hybridsocial.Accounts.User
   alias Hybridsocial.Auth.Token
   alias Hybridsocial.Auth.OAuthToken
+  alias Hybridsocial.Cache.TokenCache
 
   import Ecto.Query
+
+  @doc """
+  Whether an access token still backs a live session: a matching
+  `oauth_tokens` row exists, is not revoked, and hasn't expired. This is
+  what makes logout / revoke-session / revoke-all-devices actually take
+  effect — the JWT alone can't be un-issued, so the auth plug consults
+  this on top of JWT verification. Callers pass `Token.hash_token(token)`.
+  """
+  def access_token_active?(token_hash) when is_binary(token_hash) do
+    now = DateTime.utc_now()
+
+    OAuthToken
+    |> where([t], t.token_hash == ^token_hash)
+    |> where([t], is_nil(t.revoked_at))
+    |> where([t], t.expires_at > ^now)
+    |> Repo.exists?()
+  end
 
   def login(email, password) do
     with {:ok, user} <- Accounts.authenticate_user(email, password) do
@@ -204,7 +222,7 @@ defmodule Hybridsocial.Auth do
   def revoke_other_sessions(identity_id, current_token) do
     current_hash = Token.hash_token(current_token)
 
-    {count, _} =
+    {count, hashes} =
       OAuthToken
       |> where(
         [t],
@@ -212,7 +230,12 @@ defmodule Hybridsocial.Auth do
           is_nil(t.revoked_at) and
           t.token_hash != ^current_hash
       )
+      |> select([t], t.token_hash)
       |> Repo.update_all(set: [revoked_at: DateTime.utc_now()])
+
+    # Invalidate each revoked token's session cache so "log out all
+    # devices" takes effect immediately, not after the cache TTL.
+    Enum.each(hashes || [], &TokenCache.invalidate_session/1)
 
     {:ok, count}
   end
@@ -410,9 +433,15 @@ defmodule Hybridsocial.Auth do
   end
 
   defp revoke_token(oauth_token) do
-    oauth_token
-    |> OAuthToken.revoke_changeset()
-    |> Repo.update()
+    result =
+      oauth_token
+      |> OAuthToken.revoke_changeset()
+      |> Repo.update()
+
+    # Drop the positive session cache so the auth plug rejects this token
+    # on the very next request (rather than waiting out the cache TTL).
+    TokenCache.invalidate_session(oauth_token.token_hash)
+    result
   end
 
   @doc false

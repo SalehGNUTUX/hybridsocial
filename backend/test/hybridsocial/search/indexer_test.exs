@@ -9,7 +9,7 @@ defmodule Hybridsocial.Search.IndexerTest do
   @groups_index "hybridsocial_groups"
 
   setup do
-    case HTTPoison.get("http://localhost:9200") do
+    case Hybridsocial.HTTP.get("http://localhost:9200") do
       {:ok, %{status_code: 200}} ->
         # Clean up indexes
         OpenSearch.delete_index(@posts_index)

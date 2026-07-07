@@ -5,6 +5,8 @@ defmodule Hybridsocial.Auth.TOTP do
   """
 
   @issuer "HybridSocial"
+  # TOTP step, seconds (NimbleTOTP default).
+  @period 30
 
   @doc """
   Generates a new random TOTP secret (20 bytes, base32-encoded internally by NimbleTOTP).
@@ -24,9 +26,19 @@ defmodule Hybridsocial.Auth.TOTP do
   @doc """
   Validates a TOTP code against the given secret.
   Accepts string codes (6-digit) and converts them for verification.
+
+  Accepts the adjacent windows (±1 period) as well as the current one, so a
+  code submitted near a 30s boundary, or with minor client/server clock
+  skew or submission latency, still validates. This is standard TOTP drift
+  tolerance (RFC 6238 §5.2) and also removes a boundary-timing flake in the
+  2FA/recovery tests.
   """
   def valid_code?(secret, code) when is_binary(code) do
-    NimbleTOTP.valid?(secret, code)
+    now = System.os_time(:second)
+
+    Enum.any?([-@period, 0, @period], fn offset ->
+      NimbleTOTP.valid?(secret, code, time: now + offset)
+    end)
   end
 
   def valid_code?(_secret, _code), do: false

@@ -29,6 +29,12 @@ config :hybridsocial, rate_limiting_enabled: false
 # Skip HTTP signature verification in tests
 config :hybridsocial, federation_signature_check: false
 
+# Don't spawn fire-and-forget ActivityPub delivery tasks in tests. Those
+# closures query the Repo and outlive the test, so they crash with a
+# DBConnection.OwnershipError once the test's sandbox connection is
+# checked back in. Tests that specifically exercise delivery flip this on.
+config :hybridsocial, federation_delivery_enabled: false
+
 # Use DB 1 for tests to avoid conflicts with dev data
 config :hybridsocial, :valkey_url, "redis://localhost:6379/1"
 

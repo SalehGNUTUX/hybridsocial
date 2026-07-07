@@ -156,7 +156,7 @@ defmodule HybridsocialWeb.Api.V1.SearchController do
         {"User-Agent", "HybridSocial/0.1.0"}
       ]
 
-      case HTTPoison.get(url, headers, recv_timeout: 10_000, timeout: 10_000) do
+      case Hybridsocial.HTTP.get(url, headers, recv_timeout: 10_000, timeout: 10_000) do
         {:ok, %{status_code: 200, body: body}} ->
           case Jason.decode(body) do
             {:ok, %{"url" => actor_url}} when is_binary(actor_url) ->
@@ -220,7 +220,7 @@ defmodule HybridsocialWeb.Api.V1.SearchController do
       {"User-Agent", "HybridSocial/0.1.0"}
     ]
 
-    case HTTPoison.get(url, headers,
+    case Hybridsocial.HTTP.get(url, headers,
            recv_timeout: 10_000,
            timeout: 10_000,
            follow_redirect: true

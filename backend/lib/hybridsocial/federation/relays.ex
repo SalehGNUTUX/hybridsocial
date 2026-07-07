@@ -44,7 +44,7 @@ defmodule Hybridsocial.Federation.Relays do
       # Fire the Follow async so the admin doesn't wait on a remote
       # relay's response. Delivery errors flip status to "failed"
       # so the UI can show what happened.
-      Task.start(fn ->
+      Hybridsocial.Federation.deliver_async(fn ->
         case Publisher.deliver_as_instance(activity, inbox_url) do
           {:ok, _status} ->
             Logger.info("Relay Follow sent to #{inbox_url} (#{style})")
@@ -151,7 +151,7 @@ defmodule Hybridsocial.Federation.Relays do
       "object" => follow
     }
 
-    Task.start(fn ->
+    Hybridsocial.Federation.deliver_async(fn ->
       case Publisher.deliver_as_instance(undo, inbox_url) do
         {:ok, _} -> Logger.info("Relay Undo{Follow} sent to #{inbox_url}")
         {:error, r} -> Logger.warning("Relay Undo to #{inbox_url} failed: #{inspect(r)}")

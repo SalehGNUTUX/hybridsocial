@@ -2,7 +2,7 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
   @moduledoc """
   CommonMark/GFM markdown rendering with per-tier feature allowlists.
 
-  Uses Earmark for parsing and HtmlSanitizeEx for output sanitization.
+  Uses MDEx (comrak) for parsing and HtmlSanitizeEx for output sanitization.
 
   Four feature levels match the tier_limits.ex markdown settings:
 
@@ -24,13 +24,16 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
 
   @type level :: :none | :basic | :full | :full_embeds
 
-  @earmark_opts_common %Earmark.Options{
-    gfm: true,
-    breaks: true,
-    smartypants: false,
-    compact_output: false,
-    escape: true
-  }
+  # GFM feature set. Pass raw HTML THROUGH (render.unsafe: true) rather than
+  # letting comrak strip or escape it, then let the per-tier HtmlSanitizeEx
+  # scrubbers be the security boundary: they drop/neutralize disallowed tags
+  # (`<script>`, `<iframe>`) and strip disallowed attributes (`onclick`) from
+  # allowed ones, and clamp each level to its allowlist. This mirrors the
+  # render-then-sanitize model the code used under Earmark.
+  @mdex_opts [
+    extension: [table: true, strikethrough: true, autolink: true, tasklist: true],
+    render: [hardbreaks: true, unsafe: true]
+  ]
 
   # --------------------------------------------------------------------------
   # Public API
@@ -55,7 +58,7 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
       |> stash_hashtags()
 
     with_placeholders
-    |> render_with_earmark(level)
+    |> render_markdown(level)
     |> sanitize(level)
     |> restore_hashtags(hashtags)
     |> post_process()
@@ -73,7 +76,7 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
       |> stash_hashtags()
 
     with_placeholders
-    |> render_with_earmark(:full_embeds)
+    |> render_markdown(:full_embeds)
     |> sanitize(:full_embeds)
     |> restore_hashtags(hashtags)
     |> post_process()
@@ -83,8 +86,8 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
   # Rendering
   # --------------------------------------------------------------------------
 
-  defp render_with_earmark(markdown, :none) do
-    # For :none we skip Earmark entirely — paragraphs only, nothing else.
+  defp render_markdown(markdown, :none) do
+    # For :none we skip the markdown engine entirely — paragraphs only, nothing else.
     # Mentions/hashtags still get linked by post_process.
     markdown
     |> String.split(~r/\n\n+/)
@@ -93,10 +96,12 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
     end)
   end
 
-  defp render_with_earmark(markdown, _level) do
-    case Earmark.as_html(markdown, @earmark_opts_common) do
-      {:ok, html, _warnings} -> html
-      {:error, html, _warnings} -> html
+  defp render_markdown(markdown, _level) do
+    case MDEx.to_html(markdown, @mdex_opts) do
+      {:ok, html} -> html
+      # On a parse/decode error fall back to escaped paragraphs rather than
+      # leaking raw markup; the sanitizer runs on the result regardless.
+      {:error, _} -> markdown |> escape_html() |> String.replace("\n", "<br>")
     end
   end
 
@@ -132,7 +137,7 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
 
   defp link_mentions(html) do
     # Only match @foo outside of existing anchor tags — avoid mangling links
-    # Earmark already wrote. Matches ` @foo` or `>@foo` or start-of-line.
+    # the renderer already wrote. Matches ` @foo` or `>@foo` or start-of-line.
     Regex.replace(
       ~r/(^|[^a-zA-Z0-9_>"\/])@([a-zA-Z0-9_]+)(@[a-zA-Z0-9.\-]+)?/u,
       html,
@@ -143,18 +148,21 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
     )
   end
 
-  # Earmark sees `_` as italic, so a hashtag like `#foo_bar_baz` would
+  # The markdown engine sees `_` as italic, so a hashtag like `#foo_bar_baz` would
   # come out of the renderer as `#foo<em>bar</em>baz` and the
   # post-process regex would never match the full tag. To dodge that
-  # we lift hashtags out of the source *before* Earmark runs, swap in
+  # we lift hashtags out of the source *before* the engine runs, swap in
   # a marker that has no markdown-special characters, then splice the
   # rendered anchors back in after sanitization.
-  @hashtag_re ~r/(^|[^\p{L}\p{M}\p{N}_>"\/])#(\p{L}[\p{L}\p{M}\p{N}_]{0,100})/u
+  # The prefix class also excludes `[` so a hashtag used as markdown link
+  # text — `[#tag](url)` — is left for the engine to render as the link; stashing
+  # it would splice a `/tags/…` anchor inside the link's <a>, nesting anchors.
+  @hashtag_re ~r/(^|[^\p{L}\p{M}\p{N}_>"\/\[])#(\p{L}[\p{L}\p{M}\p{N}_]{0,100})/u
 
   defp stash_hashtags(text) do
-    # Walk the regex matches in order, replacing each `prefix#tag`
-    # with `prefix<<<HASHTAGn>>>`. The marker has no markdown-special
-    # characters so Earmark passes it through untouched, and the tag
+    # Walk the regex matches in order, replacing each `prefix#tag` with a
+    # PUA-delimited marker (see below). The marker has no markdown-special
+    # characters so the engine passes it through untouched, and the tag
     # text — which may contain underscores — never reaches the
     # emphasis parser.
     matches = Regex.scan(@hashtag_re, text, return: :index)
@@ -166,7 +174,11 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
         head = binary_part(text, off, full_off - off)
         prefix = binary_part(text, full_off, prefix_len)
         tag = binary_part(text, tag_off, tag_len)
-        marker = "<<<HASHTAG#{idx}>>>"
+        # Delimit with Private-Use-Area codepoints, not `<<<…>>>`: comrak
+        # parses the angle brackets as an HTML tag and strips the marker,
+        # whereas PUA chars are ordinary text to every markdown engine and
+        # the sanitizer, and never appear in real content.
+        marker = "\u{E000}HASHTAG#{idx}\u{E001}"
         {acc <> head <> prefix <> marker, full_off + full_len, [{idx, tag} | tags], idx + 1}
       end)
 
@@ -177,12 +189,8 @@ defmodule Hybridsocial.Content.MarkdownRenderer do
   defp restore_hashtags(html, hashtags) when map_size(hashtags) == 0, do: html
 
   defp restore_hashtags(html, hashtags) do
-    Regex.replace(~r/&lt;&lt;&lt;HASHTAG(\d+)&gt;&gt;&gt;|<<<HASHTAG(\d+)>>>/, html, fn _full,
-                                                                                        idx_a,
-                                                                                        idx_b ->
-      idx = String.to_integer(if idx_a == "", do: idx_b, else: idx_a)
-
-      case Map.get(hashtags, idx) do
+    Regex.replace(~r/\x{E000}HASHTAG(\d+)\x{E001}/u, html, fn _full, idx ->
+      case Map.get(hashtags, String.to_integer(idx)) do
         nil ->
           ""
 

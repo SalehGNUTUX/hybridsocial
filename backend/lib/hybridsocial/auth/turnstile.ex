@@ -15,7 +15,9 @@ defmodule Hybridsocial.Auth.Turnstile do
 
     body = URI.encode_query(%{secret: secret, response: token})
 
-    case HTTPoison.post(@verify_url, body, [{"Content-Type", "application/x-www-form-urlencoded"}]) do
+    case Hybridsocial.HTTP.post(@verify_url, body, [
+           {"Content-Type", "application/x-www-form-urlencoded"}
+         ]) do
       {:ok, %{status_code: 200, body: resp_body}} ->
         case Jason.decode(resp_body) do
           {:ok, %{"success" => true}} -> {:ok, true}

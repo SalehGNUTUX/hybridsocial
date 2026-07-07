@@ -32,7 +32,10 @@ defmodule Hybridsocial.Auth.PoWTest do
     test "rejects valid prefix but wrong nonce" do
       challenge = PoW.generate_challenge(4)
 
-      refute PoW.verify(challenge.prefix, "bad_nonce")
+      # A random nonce satisfies difficulty 4 (4 leading zero bits) ~1/16
+      # of the time, so a hardcoded "bad_nonce" flakes. Use one whose hash
+      # provably starts with a 1 bit — never a valid difficulty-4 solution.
+      refute PoW.verify(challenge.prefix, find_non_solution(challenge.prefix))
     end
 
     test "rejects when the challenge has expired / been evicted" do
@@ -73,4 +76,14 @@ defmodule Hybridsocial.Auth.PoWTest do
 
   defp count_zeros(<<0::1, rest::bitstring>>), do: 1 + count_zeros(rest)
   defp count_zeros(_), do: 0
+
+  # First nonce whose SHA-256(prefix <> nonce) starts with a 1 bit, so it
+  # can never meet any positive difficulty. Deterministic (no flakes).
+  defp find_non_solution(prefix) do
+    Enum.reduce_while(0..1_000_000, nil, fn i, _acc ->
+      nonce = Integer.to_string(i)
+      <<first::1, _::bitstring>> = :crypto.hash(:sha256, prefix <> nonce)
+      if first == 1, do: {:halt, nonce}, else: {:cont, nil}
+    end)
+  end
 end
