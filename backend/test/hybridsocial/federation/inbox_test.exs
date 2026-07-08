@@ -191,6 +191,60 @@ defmodule Hybridsocial.Federation.InboxTest do
       assert post.visibility == "public"
     end
 
+    test "extracts hashtags from a remote Note (AP tag array + body) so it can trend" do
+      remote_ap_id = "https://remote.example/users/tagger"
+
+      activity = %{
+        "@context" => "https://www.w3.org/ns/activitystreams",
+        "id" => "https://remote.example/activities/create-tags",
+        "type" => "Create",
+        "actor" => remote_ap_id,
+        "object" => %{
+          "id" => "https://remote.example/objects/note-tags",
+          "type" => "Note",
+          # #elixir appears inline in the body; #Federation only in the
+          # authoritative AP `tag` array — both must be linked.
+          "content" => "<p>Loving #elixir and the fediverse</p>",
+          "attributedTo" => remote_ap_id,
+          "published" => "2026-03-22T10:00:00Z",
+          "to" => ["https://www.w3.org/ns/activitystreams#Public"],
+          "tag" => [
+            %{"type" => "Mention", "name" => "@someone"},
+            %{
+              "type" => "Hashtag",
+              "name" => "#Federation",
+              "href" => "https://remote.example/t/federation"
+            },
+            %{
+              "type" => "Hashtag",
+              "name" => "#elixir",
+              "href" => "https://remote.example/t/elixir"
+            }
+          ]
+        }
+      }
+
+      assert {:ok, post} = Inbox.process(activity)
+
+      names =
+        from(h in Hybridsocial.Social.Hashtag,
+          join: ph in "post_hashtags",
+          on: ph.hashtag_id == h.id,
+          where: ph.post_id == type(^post.id, :binary_id),
+          select: h.name
+        )
+        |> Repo.all()
+        |> Enum.sort()
+
+      # Remote posts now populate post_hashtags — the join the trending
+      # query reads — so federated content can trend just like local.
+      assert names == ["elixir", "federation"]
+
+      # Display casing comes from the authoritative AP tag entry.
+      assert Repo.get_by(Hybridsocial.Social.Hashtag, name: "federation").display_name ==
+               "Federation"
+    end
+
     test "does not create duplicate posts" do
       remote_ap_id = "https://remote.example/users/frank"
 
