@@ -163,8 +163,11 @@ services:
       - uploads:/app/uploads
     networks:
       - internal
+    # Bind to loopback only. Caddy reaches the API over the internal
+    # network (backend:4000), so publishing to 0.0.0.0 would only let
+    # clients hit the API directly and bypass the Caddy/Coraza WAF.
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
 
   frontend:
     build:
@@ -184,8 +187,10 @@ services:
       - backend
     networks:
       - internal
+    # Loopback only — Caddy proxies to frontend:3000 over the internal
+    # network; a public bind would just expose the app in front of the WAF.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
   # ---- Antivirus (scans media uploads before storage) ----
 
