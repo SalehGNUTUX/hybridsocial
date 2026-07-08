@@ -144,6 +144,10 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  /* Kill the blue tap-flash mobile browsers paint on links/buttons
+     (very visible when a tap starts a scroll). Post text is still
+     selectable — this only removes the highlight overlay. (#10) */
+  -webkit-tap-highlight-color: transparent;
 }
 
 html {
@@ -167,6 +171,12 @@ html {
 body {
   min-height: 100vh;
   overflow-x: clip;
+  /* Disable browser scroll-anchoring. When a sticky bar sticks/unsticks
+     or async content resizes above the viewport, Chrome "helpfully"
+     re-adjusts scroll position — which reads as the top snapping into
+     place on its own while you're scrolling near it. Turning it off lets
+     the content scroll where the finger takes it. (issue #36-adjacent) */
+  overflow-anchor: none;
   /* Hard-pin body width to the visual viewport so a wide child
      can't push the body itself wider than the screen. Combined
      with the clip above this means the page can't scroll

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { untrack } from 'svelte';
   import { page } from '$app/state';
   import type { Post } from '$lib/api/types.js';
   import { api } from '$lib/api/client.js';
@@ -71,9 +71,19 @@
     finally { followLoading = false; }
   }
 
-  onMount(() => {
-    loadTimeline(true);
-    checkTagStatus();
+  // Re-load whenever the route's tag changes. SvelteKit reuses this
+  // component across /tags/a -> /tags/b navigations, so a plain onMount
+  // (fires once) left the previous tag's posts on screen even though the
+  // URL and title updated (issue #36). Reading `tag` registers it as the
+  // only dependency; untrack keeps the cursor/posts the loaders touch from
+  // retriggering the effect (which would re-fetch on every pagination).
+  $effect(() => {
+    if (tag) {
+      untrack(() => {
+        loadTimeline(true);
+        checkTagStatus();
+      });
+    }
   });
 </script>
 

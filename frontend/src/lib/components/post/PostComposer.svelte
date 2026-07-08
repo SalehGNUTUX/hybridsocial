@@ -4,7 +4,7 @@
   import { api } from '$lib/api/client.js';
   import { uploadMedia, updateMedia } from '$lib/api/media.js';
   import { search } from '$lib/api/search.js';
-  import type { Post, MediaAttachment, Identity, PostDraft } from '$lib/api/types.js';
+  import type { Post, MediaAttachment, Identity, PostDraft, TrendingTag } from '$lib/api/types.js';
   import { createDraft, updateDraft, getDraft, deleteDraft } from '$lib/api/drafts.js';
   import { currentUser, authStore } from '$lib/stores/auth.js';
   import { preferencesStore } from '$lib/stores/preferences.js';
@@ -842,9 +842,22 @@
   let mentionAtPos = $state(0);
   let mentionDebounce: ReturnType<typeof setTimeout> | null = null;
 
+  // --- Hashtag autocomplete ---
+  // Mirrors the mention flow above. `#` and `@` are distinct triggers, so
+  // at most one of the two dropdowns is ever active for the token at the
+  // cursor. Backed by the OpenSearch prefix search on hashtag names
+  // (usage-ranked, Unicode → works for AR + EN).
+  let hashtagSuggestions = $state<TrendingTag[]>([]);
+  let hashtagActive = $state(false);
+  let hashtagIndex = $state(0);
+  let hashtagQuery = $state('');
+  let hashtagAtPos = $state(0);
+  let hashtagDebounce: ReturnType<typeof setTimeout> | null = null;
+
   function handleTextareaInput() {
     autoGrow();
     detectMention();
+    detectHashtag();
   }
 
   // Pull every image File off the clipboard. clipboardData.files and
@@ -1028,6 +1041,98 @@
     mentionSuggestions = [];
     mentionQuery = '';
     if (mentionDebounce) clearTimeout(mentionDebounce);
+  }
+
+  function detectHashtag() {
+    if (!textareaEl) return;
+    const cursor = textareaEl.selectionStart;
+    const text = content.substring(0, cursor);
+
+    // Last `#tag` token at the cursor: must follow whitespace/start and
+    // begin with a letter (matches the server-side tag rule, so we don't
+    // suggest for `#123`). Unicode-aware so Arabic tags work.
+    const match = text.match(/(?:^|[\s\n])#(\p{L}[\p{L}\p{M}\p{N}_]*)$/u);
+    if (match) {
+      const query = match[1];
+      hashtagAtPos = cursor - query.length;
+      hashtagQuery = query;
+
+      // Fire after 2 letters, per the request ("first 2-3 letters").
+      if (query.length >= 2) {
+        if (hashtagDebounce) clearTimeout(hashtagDebounce);
+        hashtagDebounce = setTimeout(() => fetchHashtagSuggestions(query), 200);
+      } else {
+        hashtagSuggestions = [];
+        hashtagActive = false;
+      }
+    } else {
+      closeHashtags();
+    }
+  }
+
+  async function fetchHashtagSuggestions(query: string) {
+    try {
+      const results = await search(query, { type: 'hashtags', limit: 6 });
+      hashtagSuggestions = results.hashtags || [];
+      hashtagActive = hashtagSuggestions.length > 0;
+      hashtagIndex = 0;
+    } catch {
+      hashtagSuggestions = [];
+      hashtagActive = false;
+    }
+  }
+
+  function selectHashtag(tag: TrendingTag) {
+    if (!textareaEl) return;
+    const cursor = textareaEl.selectionStart;
+    // `before` keeps the leading `#`; replace the partial query with the
+    // chosen tag name and drop a trailing space to continue typing.
+    const before = content.substring(0, hashtagAtPos);
+    const after = content.substring(cursor);
+    const insertText = `${tag.name} `;
+    content = before + insertText + after;
+    closeHashtags();
+    setTimeout(() => {
+      if (textareaEl) {
+        const newPos = hashtagAtPos + insertText.length;
+        textareaEl.selectionStart = newPos;
+        textareaEl.selectionEnd = newPos;
+        textareaEl.focus();
+      }
+    }, 0);
+  }
+
+  function handleHashtagKeydown(e: KeyboardEvent) {
+    if (!hashtagActive) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hashtagIndex = (hashtagIndex + 1) % hashtagSuggestions.length;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hashtagIndex = (hashtagIndex - 1 + hashtagSuggestions.length) % hashtagSuggestions.length;
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (hashtagSuggestions.length > 0) {
+        e.preventDefault();
+        selectHashtag(hashtagSuggestions[hashtagIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeHashtags();
+    }
+  }
+
+  function closeHashtags() {
+    hashtagActive = false;
+    hashtagSuggestions = [];
+    hashtagQuery = '';
+    if (hashtagDebounce) clearTimeout(hashtagDebounce);
+  }
+
+  // The textarea's keydown drives whichever autocomplete is open (never
+  // both at once — `@` and `#` are different triggers).
+  function handleComposerKeydown(e: KeyboardEvent) {
+    if (mentionActive) handleMentionKeydown(e);
+    else if (hashtagActive) handleHashtagKeydown(e);
   }
 
   function togglePoll() {
@@ -1390,7 +1495,7 @@
             bind:this={textareaEl}
             bind:value={content}
             oninput={handleTextareaInput}
-            onkeydown={handleMentionKeydown}
+            onkeydown={handleComposerKeydown}
             onpaste={handlePaste}
             class="composer-textarea"
             placeholder={replyTo ? `Reply to @${replyTo.account?.handle ?? replyTo.account?.acct ?? ''}…` : quotePost ? 'Add a comment…' : "What's on your mind?"}
@@ -1419,6 +1524,27 @@
                   <div class="mention-info">
                     <span class="mention-name">{account.display_name || account.handle}</span>
                     <span class="mention-handle">@{account.acct || account.handle}</span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          {#if hashtagActive && hashtagSuggestions.length > 0}
+            <div class="mention-dropdown" role="listbox" aria-label="Hashtag suggestions">
+              {#each hashtagSuggestions as tag, i (tag.name)}
+                <button
+                  type="button"
+                  class="mention-item"
+                  class:mention-item-active={i === hashtagIndex}
+                  role="option"
+                  aria-selected={i === hashtagIndex}
+                  onclick={() => selectHashtag(tag)}
+                  onmouseenter={() => hashtagIndex = i}
+                >
+                  <div class="mention-avatar-placeholder">#</div>
+                  <div class="mention-info">
+                    <span class="mention-name">#{tag.name}</span>
                   </div>
                 </button>
               {/each}

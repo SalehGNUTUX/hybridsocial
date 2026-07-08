@@ -306,10 +306,20 @@
 
   .stream-overlay {
     position: absolute;
-    inset-block-end: 0;
+    /* Sit at the TOP so it never covers the video's native controls
+       (play/seek/volume) at the bottom. */
+    inset-block-start: 0;
     inset-inline: 0;
     padding: var(--space-3) var(--space-4);
-    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+    background: linear-gradient(rgba(0, 0, 0, 0.7), transparent);
+    /* Let clicks fall through to the <video> controls; only the author
+       link re-enables pointer events. Without this the overlay swallowed
+       every play/pause/seek tap. */
+    pointer-events: none;
+  }
+
+  .stream-author {
+    pointer-events: auto;
   }
 
   .stream-author {

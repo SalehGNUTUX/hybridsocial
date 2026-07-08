@@ -271,4 +271,15 @@
     margin-inline: calc(-1 * var(--space-2));
     padding-inline: var(--space-2);
   }
+
+  /* On mobile the translucent blur on this sticky bar repaints every
+     scroll frame (flicker, #10) and amplifies the "snapping top" feel.
+     Use a solid surface instead — still sticky, just not a live blur. */
+  @media (max-width: 768px) {
+    .timeline-sticky-bar {
+      background: var(--color-surface-base, #fff);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
 </style>
