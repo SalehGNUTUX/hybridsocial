@@ -360,6 +360,7 @@ defmodule Hybridsocial.Federation.Inbox do
           {:ok, post} ->
             persist_remote_attachments(post, ap_object, remote_identity)
             persist_remote_mentions(post, ap_object)
+            persist_remote_hashtags(post, ap_object)
             persist_remote_poll(post, post_attrs)
             Posts.broadcast_direct_post_to_participants(post)
             notify_remote_reply(post, parent_id)
@@ -425,6 +426,22 @@ defmodule Hybridsocial.Federation.Inbox do
   end
 
   defp persist_remote_mentions(_post, _object), do: :ok
+
+  # Extract hashtags for a remote post and link them into `post_hashtags`.
+  # Sources, deduped by Posts.link_hashtags/2:
+  #   1. the AP `tag` array — authoritative `type: "Hashtag"` entries the
+  #      origin instance declared (Mastodon/Pleroma/etc.);
+  #   2. the post body — fallback for peers that only inline `#tags`.
+  # This is what makes federated posts eligible for trending: the trending
+  # query is origin-agnostic and simply joins `post_hashtags`, so without
+  # this linking remote content could never trend, and remote hashtags
+  # never accrued a usage_count. Local posts already do this in insert_post.
+  defp persist_remote_hashtags(%Post{} = post, ap_object) do
+    ap_tags = ActivityMapper.extract_hashtags(ap_object["tag"])
+    body_tags = Posts.extract_hashtags(post.content)
+    Posts.link_hashtags(post, ap_tags ++ body_tags)
+    :ok
+  end
 
   # Persist a remote poll's options + cached vote counts so the
   # serializer can render `oneOf`/`anyOf` Question objects the same

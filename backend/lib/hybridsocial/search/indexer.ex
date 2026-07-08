@@ -121,6 +121,7 @@ defmodule Hybridsocial.Search.Indexer do
       visibility: post.visibility,
       post_type: post.post_type,
       language: post.language,
+      hashtags: post_hashtag_names(post.id),
       reaction_count: post.reaction_count || 0,
       boost_count: post.boost_count || 0,
       reply_count: post.reply_count || 0,
@@ -129,6 +130,19 @@ defmodule Hybridsocial.Search.Indexer do
     }
 
     OpenSearch.index_document(@posts_index, post.id, doc)
+  end
+
+  # Hashtag names linked to a post, for the OpenSearch `hashtags` keyword
+  # field the aggregation-based trending path reads. Queried from the DB
+  # (rather than a preload) because Post has no hashtags association.
+  defp post_hashtag_names(post_id) do
+    import Ecto.Query
+
+    Hybridsocial.Social.Hashtag
+    |> join(:inner, [h], ph in "post_hashtags", on: ph.hashtag_id == h.id)
+    |> where([_h, ph], ph.post_id == type(^post_id, :binary_id))
+    |> select([h, _ph], h.name)
+    |> Repo.all()
   end
 
   @doc "Indexes a single identity document."
@@ -227,6 +241,7 @@ defmodule Hybridsocial.Search.Indexer do
             visibility: post.visibility,
             post_type: post.post_type,
             language: post.language,
+            hashtags: post_hashtag_names(post.id),
             reaction_count: post.reaction_count || 0,
             boost_count: post.boost_count || 0,
             reply_count: post.reply_count || 0,

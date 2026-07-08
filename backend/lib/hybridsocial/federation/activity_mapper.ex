@@ -105,6 +105,37 @@ defmodule Hybridsocial.Federation.ActivityMapper do
   def extract_emojis(_), do: []
 
   @doc """
+  Pull hashtag entries out of an AP `tag` value. Remote instances declare
+  hashtags as `%{"type" => "Hashtag", "name" => "#photography", ...}`
+  entries in the same mixed `tag` array that carries Mentions and Emojis.
+  Returns `{lowercase_name, display}` pairs — the exact shape
+  `Hybridsocial.Social.Posts.extract_hashtags/1` produces — so federation
+  ingest can feed them through the same upsert/link path as local posts.
+  Each `name` is validated against the local tag charset (letter-led,
+  Unicode-aware) so a malformed remote value can't inject junk into the
+  `hashtags` table.
+  """
+  def extract_hashtags(nil), do: []
+
+  def extract_hashtags(tag) when is_list(tag) do
+    tag |> Enum.flat_map(&hashtag_entry/1) |> Enum.uniq_by(fn {name, _} -> name end)
+  end
+
+  def extract_hashtags(tag) when is_map(tag), do: hashtag_entry(tag)
+  def extract_hashtags(_), do: []
+
+  defp hashtag_entry(%{"type" => "Hashtag", "name" => name}) when is_binary(name) do
+    cleaned = name |> String.trim() |> String.trim_leading("#")
+
+    case Regex.run(~r/^(\p{L}[\p{L}\p{M}\p{N}_]{0,100})$/u, cleaned) do
+      [_, tag] -> [{String.downcase(tag), tag}]
+      _ -> []
+    end
+  end
+
+  defp hashtag_entry(_), do: []
+
+  @doc """
   Best-effort normalization of an AP actor `url` (which may be a string, a
   Link object, or a list of them) into a single http(s) URL string, or nil.
   """

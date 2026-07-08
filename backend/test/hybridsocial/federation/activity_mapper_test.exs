@@ -263,6 +263,48 @@ defmodule Hybridsocial.Federation.ActivityMapperTest do
     end
   end
 
+  describe "extract_hashtags/1" do
+    test "pulls Hashtag entries from a mixed tag list as {name, display} pairs" do
+      tag = [
+        %{"type" => "Mention", "name" => "@bob"},
+        %{"type" => "Hashtag", "name" => "#PhotoGraphy", "href" => "https://remote.example/t/x"},
+        %{"type" => "Emoji", "name" => ":cat:"}
+      ]
+
+      assert ActivityMapper.extract_hashtags(tag) == [{"photography", "PhotoGraphy"}]
+    end
+
+    test "handles names without a leading # and dedupes case-insensitively" do
+      tag = [
+        %{"type" => "Hashtag", "name" => "Elixir"},
+        %{"type" => "Hashtag", "name" => "#elixir"}
+      ]
+
+      assert ActivityMapper.extract_hashtags(tag) == [{"elixir", "Elixir"}]
+    end
+
+    test "supports Unicode (Arabic) tags" do
+      tag = [%{"type" => "Hashtag", "name" => "#مرحبا"}]
+      assert ActivityMapper.extract_hashtags(tag) == [{"مرحبا", "مرحبا"}]
+    end
+
+    test "rejects malformed / non-tag names so junk can't reach the hashtags table" do
+      tag = [
+        %{"type" => "Hashtag", "name" => "#has space"},
+        %{"type" => "Hashtag", "name" => "#123"},
+        %{"type" => "Hashtag", "name" => "#"},
+        %{"type" => "Hashtag", "name" => 42}
+      ]
+
+      assert ActivityMapper.extract_hashtags(tag) == []
+    end
+
+    test "tolerates nil / non-list tags" do
+      assert ActivityMapper.extract_hashtags(nil) == []
+      assert ActivityMapper.extract_hashtags("nope") == []
+    end
+  end
+
   describe "normalize_profile_url/1" do
     test "keeps an http(s) string" do
       assert ActivityMapper.normalize_profile_url("https://host/@bob") == "https://host/@bob"

@@ -1883,9 +1883,21 @@ defmodule Hybridsocial.Social.Posts do
   end
 
   defp extract_and_link_hashtags(post) do
-    tags = extract_hashtags(post.content)
+    link_hashtags(post, extract_hashtags(post.content))
+  end
 
-    Enum.each(tags, fn {name, display} ->
+  @doc """
+  Upsert and link a list of `{lowercase_name, display}` hashtag pairs to a
+  post. Shared by local create (body extraction) and federation ingest
+  (AP `tag` Hashtag entries + remote body, via Federation.Inbox). Idempotent
+  per (post, hashtag); each distinct tag bumps the hashtag's `usage_count`
+  once per post. This is the single seam that lets both local and remote
+  posts feed the origin-agnostic trending query.
+  """
+  def link_hashtags(%Post{} = post, pairs) when is_list(pairs) do
+    pairs
+    |> Enum.uniq_by(fn {name, _display} -> name end)
+    |> Enum.each(fn {name, display} ->
       {:ok, hashtag} = upsert_hashtag(name, display)
       link_post_hashtag(post.id, hashtag.id)
     end)
