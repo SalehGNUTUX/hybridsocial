@@ -45,47 +45,57 @@ export function isStaff(): boolean {
 
 // ---- Token Refresh ----
 
-// Access tokens are now 7 days (see Hybridsocial.Auth.Token). Refresh
-// halfway through their lifetime when the tab is visible; the tab
-// visibility listener below also triggers a refresh whenever the user
-// returns to the page after the token might have gone stale.
-const ACCESS_TOKEN_TTL_SECONDS = 7 * 24 * 3600;
-const REFRESH_LEAD_SECONDS = ACCESS_TOKEN_TTL_SECONDS / 2;
+// Access tokens are 15 minutes (see Hybridsocial.Auth.Token — shortened
+// from 7 days by the token-revocation hardening). We refresh ~1 minute
+// before expiry so a foregrounded tab's token never lapses, which keeps
+// each device's session alive independently. The visibilitychange hook
+// below covers tabs that were suspended past expiry (the setTimeout
+// won't have fired reliably while backgrounded). This is a fallback TTL
+// only — the actual refresh reschedules off the server's `expires_in`.
+const DEFAULT_ACCESS_TTL_SECONDS = 15 * 60;
+const REFRESH_LEAD_SECONDS = 60;
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let visibilityListenerAttached = false;
 
 function scheduleRefresh(expiresIn: number): void {
   if (refreshTimer) clearTimeout(refreshTimer);
-  // Refresh well before expiry. Browsers cap setTimeout at ~24.8 days,
-  // and long-suspended tabs don't reliably fire the timer anyway — the
-  // visibilitychange hook picks up the slack when the tab wakes.
+  // Refresh REFRESH_LEAD_SECONDS before expiry, but never busier than
+  // every 30s. Browsers cap setTimeout at ~24.8 days; long-suspended
+  // tabs don't fire the timer reliably anyway — the visibilitychange
+  // hook picks up the slack when the tab wakes.
   const delayMs = Math.max((expiresIn - REFRESH_LEAD_SECONDS) * 1000, 30_000);
   refreshTimer = setTimeout(() => attemptRefresh(), Math.min(delayMs, 2_147_483_000));
 }
 
-async function attemptRefresh(retries = 2): Promise<void> {
+async function attemptRefresh(): Promise<void> {
   const state = get(authStore);
   if (!state.user) return;
 
-  try {
-    const { refreshTokens } = await import('$lib/api/auth.js');
-    await refreshTokens();
-    // Cookies rotate on success — reschedule based on the new TTL.
-    scheduleRefresh(ACCESS_TOKEN_TTL_SECONDS);
-  } catch (err: unknown) {
-    const { ApiError } = await import('$lib/api/client.js');
-    const isAuthError = err instanceof ApiError && (err.status === 401 || err.status === 403);
+  // Route through the api client's single-flight lock so a proactive or
+  // visibility-triggered refresh can't race the reactive 401 refresh and
+  // double-rotate the refresh token (the loser 401s and bounces to
+  // /login).
+  const result = await api.refresh();
 
-    if (isAuthError) {
-      clearAuth();
-    } else if (retries > 0) {
-      setTimeout(() => attemptRefresh(retries - 1), 5_000);
-    } else {
-      // Network issue — don't log out, try again later
-      scheduleRefresh(60);
-    }
+  // 'ok' → onTokenRefreshed already rescheduled off the real TTL.
+  // 'auth_failed' → the refresh token itself is dead (expired past 90d or
+  //   revoked); this is a genuine sign-out.
+  // 'deferred' → transient network/server issue; keep the session and
+  //   retry shortly rather than logging the user out.
+  if (result === 'auth_failed') {
+    handleSessionExpired();
+  } else if (result === 'deferred') {
+    scheduleRefresh(REFRESH_LEAD_SECONDS + 60);
   }
+}
+
+// Surface the "session expired" banner briefly, then clear auth. Shared
+// by the proactive refresh and the api client's reactive 401 path so a
+// dead session is handled the same way everywhere.
+function handleSessionExpired(): void {
+  sessionExpired.set(true);
+  setTimeout(() => clearAuth(), 3000);
 }
 
 // Refresh when the tab comes back into focus after being hidden.
@@ -134,21 +144,43 @@ export async function initAuth(): Promise<void> {
     return;
   }
 
-  // Try to authenticate with httpOnly cookies. getCurrentUser will
-  // trigger the api client's automatic refresh-on-401 path if the
-  // access cookie expired while the tab was closed — so by the time
-  // this returns, the session is either valid-and-refreshed or
-  // definitively gone.
   authStore.update((s) => ({ ...s, loading: true }));
+
+  const { ApiError } = await import('$lib/api/client.js');
+  const isAuthError = (e: unknown) =>
+    e instanceof ApiError && (e.status === 401 || e.status === 403);
+
   try {
-    const user = await getCurrentUser();
+    // Bootstrap the session from the httpOnly cookies. If the short-lived
+    // access token expired while we were away, /auth/me returns 401 — but
+    // /auth/me is excluded from the client's automatic refresh, so we do
+    // one explicit refresh here using the long-lived (90-day) refresh
+    // cookie and retry. A returning user should never have to log in again
+    // while that refresh token is still alive — this is what makes staying
+    // signed in across inactivity behave like any normal site. If the
+    // refresh cookie is missing/expired the user is genuinely logged out,
+    // and we stay silent (no "session expired" banner for anon visitors).
+    let user: Identity;
+    try {
+      user = await getCurrentUser();
+    } catch (err) {
+      if (!isAuthError(err)) throw err;
+
+      const result = await api.refresh();
+      if (result !== 'ok') {
+        authStore.update((s) => ({ ...s, user: null, loading: false, initialized: true }));
+        return;
+      }
+      user = await getCurrentUser();
+    }
+
     authStore.update((s) => ({
       ...s,
       user,
       loading: false,
       initialized: true
     }));
-    scheduleRefresh(ACCESS_TOKEN_TTL_SECONDS);
+    scheduleRefresh(DEFAULT_ACCESS_TTL_SECONDS);
     attachVisibilityListener();
 
     // Sync server preferences to local stores
@@ -169,10 +201,7 @@ export async function initAuth(): Promise<void> {
       );
     } catch { /* preferences not critical */ }
   } catch (err: unknown) {
-    const { ApiError } = await import('$lib/api/client.js');
-    const isAuthError = err instanceof ApiError && (err.status === 401 || err.status === 403);
-
-    if (isAuthError) {
+    if (isAuthError(err)) {
       // No valid session — user is not logged in
       authStore.update((s) => ({ ...s, user: null, loading: false, initialized: true }));
     } else {
@@ -184,12 +213,8 @@ export async function initAuth(): Promise<void> {
 }
 
 // Wire up API client callbacks
-api.setOnTokenRefreshed(() => {
-  scheduleRefresh(ACCESS_TOKEN_TTL_SECONDS);
+api.setOnTokenRefreshed((expiresIn?: number) => {
+  scheduleRefresh(expiresIn ?? DEFAULT_ACCESS_TTL_SECONDS);
 });
 
-api.setOnAuthFailure(() => {
-  sessionExpired.set(true);
-  // Delay clearAuth so the banner shows briefly
-  setTimeout(() => clearAuth(), 3000);
-});
+api.setOnAuthFailure(handleSessionExpired);

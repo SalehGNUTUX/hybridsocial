@@ -35,12 +35,16 @@ interface RequestOptions {
   rawBody?: boolean;
 }
 
-class ApiClient {
-  private refreshPromise: Promise<void> | null = null;
-  private onAuthFailure: (() => void) | null = null;
-  private onTokenRefreshed: (() => void) | null = null;
+// Outcome of a refresh attempt, so the auth store can decide whether to
+// reschedule (ok), log out (auth_failed), or retry soon (deferred).
+export type RefreshResult = 'ok' | 'auth_failed' | 'deferred';
 
-  setOnTokenRefreshed(callback: () => void): void {
+class ApiClient {
+  private refreshPromise: Promise<RefreshResult> | null = null;
+  private onAuthFailure: (() => void) | null = null;
+  private onTokenRefreshed: ((expiresIn?: number) => void) | null = null;
+
+  setOnTokenRefreshed(callback: (expiresIn?: number) => void): void {
     this.onTokenRefreshed = callback;
   }
 
@@ -82,9 +86,16 @@ class ApiClient {
 
     let response = await doFetch();
 
-    // Auto-refresh on 401 (httpOnly cookie sent automatically)
+    // Auto-refresh on 401 (httpOnly cookie sent automatically). The
+    // /api/v1/auth/* exclusion keeps the refresh/login endpoints from
+    // recursing; the session-bootstrap (/auth/me) refreshes explicitly
+    // in the auth store instead, so it can stay silent for logged-out
+    // visitors.
     if (response.status === 401 && !path.startsWith('/api/v1/auth/')) {
-      await this.doRefresh();
+      const result = await this.doRefresh();
+      // Refresh definitively failed → the session is dead mid-use; let
+      // the app show the "session expired" banner and bounce to /login.
+      if (result === 'auth_failed') this.onAuthFailure?.();
       response = await doFetch();
     }
 
@@ -123,12 +134,24 @@ class ApiClient {
     return response.json();
   }
 
-  private async doRefresh(): Promise<void> {
+  /**
+   * Refresh the access token. Single-flight: concurrent callers (the
+   * reactive 401 path below and the auth store's proactive/visibility
+   * refresh) all await the SAME in-flight request, so we never present
+   * the rotating refresh token twice and race its 30s rotation grace —
+   * that race is what used to 401 the loser and bounce the user to
+   * /login. Public so the store shares this exact lock.
+   */
+  async refresh(): Promise<RefreshResult> {
+    return this.doRefresh();
+  }
+
+  private async doRefresh(): Promise<RefreshResult> {
     if (this.refreshPromise) {
       return this.refreshPromise;
     }
 
-    this.refreshPromise = (async () => {
+    this.refreshPromise = (async (): Promise<RefreshResult> => {
       try {
         // Rely on httpOnly cookie for refresh — no token in body
         const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
@@ -139,19 +162,33 @@ class ApiClient {
         });
 
         if (response.status === 401 || response.status === 403) {
-          this.onAuthFailure?.();
-          return;
+          // Don't fire onAuthFailure here — the caller decides. Active-use
+          // callers surface the "session expired" banner; the startup
+          // bootstrap refreshes silently so anonymous visitors never see it.
+          return 'auth_failed';
         }
 
         if (!response.ok) {
-          return;
+          // Server/proxy hiccup — keep the session and let the caller retry.
+          return 'deferred';
         }
 
-        // New cookies set by the response automatically
-        this.onTokenRefreshed?.();
+        // New cookies are set by the response automatically. Read the
+        // fresh TTL so the store can schedule the next refresh against
+        // the token's real lifetime instead of a hardcoded guess.
+        let expiresIn: number | undefined;
+        try {
+          const body = await response.json();
+          if (typeof body?.expires_in === 'number') expiresIn = body.expires_in;
+        } catch {
+          // Body parse is best-effort; the cookies still rotated.
+        }
+        this.onTokenRefreshed?.(expiresIn);
+        return 'ok';
       } catch {
         // Network error — don't log out
         console.warn('Token refresh failed due to network error, will retry later');
+        return 'deferred';
       } finally {
         this.refreshPromise = null;
       }
@@ -260,7 +297,8 @@ class ApiClient {
       let { status, body } = await send();
 
       if (status === 401 && !path.startsWith('/api/v1/auth/')) {
-        await this.doRefresh();
+        const result = await this.doRefresh();
+        if (result === 'auth_failed') this.onAuthFailure?.();
         onProgress(0);
         ({ status, body } = await send());
       }
