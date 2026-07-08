@@ -1357,6 +1357,22 @@
     padding: 16px;
   }
 
+  /* Mobile: the desktop 24px card padding + 16px avatar gap eat a big
+     chunk of a narrow screen, squeezing the text into a thin column that
+     wraps into far more lines than needed. Tighten the horizontal padding
+     and the gap so the text uses the width available. */
+  @media (max-width: 768px) {
+    .post-card,
+    .post-card.detail,
+    .post-card.compact {
+      padding-inline: 12px;
+    }
+
+    .post-layout {
+      gap: 10px;
+    }
+  }
+
   /* Main flex layout: avatar + content */
   .post-layout {
     display: flex;
