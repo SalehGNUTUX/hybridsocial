@@ -1387,13 +1387,15 @@
       min-height: 40px;
     }
 
-    /* -50px = avatar (40) + gap (10): pulls the body to the card's inner
-       edge, spanning the full width. body's overflow-x is clipped globally
-       so a rounding overshoot can't cause a horizontal scroll. */
+    /* Pull the body left, under the avatar, to span the full width.
+       PHYSICAL margin-left (not margin-inline-start): the avatar is always
+       physically on the left, but the post body has auto text-direction, so
+       a logical inline-start flips to the RIGHT for Arabic/RTL content and
+       shoves it off the right edge. 50px = avatar (40) + gap (10). */
     .post-content,
     .media-grid,
     .post-poll {
-      margin-inline-start: -50px;
+      margin-left: -50px;
     }
   }
 
