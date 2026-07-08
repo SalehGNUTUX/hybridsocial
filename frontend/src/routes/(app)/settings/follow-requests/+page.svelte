@@ -4,11 +4,18 @@
   import { addToast } from '$lib/stores/toast.js';
   import Spinner from '$lib/components/ui/Spinner.svelte';
 
+  // The API nests the requester under `account` (Mastodon-style), same as
+  // every other account list in the app. Reading it flat is what crashed
+  // the page with "charAt of undefined" (issue #27).
+  interface FollowRequestAccount {
+    handle: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  }
+
   interface FollowRequest {
     id: string;
-    handle: string;
-    display_name: string;
-    avatar_url: string | null;
+    account: FollowRequestAccount;
     created_at: string;
   }
 
@@ -32,7 +39,7 @@
     try {
       await api.post(`/api/v1/follow_requests/${request.id}/authorize`);
       requests = requests.filter(r => r.id !== request.id);
-      addToast(`Approved @${request.handle}`, 'success');
+      addToast(`Approved @${request.account.handle}`, 'success');
     } catch {
       addToast('Failed to approve follow request', 'error');
     } finally {
@@ -45,7 +52,7 @@
     try {
       await api.post(`/api/v1/follow_requests/${request.id}/reject`);
       requests = requests.filter(r => r.id !== request.id);
-      addToast(`Rejected @${request.handle}`, 'success');
+      addToast(`Rejected @${request.account.handle}`, 'success');
     } catch {
       addToast('Failed to reject follow request', 'error');
     } finally {
@@ -88,18 +95,18 @@
             {#each requests as request (request.id)}
               <div class="stitch-list-item">
                 <div class="stitch-list-avatar">
-                  {#if request.avatar_url}
-                    <img src={request.avatar_url} alt="" class="stitch-avatar-img" />
+                  {#if request.account.avatar_url}
+                    <img src={request.account.avatar_url} alt="" class="stitch-avatar-img" />
                   {:else}
                     <div class="stitch-avatar-placeholder">
-                      {(request.display_name || request.handle).charAt(0).toUpperCase()}
+                      {(request.account.display_name || request.account.handle || '?').charAt(0).toUpperCase()}
                     </div>
                   {/if}
                 </div>
                 <div class="stitch-list-info">
-                  <div class="stitch-list-name">{request.display_name || request.handle}</div>
+                  <div class="stitch-list-name">{request.account.display_name || request.account.handle}</div>
                   <div class="stitch-list-meta">
-                    <span class="stitch-list-handle">@{request.handle}</span>
+                    <span class="stitch-list-handle">@{request.account.handle}</span>
                     <span class="stitch-list-dot">&middot;</span>
                     <span>{formatDate(request.created_at)}</span>
                   </div>
