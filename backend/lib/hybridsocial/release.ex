@@ -85,6 +85,64 @@ defmodule Hybridsocial.Release do
     {:ok, refreshed, total}
   end
 
+  @doc """
+  Backfill `post_hashtags` for remote posts ingested before federation
+  extracted hashtags. New remote posts link tags at ingest time; this
+  re-scans EXISTING remote posts so they gain the bottom-of-post hashtag
+  chips and become eligible for trending without waiting to be re-ingested.
+
+  Extraction is from the stored post body only (the original AP `tag`
+  array isn't persisted), which covers the common case where remote
+  instances render `#tags` inline — the same source local posts use.
+  Idempotent: only touches remote posts with no `post_hashtags` rows yet.
+
+  Run on the LIVE node:
+
+      bin/hybridsocial rpc "Hybridsocial.Release.backfill_remote_post_hashtags()"
+      bin/hybridsocial rpc "Hybridsocial.Release.backfill_remote_post_hashtags(limit: 1000)"
+
+  Returns `{:ok, tagged_posts, scanned}`.
+  """
+  def backfill_remote_post_hashtags(opts \\ []) do
+    import Ecto.Query
+    alias Hybridsocial.Accounts.Identity
+    alias Hybridsocial.Repo
+    alias Hybridsocial.Social.{Post, Posts}
+
+    limit = Keyword.get(opts, :limit)
+
+    base =
+      from p in Post,
+        join: i in Identity,
+        on: i.id == p.identity_id,
+        where:
+          i.is_local == false and not is_nil(p.content) and p.content != "" and
+            is_nil(p.deleted_at),
+        where: fragment("NOT EXISTS (SELECT 1 FROM post_hashtags ph WHERE ph.post_id = ?)", p.id),
+        select: %{id: p.id, content: p.content}
+
+    query = if is_integer(limit), do: from(q in base, limit: ^limit), else: base
+
+    posts = Repo.all(query)
+    total = length(posts)
+    IO.puts("[backfill] scanning #{total} remote posts for hashtags")
+
+    tagged =
+      Enum.reduce(posts, 0, fn %{id: id, content: content}, acc ->
+        case Posts.extract_hashtags(content) do
+          [] ->
+            acc
+
+          tags ->
+            Posts.link_hashtags(%Post{id: id}, tags)
+            acc + 1
+        end
+      end)
+
+    IO.puts("[backfill] done: linked hashtags on #{tagged}/#{total} remote posts")
+    {:ok, tagged, total}
+  end
+
   def setup do
     load_app()
 
