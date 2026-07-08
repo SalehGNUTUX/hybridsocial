@@ -2,6 +2,7 @@ defmodule HybridsocialWeb.MediaProxyController do
   use HybridsocialWeb, :controller
 
   alias Hybridsocial.Antivirus
+  alias Hybridsocial.Config
   alias Hybridsocial.Federation.InstancePolicy
   alias Hybridsocial.Media.Backends.Local
   alias Hybridsocial.Media.InfectedTracker
@@ -25,7 +26,20 @@ defmodule HybridsocialWeb.MediaProxyController do
 
   # Hard caps for an upstream fetch.
   @fetch_timeout_ms 5_000
-  @max_file_bytes 50_000_000
+
+  # Max bytes for a single proxied remote fetch. Runtime-configurable and
+  # defaults to the platform's video upload ceiling (100 MB) so a remote
+  # video isn't rejected when a local upload of the same size would be
+  # accepted — the old hardcoded 50 MB cap bounced ordinary remote videos
+  # (see issue #24). Still bounded so a hostile upstream can't fill disk.
+  @default_max_file_bytes 100_000_000
+
+  defp max_file_bytes do
+    case Config.get("media_proxy_max_bytes", @default_max_file_bytes) do
+      n when is_integer(n) and n > 0 -> n
+      _ -> @default_max_file_bytes
+    end
+  end
 
   @doc "Proxy a remote media URL through the local server."
   # sobelow_skip ["XSS.SendResp", "Traversal.SendFile"]
@@ -146,6 +160,8 @@ defmodule HybridsocialWeb.MediaProxyController do
       {"Accept", "*/*"}
     ]
 
+    max_bytes = max_file_bytes()
+
     with {:ok, tmp_path} <- new_tmp_path(),
          {:ok, file} <- File.open(tmp_path, [:write, :binary, :raw]) do
       # Stream the body straight to the tmp file (no in-memory buffering),
@@ -159,7 +175,7 @@ defmodule HybridsocialWeb.MediaProxyController do
           resp.status not in 200..299 ->
             {:halt, {req, resp}}
 
-          written + byte_size(chunk) > @max_file_bytes ->
+          written + byte_size(chunk) > max_bytes ->
             {:halt, {req, put_resp_private(resp, :too_large, true)}}
 
           true ->

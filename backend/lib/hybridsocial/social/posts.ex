@@ -125,6 +125,12 @@ defmodule Hybridsocial.Social.Posts do
     Map.get(attrs, "media_ids") || Map.get(attrs, :media_ids) || []
   end
 
+  defp post_has_media?(post_id) do
+    Hybridsocial.Media.MediaFile
+    |> where([m], m.post_id == ^post_id and is_nil(m.deleted_at))
+    |> Repo.exists?()
+  end
+
   defp any_audio_media?([]), do: false
 
   defp any_audio_media?(ids) when is_list(ids) do
@@ -605,6 +611,16 @@ defmodule Hybridsocial.Social.Posts do
 
       revision_number = get_next_revision_number(post_id)
 
+      # A media-bearing post (captioned image is stored as post_type
+      # "text") must not require content on edit. Use the supplied
+      # media_ids when the editor sent them, otherwise the post's
+      # existing attachments.
+      has_media? =
+        case media_ids_from_attrs(attrs) do
+          [] -> post_has_media?(post.id)
+          ids -> ids != []
+        end
+
       Ecto.Multi.new()
       |> Ecto.Multi.insert(:revision, fn _ ->
         %PostRevision{}
@@ -617,7 +633,10 @@ defmodule Hybridsocial.Social.Posts do
         })
       end)
       |> Ecto.Multi.update(:post, fn _ ->
-        Post.edit_changeset(post, attrs, char_limit: limits[:char_limit] || 5000)
+        Post.edit_changeset(post, attrs,
+          char_limit: limits[:char_limit] || 5000,
+          has_media: has_media?
+        )
       end)
       |> Repo.transaction()
       |> case do

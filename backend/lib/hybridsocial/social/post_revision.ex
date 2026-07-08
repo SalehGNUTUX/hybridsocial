@@ -17,7 +17,12 @@ defmodule Hybridsocial.Social.PostRevision do
   def changeset(revision, attrs) do
     revision
     |> cast(attrs, [:post_id, :content, :content_html, :edited_at, :revision_number])
-    |> validate_required([:post_id, :content, :revision_number])
+    # Content is intentionally NOT required: a revision snapshots a post's
+    # prior body, and media-only posts (image/video/audio without a
+    # caption) legitimately have nil content. Requiring it here made
+    # editing a caption-less media post blow up when snapshotting its
+    # previous (blank) content — see issue #26.
+    |> validate_required([:post_id, :revision_number])
     |> foreign_key_constraint(:post_id)
   end
 end

@@ -140,7 +140,7 @@ defmodule Hybridsocial.Social.Post do
     |> cast(attrs, [:content, :content_html, :spoiler_text, :sensitive, :language])
     |> normalize_content()
     |> validate_edit_window(post)
-    |> validate_content_for_type()
+    |> validate_content_for_type(Keyword.get(opts, :has_media, false))
     |> validate_length(:content, max: char_limit)
     |> validate_length(:spoiler_text, max: 500)
     |> generate_content_html()
@@ -205,13 +205,16 @@ defmodule Hybridsocial.Social.Post do
     end
   end
 
-  defp validate_content_for_type(changeset) do
+  defp validate_content_for_type(changeset, has_media \\ false) do
     post_type = get_field(changeset, :post_type)
 
-    # media, video_stream and audio posts can be caption-less —
-    # a photo, reel, or voice memo doesn't need text. Everything
-    # else (text/poll/article) requires content.
-    if post_type in ["media", "video_stream", "audio"] do
+    # media, video_stream and audio posts can be caption-less — a photo,
+    # reel, or voice memo doesn't need text. A post that HAS media is also
+    # exempt regardless of post_type: a captioned image is stored as
+    # post_type "text", so clearing its caption on edit must not demand
+    # content when there's still an image (issue #26). Everything else
+    # (text/poll/article with no media) requires content.
+    if post_type in ["media", "video_stream", "audio"] or has_media do
       changeset
     else
       validate_required(changeset, [:content])

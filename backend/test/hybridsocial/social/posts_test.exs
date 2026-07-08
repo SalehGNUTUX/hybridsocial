@@ -430,4 +430,49 @@ defmodule Hybridsocial.Social.PostsTest do
       assert first.id == newest_created.id
     end
   end
+
+  describe "edit_post caption on media post (issue #26)" do
+    test "adding text to a caption-less image post succeeds" do
+      identity = create_user("edit_caption", "edit_caption@test.com")
+      media = upload_media(identity.id)
+
+      {:ok, post} =
+        Posts.create_post(identity.id, %{
+          "post_type" => "media",
+          "media_ids" => [media.id]
+        })
+
+      assert post.post_type == "media"
+
+      result =
+        Posts.edit_post(post.id, identity.id, %{
+          "content" => "added a caption",
+          "media_ids" => [media.id]
+        })
+
+      assert {:ok, _} = result
+    end
+
+    test "removing the caption from an image post (post_type text + media) still succeeds" do
+      identity = create_user("edit_caption2", "edit_caption2@test.com")
+      media = upload_media(identity.id)
+
+      {:ok, post} =
+        Posts.create_post(identity.id, %{
+          "content" => "original caption",
+          "media_ids" => [media.id]
+        })
+
+      # A captioned image is stored as post_type "text" (composer only
+      # sets "media" when there's no caption). Clearing the caption must
+      # not fail with content-required — the post still has an image.
+      result =
+        Posts.edit_post(post.id, identity.id, %{
+          "content" => "",
+          "media_ids" => [media.id]
+        })
+
+      assert {:ok, _} = result
+    end
+  end
 end
