@@ -251,6 +251,11 @@ services:
     image: crowdsecurity/crowdsec:latest
     container_name: hs_crowdsec
     restart: unless-stopped
+    ports:
+      # LAPI bound to loopback only. The Caddy bouncer reaches it over the
+      # internal network; the host publish is for cscli/debugging from the
+      # box, never exposed publicly.
+      - "127.0.0.1:8080:8080"
     environment:
       COLLECTIONS: "crowdsecurity/caddy crowdsecurity/http-cve crowdsecurity/base-http-scenarios crowdsecurity/linux"
       # Pre-register the bouncer key on first boot so Caddy can
@@ -267,6 +272,11 @@ services:
       - caddy_logs:/var/log/caddy:ro
       - crowdsec_data:/var/lib/crowdsec/data
       - crowdsec_config:/etc/crowdsec
+      # Host SSH auth log (read-only) so the crowdsecurity/linux collection
+      # watches sshd for brute-force and feeds the firewall bouncer. NOT
+      # relabeled (no :z) — it's a shared host system log; relabeling it
+      # would break journald/other consumers on the host.
+      - /var/log/secure:/var/log/host-secure:ro
       - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro,z
       - ./crowdsec/profiles.yaml:/etc/crowdsec/profiles.yaml:ro,z
       # Email digest notifier — disabled until SMTP is configured. The

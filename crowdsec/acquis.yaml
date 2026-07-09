@@ -6,3 +6,11 @@ filenames:
   - /var/log/caddy/media-access.log
 labels:
   type: caddy
+---
+# Host SSH auth log (bind-mounted from /var/log/secure) so the sshd
+# scenarios in the crowdsecurity/linux collection detect brute-force
+# against the box and feed the firewall bouncer.
+filenames:
+  - /var/log/host-secure
+labels:
+  type: syslog
