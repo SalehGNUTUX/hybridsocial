@@ -219,6 +219,15 @@
        is the source of truth for where the finger is, and we don't
        want this overlay to swallow that event. */
     pointer-events: none;
+    /* Belt and braces only. Because of `pointer-events: none` above,
+       this overlay is transparent to selection hit-testing, so these
+       rules protect the dial's own glyphs, not the post text beneath
+       it. The post text is protected by cancelling touchstart on the
+       like button, which suppresses the OS long-press gesture. */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
   }
 
   .radial-scrim {
