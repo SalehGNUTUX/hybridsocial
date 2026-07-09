@@ -228,10 +228,7 @@ defmodule Hybridsocial.Social.Posts do
         # the reply is visible to them. Self-replies are skipped
         # inside notify_reply via the self-notification guard.
         if post.parent_id do
-          Post
-          |> where([p], p.id == ^post.parent_id)
-          |> Repo.update_all(inc: [reply_count: 1])
-
+          increment_reply_count(post.parent_id)
           bump_thread_activity(post)
           notify_reply_to_parent(post)
         end
@@ -829,9 +826,7 @@ defmodule Hybridsocial.Social.Posts do
           # increments and delete-time decrements ever fall out of
           # sync (e.g. a partial migration leaves an orphaned row).
           if deleted.parent_id do
-            Post
-            |> where([p], p.id == ^deleted.parent_id and p.reply_count > 0)
-            |> Repo.update_all(inc: [reply_count: -1])
+            decrement_reply_count(deleted.parent_id)
           end
 
           Phoenix.PubSub.broadcast(Hybridsocial.PubSub, "posts", {:post_deleted, post_id})
@@ -1879,6 +1874,30 @@ defmodule Hybridsocial.Social.Posts do
       b.post_id == ^post_id and b.identity_id == ^identity_id and is_nil(b.deleted_at)
     )
     |> Repo.one()
+  end
+
+  @doc """
+  Bump a parent post's `reply_count` when a reply is created. Shared by
+  local reply creation and federation ingest (a remote reply to a post we
+  host or mirror) so both paths keep the counter accurate — otherwise
+  replies arriving over federation would never show up in the count,
+  which is most visible on the global timeline.
+  """
+  def increment_reply_count(parent_id) do
+    Post
+    |> where([p], p.id == ^parent_id)
+    |> Repo.update_all(inc: [reply_count: 1])
+  end
+
+  @doc """
+  Drop a parent post's `reply_count` when a reply is deleted. Floors at 0
+  so create/delete drift can't push the counter negative. Shared by local
+  and federated delete paths.
+  """
+  def decrement_reply_count(parent_id) do
+    Post
+    |> where([p], p.id == ^parent_id and p.reply_count > 0)
+    |> Repo.update_all(inc: [reply_count: -1])
   end
 
   defp update_reaction_count(post_id, delta) do

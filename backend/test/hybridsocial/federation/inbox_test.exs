@@ -284,6 +284,74 @@ defmodule Hybridsocial.Federation.InboxTest do
       # is unreachable.
       assert {:error, {:validation_failed, _}} = Inbox.process(activity)
     end
+
+    test "increments the parent's reply_count for a federated reply to a local post" do
+      local = create_local_identity("reply_target")
+      parent = create_local_post(local)
+      assert Repo.get!(Post, parent.id).reply_count == 0
+
+      remote = create_remote_identity("https://remote.example/users/replier", "replier_remote")
+
+      activity = %{
+        "@context" => "https://www.w3.org/ns/activitystreams",
+        "id" => "https://remote.example/activities/reply-1",
+        "type" => "Create",
+        "actor" => remote.ap_actor_url,
+        "object" => %{
+          "id" => "https://remote.example/objects/reply-1",
+          "type" => "Note",
+          "content" => "<p>Nice post!</p>",
+          "attributedTo" => remote.ap_actor_url,
+          "inReplyTo" => "#{base_url()}/objects/#{parent.id}",
+          "published" => "2026-03-22T12:00:00Z",
+          "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+        }
+      }
+
+      assert {:ok, reply} = Inbox.process(activity)
+      assert reply.parent_id == parent.id
+      # Without the fix the count stayed at 0, so the global feed rendered
+      # "0 comments" on posts that had federated replies.
+      assert Repo.get!(Post, parent.id).reply_count == 1
+    end
+
+    test "decrements the parent's reply_count when a federated reply is deleted" do
+      local = create_local_identity("reply_del_target")
+      parent = create_local_post(local)
+
+      remote =
+        create_remote_identity("https://remote.example/users/delreplier", "delreplier_remote")
+
+      reply_activity = %{
+        "@context" => "https://www.w3.org/ns/activitystreams",
+        "id" => "https://remote.example/activities/reply-del",
+        "type" => "Create",
+        "actor" => remote.ap_actor_url,
+        "object" => %{
+          "id" => "https://remote.example/objects/reply-del",
+          "type" => "Note",
+          "content" => "<p>Reply to be deleted</p>",
+          "attributedTo" => remote.ap_actor_url,
+          "inReplyTo" => "#{base_url()}/objects/#{parent.id}",
+          "published" => "2026-03-22T12:30:00Z",
+          "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+        }
+      }
+
+      assert {:ok, _reply} = Inbox.process(reply_activity)
+      assert Repo.get!(Post, parent.id).reply_count == 1
+
+      delete_activity = %{
+        "@context" => "https://www.w3.org/ns/activitystreams",
+        "id" => "https://remote.example/activities/reply-del-delete",
+        "type" => "Delete",
+        "actor" => remote.ap_actor_url,
+        "object" => "https://remote.example/objects/reply-del"
+      }
+
+      assert {:ok, _deleted} = Inbox.process(delete_activity)
+      assert Repo.get!(Post, parent.id).reply_count == 0
+    end
   end
 
   describe "process/1 - Like" do

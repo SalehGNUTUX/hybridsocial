@@ -369,8 +369,14 @@ defmodule Hybridsocial.Federation.Inbox do
             # Thread-bump the ancestors if we linked a local parent —
             # same semantics as local reply creation in Posts.create_post.
             # Without this, a reply from federation wouldn't surface the
-            # local thread back to the top of Explore.
-            if parent_id, do: Posts.bump_thread_activity_public(post)
+            # local thread back to the top of Explore. The reply_count
+            # bump mirrors local reply creation too: without it, federated
+            # replies never registered in the count (visible as "0
+            # comments" on posts in the global feed).
+            if parent_id do
+              Posts.increment_reply_count(parent_id)
+              Posts.bump_thread_activity_public(post)
+            end
 
           _ ->
             :ok
@@ -768,9 +774,18 @@ defmodule Hybridsocial.Federation.Inbox do
     with {:ok, remote_identity} <- resolve_remote_identity(actor_ap_id) do
       case get_post_by_ap_id(object_ap_id) do
         %Post{identity_id: identity_id} = post when identity_id == remote_identity.id ->
-          post
-          |> Post.soft_delete_changeset()
-          |> Repo.update()
+          result =
+            post
+            |> Post.soft_delete_changeset()
+            |> Repo.update()
+
+          # Mirror local delete_post: drop the parent's reply_count so the
+          # count stays accurate after a federated reply is retracted.
+          with {:ok, %Post{parent_id: parent_id}} when not is_nil(parent_id) <- result do
+            Posts.decrement_reply_count(parent_id)
+          end
+
+          result
 
         %Post{} ->
           {:error, :forbidden}
