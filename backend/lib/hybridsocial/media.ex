@@ -31,6 +31,7 @@ defmodule Hybridsocial.Media do
          :ok <- Antivirus.scan(binary_data),
          :ok <- Hash.check_upload(path),
          :ok <- Validator.strip_metadata(path),
+         :ok <- maybe_sanitize_svg(path, content_type),
          {:ok, filtered} <-
            Filter.filter(%{path: path, filename: filename, content_type: content_type}) do
       # Resize / recompress / strip-metadata for image uploads. Runs
@@ -194,6 +195,17 @@ defmodule Hybridsocial.Media do
       {:error, :invalid_content_type}
     end
   end
+
+  # SVG can carry <script>/on* handlers, so strip active content in place
+  # before the file continues down the pipeline to storage.
+  # sobelow_skip ["Traversal.FileModule"]
+  defp maybe_sanitize_svg(path, "image/svg+xml") do
+    with {:ok, raw} <- File.read(path) do
+      File.write(path, Hybridsocial.Media.SvgSanitizer.sanitize(raw))
+    end
+  end
+
+  defp maybe_sanitize_svg(_path, _content_type), do: :ok
 
   # Keep only the codec/sample-rate/bitrate fields we need to render
   # the player; drop the rest. ffprobe emits a lot of noise per

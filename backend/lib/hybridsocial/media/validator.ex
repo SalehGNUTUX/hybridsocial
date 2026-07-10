@@ -36,6 +36,10 @@ defmodule Hybridsocial.Media.Validator do
       flac?(binary_data) -> {:ok, "audio/flac"}
       ogg?(binary_data) -> {:ok, "audio/ogg"}
       aac?(binary_data) -> {:ok, "audio/aac"}
+      # SVG is XML text (no binary magic). Checked last so real binary
+      # formats win first. Accepted content is sanitized downstream
+      # (SvgSanitizer) before storage since SVG can carry active content.
+      svg?(binary_data) -> {:ok, "image/svg+xml"}
       true -> {:error, :invalid_content_type}
     end
   end
@@ -104,6 +108,26 @@ defmodule Hybridsocial.Media.Validator do
        do: true
 
   defp webp?(_), do: false
+
+  # SVG sniff: past an optional UTF-8 BOM and leading whitespace/prolog,
+  # the markup must open an <svg> root. Only looks at the first 1KB.
+  defp svg?(data) when byte_size(data) > 0 do
+    head = binary_part(data, 0, min(byte_size(data), 1024))
+
+    head =
+      case head do
+        <<0xEF, 0xBB, 0xBF, rest::binary>> -> rest
+        _ -> head
+      end
+
+    trimmed = String.trim_leading(head)
+
+    String.starts_with?(trimmed, "<svg") or
+      ((String.starts_with?(trimmed, "<?xml") or String.starts_with?(trimmed, "<!--") or
+          String.starts_with?(trimmed, "<!DOCTYPE")) and Regex.match?(~r/<svg[\s>]/i, trimmed))
+  end
+
+  defp svg?(_), do: false
 
   # MP4: ftyp at offset 4
   defp mp4?(<<_size::binary-size(4), 0x66, 0x74, 0x79, 0x70, _rest::binary>>), do: true

@@ -9,6 +9,7 @@
 	import { applyTheme, themeStore } from '$lib/stores/theme.js';
 	import { getInstanceInfo } from '$lib/api/instance.js';
 	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 
 	let { children, data } = $props();
 
@@ -43,13 +44,17 @@
 	<meta property="og:title" content={data?.instance?.title || 'HybridSocial'} />
 	<meta property="og:site_name" content={data?.instance?.title || 'HybridSocial'} />
 	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{$page.url.origin}{$page.url.pathname}" />
+	<link rel="canonical" href="{$page.url.origin}{$page.url.pathname}" />
 	{#if data?.instance?.description}
 		<meta name="description" content={data.instance.description} />
 		<meta property="og:description" content={data.instance.description} />
-		<meta name="twitter:description" content={data.instance.description} />
 	{/if}
 	{#if data?.instance?.og_image_url}
 		<meta property="og:image" content={data.instance.og_image_url} />
+		<meta property="og:image:alt" content={data?.instance?.title || 'HybridSocial'} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
 		<meta name="twitter:card" content="summary_large_image" />
 	{/if}
 	<link rel="icon" href={$themeStore?.favicon_url || data?.instance?.favicon_url || favicon} />
