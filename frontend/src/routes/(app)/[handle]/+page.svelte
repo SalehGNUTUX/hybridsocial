@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
@@ -371,7 +372,7 @@
 </script>
 
 <svelte:head>
-  <title>{account ? (account.display_name || account.handle) : 'Profile'} - Bassam Social</title>
+  <title>{account ? (account.display_name || account.handle) : 'Profile'} - {$instanceName}</title>
 </svelte:head>
 
 <div class="profile-page">

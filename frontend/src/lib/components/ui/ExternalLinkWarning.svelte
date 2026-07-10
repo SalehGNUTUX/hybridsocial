@@ -6,6 +6,7 @@
     isWarningDisabled,
   } from '$lib/utils/external-link-trust.js';
   import SafeUrl from './SafeUrl.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let pendingUrl = $state<string | null>(null);
   let pendingDomain = $state<string>('');
@@ -145,7 +146,7 @@
     tabindex="-1"
   >
     <div class="elw-modal" role="document">
-      <h2 id="elw-title" class="elw-title">Leaving Bassam Social</h2>
+      <h2 id="elw-title" class="elw-title">Leaving {$instanceName}</h2>
       <p class="elw-sub">
         You're about to open a link on another site. Check the URL
         below carefully — phishing pages often use lookalike domains.

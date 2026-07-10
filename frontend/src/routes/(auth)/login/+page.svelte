@@ -5,6 +5,7 @@
   import { getCurrentUser } from '$lib/api/auth.js';
   import { subscribeToPush } from '$lib/utils/push.js';
   import { tError } from '$lib/utils/i18n.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let email = $state('');
   let password = $state('');
@@ -202,7 +203,7 @@
 </script>
 
 <svelte:head>
-  <title>Sign in - Bassam Social</title>
+  <title>Sign in - {$instanceName}</title>
 </svelte:head>
 
 <div class="auth-card">
@@ -413,7 +414,7 @@
 
 {#if !otpRequired}
   <div class="auth-info-card">
-    <h3 class="auth-info-title">New to Bassam Social?</h3>
+    <h3 class="auth-info-title">New to {$instanceName}?</h3>
     <p class="auth-info-desc">
       Create your own server in minutes or join a community run by others.
     </p>

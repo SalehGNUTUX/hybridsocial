@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -181,7 +182,7 @@
 </script>
 
 <svelte:head>
-  <title>{displayName ? `${displayName} — Settings` : 'Page settings'} — Bassam Social</title>
+  <title>{displayName ? `${displayName} — Settings` : 'Page settings'} — {$instanceName}</title>
 </svelte:head>
 
 <div class="settings-page">

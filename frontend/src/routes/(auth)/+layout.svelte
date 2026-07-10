@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
+  import { instanceName } from '$lib/stores/instance.js';
   import Toast from '$lib/components/ui/Toast.svelte';
   import { cookieConsent, hasConsented } from '$lib/stores/consent.js';
   import CookieBanner from '$lib/components/ui/CookieBanner.svelte';
@@ -27,7 +28,7 @@
           <rect rx="6" width="28" height="28" fill="var(--color-primary)" />
           <text x="14" y="19.5" text-anchor="middle" fill="white" font-size="15" font-weight="700">H</text>
         </svg>
-        <span class="hero-logo-text">Bassam Social</span>
+        <span class="hero-logo-text">{$instanceName}</span>
       </div>
 
       <h1 class="hero-headline">
@@ -38,7 +39,7 @@
         {#if $page.data?.instance?.description}
           {$page.data.instance.description}
         {:else}
-          Bassam Social is a decentralized social platform.
+          {$instanceName} is a decentralized social platform.
           Run your own server, control your data, and connect
           with others across the Fediverse.
         {/if}

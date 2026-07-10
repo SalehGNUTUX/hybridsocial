@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import { getFunding, type FundingMethod } from '$lib/api/funding.js';
 
@@ -44,7 +45,7 @@
 </script>
 
 <svelte:head>
-  <title>Support this instance - Bassam Social</title>
+  <title>Support this instance - {$instanceName}</title>
 </svelte:head>
 
 <div class="donate-page">

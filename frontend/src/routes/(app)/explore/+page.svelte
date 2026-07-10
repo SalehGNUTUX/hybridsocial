@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { page } from '$app/state';
   import type { Post, Identity, TrendingTag } from '$lib/api/types.js';
   import { search } from '$lib/api/search.js';
@@ -131,7 +132,7 @@
 </script>
 
 <svelte:head>
-  <title>Explore - Bassam Social</title>
+  <title>Explore - {$instanceName}</title>
 </svelte:head>
 
 <div class="explore-page">

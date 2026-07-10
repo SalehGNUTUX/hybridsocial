@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client.js';
   import { addToast } from '$lib/stores/toast.js';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   interface CryptoAddr {
     id: string;
@@ -73,7 +74,7 @@
 </script>
 
 <svelte:head>
-  <title>Donation Settings - Bassam Social</title>
+  <title>Donation Settings - {$instanceName}</title>
 </svelte:head>
 
 <div class="donations-page">

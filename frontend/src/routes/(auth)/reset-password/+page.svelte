@@ -2,6 +2,7 @@
   import { page } from '$app/state';
   import { api } from '$lib/api/client.js';
   import { ApiError } from '$lib/api/client.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   // Check if we arrived with a token (from email link)
   let tokenFromUrl = $derived(page.url.searchParams.get('token') || '');
@@ -89,7 +90,7 @@
 </script>
 
 <svelte:head>
-  <title>Reset password - Bassam Social</title>
+  <title>Reset password - {$instanceName}</title>
 </svelte:head>
 
 <div class="auth-card">

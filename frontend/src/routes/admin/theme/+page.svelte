@@ -557,7 +557,7 @@
       <div class="preview-frame" style={previewVars}>
         <!-- Header -->
         <div class="preview-header">
-          <span class="preview-logo">{theme.instance_name || 'Bassam Social'}</span>
+          <span class="preview-logo">{theme.instance_name || 'HybridSocial'}</span>
           <div class="preview-nav-dots">
             <span class="preview-dot"></span>
             <span class="preview-dot"></span>

@@ -15,6 +15,7 @@
   import AdminProfileActions from '$lib/components/admin/AdminProfileActions.svelte';
   import EntityHeader from '$lib/components/entity/EntityHeader.svelte';
   import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let pageId = $state('');
   let pageData: any = $state(null);
@@ -112,7 +113,7 @@
 </script>
 
 <svelte:head>
-  <title>{pageData?.display_name || pageData?.name || 'Page'} - Bassam Social</title>
+  <title>{pageData?.display_name || pageData?.name || 'Page'} - {$instanceName}</title>
 </svelte:head>
 
 <div class="page-detail">

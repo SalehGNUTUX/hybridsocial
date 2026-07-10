@@ -999,7 +999,7 @@
   }
 
   /* Widen the handle cells + keep the whole handle on one line so a
-     long acct like @user@bassam.social can't collide with the next
+     long acct like @user@example.social can't collide with the next
      column's content. */
   :global(.data-table td:nth-child(2)),
   :global(.data-table td:nth-child(3)) {

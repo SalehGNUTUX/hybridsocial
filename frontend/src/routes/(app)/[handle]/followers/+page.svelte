@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
@@ -92,7 +93,7 @@
 </script>
 
 <svelte:head>
-  <title>Followers - {handle} - Bassam Social</title>
+  <title>Followers - {handle} - {$instanceName}</title>
 </svelte:head>
 
 <div class="followers-page">

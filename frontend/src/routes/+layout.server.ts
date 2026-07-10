@@ -21,7 +21,7 @@ export const load: LayoutServerLoad = async ({ fetch }) => {
 
     return {
       instance: {
-        title: (info.title as string) || 'Bassam Social',
+        title: (info.title as string) || 'HybridSocial',
         description:
           (info.short_description as string) || (info.description as string) || '',
         favicon_url:

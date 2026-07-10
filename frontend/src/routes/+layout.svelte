@@ -39,9 +39,9 @@
 </script>
 
 <svelte:head>
-	<title>{data?.instance?.title || 'Bassam Social'}</title>
-	<meta property="og:title" content={data?.instance?.title || 'Bassam Social'} />
-	<meta property="og:site_name" content={data?.instance?.title || 'Bassam Social'} />
+	<title>{data?.instance?.title || 'HybridSocial'}</title>
+	<meta property="og:title" content={data?.instance?.title || 'HybridSocial'} />
+	<meta property="og:site_name" content={data?.instance?.title || 'HybridSocial'} />
 	<meta property="og:type" content="website" />
 	{#if data?.instance?.description}
 		<meta name="description" content={data.instance.description} />

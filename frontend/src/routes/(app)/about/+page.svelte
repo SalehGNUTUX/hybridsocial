@@ -19,7 +19,7 @@
 </script>
 
 <svelte:head>
-  <title>About - {instance?.title || 'Bassam Social'}</title>
+  <title>About - {instance?.title || 'HybridSocial'}</title>
 </svelte:head>
 
 <div class="about-page">

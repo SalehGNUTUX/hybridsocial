@@ -2,6 +2,7 @@
   import AppLayout from '$lib/components/layout/AppLayout.svelte';
   import HostingPromo from '$lib/components/marketing/HostingPromo.svelte';
   import { isLoggedIn } from '$lib/stores/auth.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let { children } = $props();
 
@@ -26,7 +27,7 @@
           <rect rx="6" width="28" height="28" fill="var(--color-primary)" />
           <text x="14" y="19.5" text-anchor="middle" fill="white" font-size="15" font-weight="700">H</text>
         </svg>
-        <span>Bassam Social</span>
+        <span>{$instanceName}</span>
       </a>
       <nav class="public-header-nav">
         <a href="/login" class="header-login-btn">Sign in</a>
@@ -68,7 +69,7 @@
         <a href="/legal/privacy">Privacy</a>
         <a href="/legal/terms">Terms</a>
       </div>
-      <div class="footer-copy">&copy; {new Date().getFullYear()} Bassam Social</div>
+      <div class="footer-copy">&copy; {new Date().getFullYear()} {$instanceName}</div>
     </div>
   </footer>
 </div>

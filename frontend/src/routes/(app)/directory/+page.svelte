@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client.js';
   import { relativeTime } from '$lib/utils/time.js';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   interface NewUser {
     id: string;
@@ -33,7 +34,7 @@
 </script>
 
 <svelte:head>
-  <title>Directory — Bassam Social</title>
+  <title>Directory — {$instanceName}</title>
 </svelte:head>
 
 <div class="directory-page">

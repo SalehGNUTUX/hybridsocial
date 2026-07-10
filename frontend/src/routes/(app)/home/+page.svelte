@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import type { Post } from '$lib/api/types.js';
   import { getHomeTimeline } from '$lib/api/timelines.js';
   import StoriesCarousel from '$lib/components/stories/StoriesCarousel.svelte';
@@ -49,7 +50,7 @@
 </script>
 
 <svelte:head>
-  <title>Home - Bassam Social</title>
+  <title>Home - {$instanceName}</title>
 </svelte:head>
 
 <div class="home-page">

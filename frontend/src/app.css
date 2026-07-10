@@ -1,5 +1,5 @@
 /* ============================================================
-   Bassam Social — Stitch Design System (Bassam Purple)
+   HybridSocial — Stitch Design System (brand purple)
    ============================================================ */
 
 /* --- Font Imports --- */
@@ -251,7 +251,7 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  /* Brand — a lifted Bassam violet: saturated enough to carry white text
+  /* Brand — a lifted brand violet: saturated enough to carry white text
      as a fill, bright enough to read as a link/icon on dark. Hover
      LIGHTENS. (applyTheme re-derives these from the light brand when the
      admin changes it, so both modes track one source colour.) */

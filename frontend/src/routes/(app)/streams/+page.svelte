@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client.js';
   import type { Post, MediaAttachment } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let posts: Post[] = $state([]);
   let loading = $state(true);
@@ -122,7 +123,7 @@
 </script>
 
 <svelte:head>
-  <title>Streams - Bassam Social</title>
+  <title>Streams - {$instanceName}</title>
 </svelte:head>
 
 <div class="streams-page">

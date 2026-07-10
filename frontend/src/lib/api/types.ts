@@ -1,4 +1,4 @@
-// Bassam Social API type definitions
+// HybridSocial API type definitions
 
 export interface TierLimits {
   char_limit: number;

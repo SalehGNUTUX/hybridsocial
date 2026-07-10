@@ -171,7 +171,7 @@
   let isRemote = $derived(!!domain);
   // Prefer `acct` (already in webfinger form for remote accounts)
   // over our internal munged handle. A remote user like
-  // `ahmad_bassamso_2e8909` renders as `@ahmad@bassam.social` —
+  // `ahmad_bassamso_2e8909` renders as `@ahmad@example.social` —
   // what the user actually typed / expects to see.
   let handle = $derived('@' + (post.account.acct || post.account.handle));
   let instanceFavicon = $derived(domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : null);

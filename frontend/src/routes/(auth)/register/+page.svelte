@@ -5,6 +5,7 @@
   import { solvePow, type PowChallenge, type PowSolution } from '$lib/utils/pow.js';
   import { tError } from '$lib/utils/i18n.js';
   import { browser } from '$app/environment';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let handle = $state('');
   let email = $state('');
@@ -225,7 +226,7 @@
 </script>
 
 <svelte:head>
-  <title>Create account - Bassam Social</title>
+  <title>Create account - {$instanceName}</title>
 </svelte:head>
 
 {#if success}

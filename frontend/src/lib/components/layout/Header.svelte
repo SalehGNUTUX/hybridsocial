@@ -8,6 +8,7 @@
   import { api } from '$lib/api/client.js';
   import type { Identity } from '$lib/api/types.js';
   import { themeStore, resolvedMode } from '$lib/stores/theme.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let user: Identity | null = $state(null);
   let authenticated = $state(false);
@@ -105,19 +106,19 @@
   <div class="header-inner">
     <!-- Logo + Nav -->
     <div class="header-start">
-      <a href="/home" class="header-logo" aria-label="Bassam Social home">
+      <a href="/home" class="header-logo" aria-label="{$instanceName} home">
         {#if $themeStore?.logo_url || $themeStore?.dark_logo_url}
           <img
             src={$resolvedMode === 'dark'
               ? $themeStore?.dark_logo_url || $themeStore?.logo_url
               : $themeStore?.logo_url || $themeStore?.dark_logo_url}
-            alt="Bassam Social"
+            alt={$instanceName}
             class="header-logo-img"
           />
         {:else}
           <svg class="logo-mark" width="32" height="32" viewBox="0 0 32 32" fill="none">
             <rect width="32" height="32" rx="10" fill="url(#logo-grad)" />
-            <text x="16" y="22" text-anchor="middle" fill="white" font-size="16" font-weight="800" font-family="'Manrope', sans-serif">B</text>
+            <text x="16" y="22" text-anchor="middle" fill="white" font-size="16" font-weight="800" font-family="'Manrope', sans-serif">H</text>
             <defs>
               <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
                 <stop offset="0%" stop-color="#6c3edd" />
@@ -125,7 +126,7 @@
               </linearGradient>
             </defs>
           </svg>
-          <span class="header-logo-text">Bassam Social</span>
+          <span class="header-logo-text">{$instanceName}</span>
         {/if}
       </a>
 

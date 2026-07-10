@@ -5,6 +5,7 @@
   import type { TwoFactorSetup } from '$lib/api/types.js';
   import { authStore, setUser } from '$lib/stores/auth.js';
   import { addToast } from '$lib/stores/toast.js';
+  import { instanceName } from '$lib/stores/instance.js';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import QRCode from 'qrcode';
@@ -708,7 +709,7 @@
         <h2 class="stitch-section-title">External link warning</h2>
         <p class="stitch-section-desc">
           Pop a confirmation dialog before opening links that lead off
-          Bassam Social. Helps catch typosquatted phishing domains
+          {$instanceName}. Helps catch typosquatted phishing domains
           before you visit them.
         </p>
       </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
@@ -118,7 +119,7 @@
 </script>
 
 <svelte:head>
-  <title>{post ? `Post by ${post.account.display_name || post.account.handle}` : 'Post'} - Bassam Social</title>
+  <title>{post ? `Post by ${post.account.display_name || post.account.handle}` : 'Post'} - {$instanceName}</title>
 </svelte:head>
 
 <div class="post-detail-page">

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { Group } from '$lib/api/types.js';
@@ -97,7 +98,7 @@
 </script>
 
 <svelte:head>
-  <title>Groups - Bassam Social</title>
+  <title>Groups - {$instanceName}</title>
 </svelte:head>
 
 <div class="groups-page">
