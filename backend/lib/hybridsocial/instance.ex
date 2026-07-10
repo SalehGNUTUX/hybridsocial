@@ -154,11 +154,17 @@ defmodule Hybridsocial.Instance do
   # baked-in defaults for anything the operator hasn't set.
   defp theme_config do
     keys = ~w(
+      mode
       color_primary color_primary_hover color_primary_soft color_primary_contrast
       color_secondary color_accent color_success color_warning color_danger color_info
       color_bg color_bg_wash color_surface color_border color_text color_text_secondary color_text_link
       gradient_start gradient_end gradient_direction
       border_radius density font_family logo_url favicon_url
+      dark_color_primary dark_color_primary_hover dark_color_primary_soft dark_color_primary_contrast
+      dark_color_secondary dark_color_accent dark_color_success dark_color_warning dark_color_danger dark_color_info
+      dark_color_bg dark_color_bg_wash dark_color_surface dark_color_border dark_color_text dark_color_text_secondary dark_color_text_link
+      dark_gradient_start dark_gradient_end dark_gradient_direction
+      dark_logo_url
     )
 
     keys

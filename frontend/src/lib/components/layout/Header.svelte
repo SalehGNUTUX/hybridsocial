@@ -7,7 +7,7 @@
   import { dmUnreadTotal } from '$lib/stores/dm-unread.js';
   import { api } from '$lib/api/client.js';
   import type { Identity } from '$lib/api/types.js';
-  import { themeStore } from '$lib/stores/theme.js';
+  import { themeStore, resolvedMode } from '$lib/stores/theme.js';
 
   let user: Identity | null = $state(null);
   let authenticated = $state(false);
@@ -106,8 +106,14 @@
     <!-- Logo + Nav -->
     <div class="header-start">
       <a href="/home" class="header-logo" aria-label="Bassam Social home">
-        {#if $themeStore?.logo_url}
-          <img src={$themeStore.logo_url} alt="Bassam Social" class="header-logo-img" />
+        {#if $themeStore?.logo_url || $themeStore?.dark_logo_url}
+          <img
+            src={$resolvedMode === 'dark'
+              ? $themeStore?.dark_logo_url || $themeStore?.logo_url
+              : $themeStore?.logo_url || $themeStore?.dark_logo_url}
+            alt="Bassam Social"
+            class="header-logo-img"
+          />
         {:else}
           <svg class="logo-mark" width="32" height="32" viewBox="0 0 32 32" fill="none">
             <rect width="32" height="32" rx="10" fill="url(#logo-grad)" />

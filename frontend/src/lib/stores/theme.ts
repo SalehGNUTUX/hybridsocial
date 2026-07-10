@@ -6,6 +6,11 @@ export const themeStore = writable<ThemeConfig | null>(null);
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 
+// The mode actually in effect right now ('auto' resolved against the OS).
+// Components subscribe to this to pick mode-specific assets (e.g. a dark
+// vs light logo). Updated by applyTheme() and on OS preference changes.
+export const resolvedMode = writable<'light' | 'dark'>('light');
+
 // localStorage key the no-FOUC boot script in app.html also reads so the
 // resolved mode is set on <html> before first paint on repeat visits.
 export const MODE_STORAGE_KEY = 'hs-theme-mode';
@@ -172,6 +177,7 @@ function render(cfg: Record<string, unknown>, mode: ThemeMode): void {
   const root = document.documentElement;
   const resolved = resolveMode(mode);
   root.setAttribute('data-theme', resolved);
+  resolvedMode.set(resolved);
   try {
     localStorage.setItem(MODE_STORAGE_KEY, mode);
   } catch {

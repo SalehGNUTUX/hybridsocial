@@ -883,4 +883,9 @@ export interface AdminThemeConfig {
   logo_url: string | null;
   favicon_url: string | null;
   og_image_url: string | null;
+  // Dark-mode policy + optional dark logo (shown when the theme resolves
+  // to dark; falls back to logo_url). Dark colours are derived from the
+  // light theme, so dark_* colour overrides are optional and not required.
+  mode?: 'light' | 'dark' | 'auto';
+  dark_logo_url?: string | null;
 }

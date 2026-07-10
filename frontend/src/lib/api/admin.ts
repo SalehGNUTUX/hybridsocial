@@ -234,8 +234,8 @@ export function saveAdminTheme(theme: AdminThemeConfig): Promise<AdminThemeConfi
   return api.put('/api/v1/admin/theme', theme);
 }
 
-export function uploadLogo(file: File): Promise<{ url: string }> {
-  return api.upload('/api/v1/admin/theme/logo', file);
+export function uploadLogo(file: File, variant?: 'light' | 'dark'): Promise<{ url: string }> {
+  return api.upload('/api/v1/admin/theme/logo', file, variant ? { variant } : undefined);
 }
 
 export function uploadOgImage(file: File): Promise<{ url: string }> {

@@ -33,8 +33,16 @@
     instance_description: '',
     logo_url: null,
     favicon_url: null,
-    og_image_url: null
+    og_image_url: null,
+    mode: 'auto',
+    dark_logo_url: null
   };
+
+  const modeOptions: { value: 'auto' | 'light' | 'dark'; label: string; hint: string }[] = [
+    { value: 'auto', label: 'Auto', hint: "Follows each visitor's device setting" },
+    { value: 'light', label: 'Light', hint: 'Always light' },
+    { value: 'dark', label: 'Dark', hint: 'Always dark' }
+  ];
 
   let theme: AdminThemeConfig = $state({ ...defaults });
   let loading = $state(true);
@@ -232,17 +240,38 @@
     input.click();
   }
 
+  function setMode(mode: 'auto' | 'light' | 'dark') {
+    theme.mode = mode;
+    theme = { ...theme };
+    // Live-apply so the admin sees the whole app flip while choosing.
+    applyTheme(theme as unknown as import('$lib/api/types.js').ThemeConfig);
+  }
+
   async function handleLogoUpload(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
     try {
-      const result = await uploadLogo(file);
+      const result = await uploadLogo(file, 'light');
       theme.logo_url = result.url;
       theme = { ...theme };
       addToast('Logo uploaded', 'success');
     } catch {
       addToast('Failed to upload logo', 'error');
+    }
+  }
+
+  async function handleDarkLogoUpload(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const result = await uploadLogo(file, 'dark');
+      theme.dark_logo_url = result.url;
+      theme = { ...theme };
+      addToast('Dark logo uploaded', 'success');
+    } catch {
+      addToast('Failed to upload dark logo', 'error');
     }
   }
 
@@ -433,6 +462,26 @@
         <div class="gradient-preview-bar" style="background: linear-gradient({theme.gradient_direction}, {theme.gradient_start}, {theme.gradient_end})"></div>
       </div>
 
+      <div class="darkmode-section card">
+        <h3 class="section-title">Dark mode</h3>
+        <p class="branding-hint">
+          Dark is generated automatically from your colours above. Pick how the
+          instance renders; you can also upload a dark logo under Branding.
+        </p>
+        <div class="mode-options" style="display:flex; gap:8px; flex-wrap:wrap;">
+          {#each modeOptions as opt}
+            <button
+              type="button"
+              class="btn {theme.mode === opt.value ? 'btn-primary' : 'btn-outline'}"
+              onclick={() => setMode(opt.value)}
+              title={opt.hint}
+            >
+              {opt.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
       <div class="branding-section card">
         <h3 class="section-title">Branding</h3>
         <div class="branding-fields">
@@ -445,12 +494,27 @@
             <textarea id="instance-desc" class="textarea" rows="3" bind:value={theme.instance_description}></textarea>
           </div>
           <div class="branding-field">
-            <label class="color-label">Logo</label>
+            <label class="color-label">Logo (light mode)</label>
             <div class="upload-row">
               {#if theme.logo_url}
                 <img src={theme.logo_url} alt="Logo" class="upload-preview" />
               {/if}
               <input type="file" accept="image/*" onchange={handleLogoUpload} class="file-input" />
+            </div>
+          </div>
+          <div class="branding-field">
+            <label class="color-label">Logo (dark mode)</label>
+            <p class="branding-hint">Shown when the theme is dark. Falls back to the light logo if unset.</p>
+            <div class="upload-row">
+              {#if theme.dark_logo_url}
+                <img
+                  src={theme.dark_logo_url}
+                  alt="Dark logo"
+                  class="upload-preview"
+                  style="background:#14121c; padding:4px; border-radius:6px;"
+                />
+              {/if}
+              <input type="file" accept="image/*" onchange={handleDarkLogoUpload} class="file-input" />
             </div>
           </div>
           <div class="branding-field">
