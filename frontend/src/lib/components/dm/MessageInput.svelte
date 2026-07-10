@@ -410,7 +410,7 @@
   .send-btn.active {
     background: var(--gradient-primary);
     color: var(--color-text-on-primary);
-    box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.28);
+    box-shadow: 0 1px 4px rgba(var(--color-primary-rgb), 0.18);
   }
 
   .send-btn.active:hover:not(:disabled) {

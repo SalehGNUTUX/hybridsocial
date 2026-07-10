@@ -1091,5 +1091,6 @@ defmodule HybridsocialWeb.Router do
     get "/post/:id", CrawlerController, :post
     get "/@:handle", CrawlerController, :profile
     get "/legal/:slug", CrawlerController, :legal
+    get "/", CrawlerController, :home
   end
 end

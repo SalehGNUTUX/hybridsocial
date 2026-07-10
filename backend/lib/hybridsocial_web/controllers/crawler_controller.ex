@@ -86,6 +86,15 @@ defmodule HybridsocialWeb.CrawlerController do
   # GET /legal/:slug
   # ---------------------------------------------------------------------------
 
+  @doc "GET / — server-rendered OG shell for the instance home page."
+  def home(conn, _params) do
+    if UserAgent.crawler?(conn) do
+      render_og(conn, home_og())
+    else
+      send_spa_handoff(conn)
+    end
+  end
+
   def legal(conn, %{"slug" => slug}) do
     if UserAgent.crawler?(conn) do
       case SitePages.get_published_page(slug) do
@@ -330,6 +339,24 @@ defmodule HybridsocialWeb.CrawlerController do
   # ---------------------------------------------------------------------------
   # OG builders — return a map of {title, description, image, type, url}
   # ---------------------------------------------------------------------------
+
+  defp home_og do
+    instance = instance_name()
+
+    description =
+      Config.get("instance_short_description", Config.get("instance_description", ""))
+      |> default_if_blank("#{instance} — a decentralized social network")
+
+    %{
+      title: instance,
+      description: description,
+      image: default_instance_image(),
+      type: "website",
+      url: base_url() <> "/",
+      site_name: instance,
+      author: nil
+    }
+  end
 
   defp post_og_public(post) do
     post = Repo.preload(post, [:identity, :media_attachments])

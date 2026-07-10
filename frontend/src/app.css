@@ -352,10 +352,10 @@
    the hero action against the violet-ink surfaces (the light theme relies
    on a drop shadow, which mostly vanishes on dark). */
 :root[data-theme='dark'] .btn-primary {
-  box-shadow: 0 2px 16px rgba(var(--color-primary-rgb), 0.4);
+  box-shadow: 0 1px 4px rgba(var(--color-primary-rgb), 0.22);
 }
 :root[data-theme='dark'] .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 4px 24px rgba(var(--color-primary-rgb), 0.55);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.3);
 }
 
 

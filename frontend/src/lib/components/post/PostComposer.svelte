@@ -2133,14 +2133,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 16px rgba(var(--color-primary-rgb), 0.3);
+    box-shadow: 0 2px 6px rgba(var(--color-primary-rgb), 0.2);
     transition: transform 150ms ease, box-shadow 150ms ease;
     z-index: var(--z-sticky);
   }
 
   .fab:hover {
     transform: scale(1.05);
-    box-shadow: 0 6px 24px rgba(var(--color-primary-rgb), 0.4);
+    box-shadow: 0 3px 10px rgba(var(--color-primary-rgb), 0.28);
   }
 
   .fab:focus-visible {

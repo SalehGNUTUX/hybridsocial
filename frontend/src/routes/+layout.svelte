@@ -6,7 +6,7 @@
 	import { onMount } from 'svelte';
 	import { initAuth } from '$lib/stores/auth.js';
 	import { initializeI18n, isRtl } from '$lib/stores/i18n.js';
-	import { applyTheme } from '$lib/stores/theme.js';
+	import { applyTheme, themeStore } from '$lib/stores/theme.js';
 	import { getInstanceInfo } from '$lib/api/instance.js';
 	import { browser } from '$app/environment';
 
@@ -39,7 +39,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={$themeStore?.favicon_url || favicon} />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
