@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
   import { api } from '$lib/api/client.js';
   import { addToast } from '$lib/stores/toast.js';
   import { getPromotedUsers, getPromotionPricing, purchasePromotion, formatPrice } from '$lib/api/promotions.js';
@@ -520,6 +521,14 @@
   {/if}
 
   <section class="sidebar-footer">
+    {#if $page.data?.instance?.description}
+      <p
+        class="footer-about"
+        style="font-size: var(--text-xs); line-height: 1.5; color: var(--color-text-secondary); margin-block-end: var(--space-3);"
+      >
+        {$page.data.instance.description}
+      </p>
+    {/if}
     <nav class="footer-links" aria-label="Footer">
       <a href="/legal/about" class="footer-link">About</a>
       <span class="footer-dot" aria-hidden="true">&middot;</span>

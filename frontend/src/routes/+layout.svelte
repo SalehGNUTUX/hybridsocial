@@ -10,7 +10,7 @@
 	import { getInstanceInfo } from '$lib/api/instance.js';
 	import { browser } from '$app/environment';
 
-	let { children } = $props();
+	let { children, data } = $props();
 
 	onMount(async () => {
 		// Initialize i18n (auto-detects browser locale)
@@ -39,7 +39,20 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={$themeStore?.favicon_url || favicon} />
+	<title>{data?.instance?.title || 'Bassam Social'}</title>
+	<meta property="og:title" content={data?.instance?.title || 'Bassam Social'} />
+	<meta property="og:site_name" content={data?.instance?.title || 'Bassam Social'} />
+	<meta property="og:type" content="website" />
+	{#if data?.instance?.description}
+		<meta name="description" content={data.instance.description} />
+		<meta property="og:description" content={data.instance.description} />
+		<meta name="twitter:description" content={data.instance.description} />
+	{/if}
+	{#if data?.instance?.og_image_url}
+		<meta property="og:image" content={data.instance.og_image_url} />
+		<meta name="twitter:card" content="summary_large_image" />
+	{/if}
+	<link rel="icon" href={$themeStore?.favicon_url || data?.instance?.favicon_url || favicon} />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
