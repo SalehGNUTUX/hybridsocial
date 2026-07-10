@@ -5,7 +5,7 @@ defmodule HybridsocialWeb.Federation.PostObjectController do
   embed as `object.id`, so remote servers dereference it to verify +
   hydrate the object. Without this endpoint every outbound Create
   Mastodon receives fails subsequent re-fetches with a 404, which
-  is why replies from arab.place never show up in Mastodon threads
+  is why replies from a peer instance never show up in Mastodon threads
   beyond the first level — Mastodon couldn't resolve the reply
   chain.
 

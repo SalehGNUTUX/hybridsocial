@@ -32,7 +32,7 @@ defmodule HybridsocialWeb.Api.V1.SearchController do
     # If resolve=true and the query is a fully-qualified `@user@domain`,
     # we trigger a federation lookup unless the local DB already
     # contains an EXACT (user, domain) match. Substring matches don't
-    # count — searching `@ahmad@bassam.social` shouldn't be satisfied
+    # count — searching `@user@example.social` shouldn't be satisfied
     # by a cached `ahmad@mastodon.social` or a local `ahmad`.
     accounts =
       if resolve and looks_like_remote_handle?(query) and
@@ -186,7 +186,7 @@ defmodule HybridsocialWeb.Api.V1.SearchController do
   # Mastodon, Pleroma, Akkoma and Misskey all expose, and dereference
   # the actor JSON directly. Lets us federate with instances whose
   # WebFinger and Mastodon-API discovery are both broken (e.g.
-  # bassam.social, where nginx swallows /.well-known/* before it
+  # some instances, where nginx swallows /.well-known/* before it
   # reaches Pleroma).
   #
   # We *probe* the URL before calling resolve_or_create — that

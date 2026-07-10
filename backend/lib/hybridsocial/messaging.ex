@@ -668,7 +668,7 @@ defmodule Hybridsocial.Messaging do
     sender_url = "#{base}/actors/#{sender.id}"
     # Use `/dm/:id` rather than `/messages/:id` — the latter collides
     # with the SvelteKit DM conversation route, so when Mastodon
-    # links to "see replies on arab.place" the frontend tries to
+    # links to "see replies on the origin instance" the frontend tries to
     # load the message UUID as a conversation and renders blank.
     note_id = "#{base}/dm/#{message.id}"
     activity_id = "#{base}/activities/#{sender.id}/create-dm/#{message.id}"
