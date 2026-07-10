@@ -803,7 +803,7 @@
     background: var(--color-surface-raised, var(--color-surface));
     border: 1px solid var(--color-danger, #b00);
     border-radius: var(--radius-md, 8px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-md);
     white-space: nowrap;
   }
 
@@ -1050,7 +1050,7 @@
     border-radius: 9999px;
     background: var(--color-surface-raised, var(--color-surface));
     border: 1px solid var(--color-border);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-sm);
     font-size: 0.875rem;
     line-height: 1;
     cursor: default;

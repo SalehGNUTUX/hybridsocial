@@ -139,7 +139,7 @@
     border: 1px solid var(--color-border);
     border-radius: 18px;
     padding: 28px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-sm);
   }
 
   .donate-header {

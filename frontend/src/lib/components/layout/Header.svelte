@@ -211,7 +211,7 @@
     top: 0;
     inset-inline: 0;
     height: var(--header-height);
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--color-glass);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-block-end: var(--ghost-border);
@@ -371,7 +371,9 @@
     color: var(--color-on-primary);
     background: var(--color-error);
     border-radius: var(--radius-full);
-    border: 2px solid rgba(255, 255, 255, 0.8);
+    /* Ring matches the bar behind it (separates the badge) — flips with
+       the theme instead of staying white. */
+    border: 2px solid var(--color-surface);
   }
 
   .avatar-btn {

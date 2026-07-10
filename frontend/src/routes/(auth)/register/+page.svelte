@@ -542,7 +542,7 @@
     background: var(--color-surface-container-lowest);
     border-radius: 14px;
     padding: 32px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 24px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-md);
     flex: 1;
     min-width: 0;
     max-width: 420px;
@@ -550,7 +550,7 @@
   }
 
   .auth-card:focus-within {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-lg);
   }
 
   .auth-logo { display: flex; justify-content: center; margin-block-end: 24px; }

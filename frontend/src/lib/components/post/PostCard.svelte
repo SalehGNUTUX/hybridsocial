@@ -1329,7 +1329,7 @@
     z-index: 5;
     box-shadow:
       0 2px 4px rgba(25, 28, 29, 0.05),
-      0 16px 36px rgba(var(--color-primary-rgb), 0.11);
+      0 4px 14px rgba(var(--color-primary-rgb), 0.1);
     border-color: rgba(var(--color-primary-rgb), 0.18);
   }
 
@@ -2028,10 +2028,11 @@
     transition: opacity 0.3s ease;
   }
 
-  @media (prefers-color-scheme: dark) {
-    .nsfw-frost-glass {
-      background: rgba(0, 0, 0, 0.25);
-    }
+  /* Keyed on the app theme (which resolves the OS preference for 'auto')
+     rather than a bare prefers-color-scheme query, so a NSFW frost stays
+     dark even when the admin forces dark on a light-OS visitor. */
+  :global(:root[data-theme='dark']) .nsfw-frost-glass {
+    background: rgba(0, 0, 0, 0.25);
   }
 
   /* Overlay with badge, warning text, and button */
@@ -2711,7 +2712,7 @@
 
   .post-actions-divider {
     height: 1px;
-    background: rgba(188, 201, 200, 0.35);
+    background: var(--color-border);
     margin-top: 20px;
     margin-bottom: 12px;
   }

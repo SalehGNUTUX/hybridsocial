@@ -618,8 +618,8 @@
     background: var(--color-surface-container-lowest);
     border-radius: var(--radius-xl);
     padding: var(--space-5);
-    border: 1px solid rgba(188, 201, 200, 0.15);
-    box-shadow: 0 1px 3px rgba(25, 28, 29, 0.04);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
   }
 
   .section-title {

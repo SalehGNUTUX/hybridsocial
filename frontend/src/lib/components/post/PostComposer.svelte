@@ -2081,7 +2081,7 @@
     background: var(--color-surface-container-lowest);
     border: 1px solid var(--color-primary);
     border-radius: 14px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-md);
     z-index: var(--z-sticky, 40);
     animation: draft-in 0.3s ease;
   }
@@ -2261,7 +2261,7 @@
     background: var(--color-surface-container-lowest);
     border-radius: 14px;
     padding: 24px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-lg);
     z-index: var(--z-modal);
     /* Allow internal scroll once the content (textarea + many media
        tiles + footer) exceeds the panel's max-height — previously
@@ -2987,7 +2987,7 @@
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg, 12px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-md);
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -3119,9 +3119,9 @@
     max-height: 240px;
     overflow-y: auto;
     background: var(--color-surface-container-lowest, #fff);
-    border: 1px solid rgba(188, 201, 200, 0.25);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(25, 28, 29, 0.1);
+    box-shadow: var(--shadow-md);
     z-index: 50;
   }
 

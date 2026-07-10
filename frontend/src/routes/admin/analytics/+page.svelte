@@ -329,7 +329,7 @@
     align-items: center;
     gap: 1px;
     white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-sm);
     z-index: 100;
   }
   .chart-tooltip strong { font-size: 0.875rem; font-weight: 700; }

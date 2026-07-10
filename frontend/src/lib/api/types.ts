@@ -415,6 +415,13 @@ export interface InstanceStats {
 }
 
 export interface ThemeConfig {
+  // Instance dark-mode policy. 'auto' follows the visitor's OS (default).
+  // Dark is derived from the light theme (hybrid model); any dark_<key>
+  // below overrides the derived/ramped value for that token.
+  mode?: 'light' | 'dark' | 'auto';
+  // Optional per-token dark overrides, e.g. dark_color_primary,
+  // dark_color_bg, dark_color_surface, dark_color_text …
+  [key: `dark_${string}`]: string | undefined;
   color_primary?: string;
   color_primary_hover?: string;
   color_primary_soft?: string;

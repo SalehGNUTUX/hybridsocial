@@ -435,9 +435,9 @@
   .stitch-avatar-btn :global(.avatar) {
     width: 96px !important;
     height: 96px !important;
-    ring: 4px solid white;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-    border: 4px solid white;
+    ring: 4px solid var(--color-surface);
+    box-shadow: var(--shadow-md);
+    border: 4px solid var(--color-surface);
     border-radius: 50%;
   }
 
