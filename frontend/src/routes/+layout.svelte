@@ -19,12 +19,23 @@
 	// this in one place means exactly one set of og: tags per page.
 	const instTitle = $derived(data?.instance?.title || 'HybridSocial');
 	const pageOg = $derived(($page.data as Record<string, any>)?.og as
-		| { title?: string; description?: string; image?: string; type?: string }
+		| {
+				title?: string;
+				description?: string;
+				image?: string;
+				image_width?: number | null;
+				image_height?: number | null;
+				type?: string;
+		  }
 		| undefined);
 	const ogTitle = $derived(pageOg?.title || instTitle);
 	const ogDescription = $derived(pageOg?.description ?? data?.instance?.description ?? '');
 	const ogType = $derived(pageOg?.type || 'website');
 	const ogImage = $derived(pageOg?.image || data?.instance?.og_image_url || null);
+	// Real dimensions of whichever image is in use (post attachment or the
+	// instance social image). Emitted only when known — never assumed.
+	const ogImageWidth = $derived(pageOg?.image_width ?? data?.instance?.og_image_width ?? null);
+	const ogImageHeight = $derived(pageOg?.image_height ?? data?.instance?.og_image_height ?? null);
 	const canonicalUrl = $derived(`${$page.url.origin}${$page.url.pathname}`);
 
 	onMount(async () => {
@@ -67,11 +78,9 @@
 	{#if ogImage}
 		<meta property="og:image" content={ogImage} />
 		<meta property="og:image:alt" content={ogTitle} />
-		{#if !pageOg}
-			<!-- Instance OG image is the recommended 1200x630; post/profile
-			     images are arbitrary size so we omit dimensions there. -->
-			<meta property="og:image:width" content="1200" />
-			<meta property="og:image:height" content="630" />
+		{#if ogImageWidth && ogImageHeight}
+			<meta property="og:image:width" content={String(ogImageWidth)} />
+			<meta property="og:image:height" content={String(ogImageHeight)} />
 		{/if}
 		<meta name="twitter:card" content="summary_large_image" />
 	{/if}

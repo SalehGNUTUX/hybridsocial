@@ -27,7 +27,9 @@ export const load: LayoutServerLoad = async ({ fetch }) => {
         favicon_url:
           (info.favicon_url as string) || (theme?.favicon_url as string) || null,
         og_image_url:
-          (info.og_image_url as string) || (theme?.og_image_url as string) || null
+          (info.og_image_url as string) || (theme?.og_image_url as string) || null,
+        og_image_width: (info.og_image_width as number) ?? null,
+        og_image_height: (info.og_image_height as number) ?? null
       }
     };
   } catch {

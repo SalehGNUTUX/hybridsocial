@@ -397,10 +397,14 @@ defmodule HybridsocialWeb.CrawlerController do
       |> truncate(300)
       |> default_if_blank("A post on #{instance}")
 
+    img = post_image_meta(post)
+
     %{
       title: title,
       description: description,
-      image: post_image(post),
+      image: img.url,
+      image_width: img.width,
+      image_height: img.height,
       type: "article",
       url: "#{base_url()}/post/#{post.id}",
       site_name: instance,
@@ -581,7 +585,10 @@ defmodule HybridsocialWeb.CrawlerController do
     String.starts_with?(ap_id, base)
   end
 
-  defp post_image(%Post{} = post) do
+  # Returns the OG image url + its real pixel dimensions (nil when the
+  # image is a fallback we don't have dimensions for, so callers omit the
+  # width/height tags rather than assume a size).
+  defp post_image_meta(%Post{} = post) do
     attachments =
       case post.media_attachments do
         %Ecto.Association.NotLoaded{} ->
@@ -598,8 +605,11 @@ defmodule HybridsocialWeb.CrawlerController do
       end
 
     case attachments do
-      [media | _] -> Hybridsocial.Media.media_url(media)
-      _ -> post_card_image(post) || default_instance_image()
+      [%MediaFile{} = media | _] ->
+        %{url: Hybridsocial.Media.media_url(media), width: media.width, height: media.height}
+
+      _ ->
+        %{url: post_card_image(post) || default_instance_image(), width: nil, height: nil}
     end
   end
 

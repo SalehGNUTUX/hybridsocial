@@ -14,12 +14,14 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
     const res = await fetch(`${base}/api/v1/og/post/${encodeURIComponent(params.id)}`);
     if (!res.ok) return {};
 
-    const m = (await res.json()) as Record<string, string>;
+    const m = (await res.json()) as Record<string, string | number | null>;
     return {
       og: {
         title: m.title,
         description: m.description,
         image: m.image,
+        image_width: (m.image_width as number) ?? null,
+        image_height: (m.image_height as number) ?? null,
         type: m.type || 'article',
         url: m.url
       }

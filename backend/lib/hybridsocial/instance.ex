@@ -55,8 +55,12 @@ defmodule Hybridsocial.Instance do
       stats: stats(),
       thumbnail: Config.get("instance_thumbnail", nil),
       # Social-card image (admin uploads it as instance_og_image). Exposed
-      # here so the frontend can render <meta property="og:image"> at SSR.
+      # here so the frontend can render <meta property="og:image"> at SSR,
+      # with the real stored dimensions (nil until (re)uploaded, so the
+      # frontend omits the width/height tags rather than assume a size).
       og_image_url: Config.get("instance_og_image"),
+      og_image_width: Config.get("instance_og_image_width"),
+      og_image_height: Config.get("instance_og_image_height"),
       languages: languages(),
       registrations: reg_mode != "closed",
       approval_required: reg_mode == "approval",

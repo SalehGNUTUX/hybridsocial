@@ -78,7 +78,8 @@ defmodule Hybridsocial.Media do
           {duration, width, height, metadata} =
             case video_meta do
               nil ->
-                {nil, nil, nil, base_metadata}
+                {w, h} = image_dimensions(final_path, final_content_type)
+                {nil, w, h, base_metadata}
 
               %{} = vm ->
                 extra = %{
@@ -195,6 +196,24 @@ defmodule Hybridsocial.Media do
       {:error, :invalid_content_type}
     end
   end
+
+  # Real pixel dimensions of an image via libvips (same toolchain as the
+  # optimizer). Populates the media record's width/height so og:image and
+  # layout code can use actual sizes instead of assuming any. Best-effort:
+  # returns {nil, nil} if vipsheader is unavailable or the file isn't an
+  # image.
+  defp image_dimensions(path, "image/" <> _) do
+    with {w_out, 0} <- System.cmd("vipsheader", ["-f", "width", path], stderr_to_stdout: true),
+         {h_out, 0} <- System.cmd("vipsheader", ["-f", "height", path], stderr_to_stdout: true),
+         {w, _} <- Integer.parse(String.trim(w_out)),
+         {h, _} <- Integer.parse(String.trim(h_out)) do
+      {w, h}
+    else
+      _ -> {nil, nil}
+    end
+  end
+
+  defp image_dimensions(_path, _content_type), do: {nil, nil}
 
   # SVG can carry <script>/on* handlers, so strip active content in place
   # before the file continues down the pipeline to storage.

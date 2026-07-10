@@ -698,6 +698,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
         {:ok, media} ->
           url = Hybridsocial.Media.media_url(media)
           Hybridsocial.Config.set("instance_og_image", url)
+          # Store the real dimensions so og:image:width/height reflect the
+          # actual upload instead of an assumed size.
+          Hybridsocial.Config.set("instance_og_image_width", media.width)
+          Hybridsocial.Config.set("instance_og_image_height", media.height)
           json(conn, %{url: url})
 
         {:error, reason} ->
