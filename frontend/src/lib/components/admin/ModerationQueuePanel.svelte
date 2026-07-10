@@ -326,7 +326,7 @@
     padding: 2px var(--space-2);
     border-radius: var(--radius-full);
     background: var(--color-info-soft);
-    color: #1e40af;
+    color: var(--color-on-info-soft);
     text-transform: capitalize;
   }
 
@@ -338,9 +338,9 @@
     text-transform: capitalize;
   }
 
-  .severity-critical { background: var(--color-danger-soft); color: #991b1b; }
-  .severity-high     { background: var(--color-warning-soft); color: #92400e; }
-  .severity-medium   { background: var(--color-info-soft); color: #1e40af; }
+  .severity-critical { background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
+  .severity-high     { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+  .severity-medium   { background: var(--color-info-soft); color: var(--color-on-info-soft); }
   .severity-low      { background: var(--color-surface); color: var(--color-text-secondary); }
 
   .status-badge {
@@ -351,10 +351,10 @@
     text-transform: capitalize;
   }
 
-  .status-pending   { background: var(--color-warning-soft); color: #92400e; }
-  .status-approved  { background: var(--color-success-soft); color: #166534; }
-  .status-rejected  { background: var(--color-danger-soft); color: #991b1b; }
-  .status-escalated { background: var(--color-info-soft); color: #1e40af; }
+  .status-pending   { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+  .status-approved  { background: var(--color-success-soft); color: var(--color-on-success-soft); }
+  .status-rejected  { background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
+  .status-escalated { background: var(--color-info-soft); color: var(--color-on-info-soft); }
 
   .action-buttons {
     display: flex;

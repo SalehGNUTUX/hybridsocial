@@ -4,6 +4,7 @@
   import { getBookmarks } from '$lib/api/timelines.js';
   import { addToast } from '$lib/stores/toast.js';
   import FeedList from '$lib/components/feed/FeedList.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let posts: Post[] = $state([]);
   let loading = $state(true);
@@ -47,7 +48,7 @@
 </script>
 
 <svelte:head>
-  <title>Bookmarks - Bassam Social</title>
+  <title>Bookmarks - {$instanceName}</title>
 </svelte:head>
 
 <div class="bookmarks-page">

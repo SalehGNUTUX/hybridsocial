@@ -3,11 +3,27 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script>
+			// No-FOUC theme boot: set data-theme before first paint from the
+			// last-known instance mode (cached by applyTheme) resolving 'auto'
+			// against the OS. Default is 'auto' so dark-OS visitors get dark
+			// immediately. applyTheme() re-asserts this after instance info loads.
+			(function () {
+				try {
+					var mode = localStorage.getItem('hs-theme-mode') || 'auto';
+					var dark = mode === 'dark' || (mode === 'auto' &&
+						window.matchMedia('(prefers-color-scheme: dark)').matches);
+					document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+				} catch (e) {
+					document.documentElement.setAttribute('data-theme', 'light');
+				}
+			})();
+		</script>
 		<link rel="manifest" href="/manifest.json">
 		<meta name="theme-color" content="#6c3edd">
 		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="default">
-		<meta name="apple-mobile-web-app-title" content="Bassam Social">
+		<meta name="apple-mobile-web-app-title" content="HybridSocial">
 		<link rel="apple-touch-icon" href="/icons/icon.svg">
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

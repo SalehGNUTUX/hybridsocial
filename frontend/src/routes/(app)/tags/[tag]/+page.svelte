@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { untrack } from 'svelte';
   import { page } from '$app/state';
   import type { Post } from '$lib/api/types.js';
@@ -88,7 +89,7 @@
 </script>
 
 <svelte:head>
-  <title>#{tag} - Bassam Social</title>
+  <title>#{tag} - {$instanceName}</title>
 </svelte:head>
 
 <div class="tag-page">

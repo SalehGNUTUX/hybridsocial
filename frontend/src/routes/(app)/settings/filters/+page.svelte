@@ -183,7 +183,7 @@
   .stitch-field { margin-block-end: var(--space-3); }
   .stitch-label { display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); margin-block-end: 6px; }
   .stitch-input { width: 100%; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: 10px; font-size: 0.875rem; color: var(--color-text); background: var(--color-surface); }
-  .stitch-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft, rgba(108,62,221,0.1)); }
+  .stitch-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft, rgba(var(--color-primary-rgb),0.1)); }
 
   .action-toggle { display: flex; gap: 8px; }
   .action-opt {
@@ -192,7 +192,7 @@
     background: transparent; color: var(--color-text-secondary); font-size: 0.8125rem; font-weight: 600; cursor: pointer;
     transition: all 150ms ease;
   }
-  .action-opt.active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft, rgba(108,62,221,0.05)); }
+  .action-opt.active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft, rgba(var(--color-primary-rgb),0.05)); }
 
   .context-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .context-chip {
@@ -224,8 +224,8 @@
   .filter-action-badge {
     font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 4px;
   }
-  .badge-warn { background: rgba(245,158,11,0.15); color: #92400e; }
-  .badge-hide { background: rgba(239,68,68,0.15); color: #dc2626; }
+  .badge-warn { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+  .badge-hide { background: var(--color-danger-soft); color: var(--color-danger); }
 
   .filter-context-tag { font-size: 0.65rem; color: var(--color-text-tertiary); background: var(--color-surface-container-low, #f0f0f0); padding: 1px 6px; border-radius: 4px; }
 

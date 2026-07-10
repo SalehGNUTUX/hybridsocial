@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
+
   // Developer documentation — explains what bots and the API can do
   // and how to use them. Lives at /help/developers and is the only
   // human-readable reference outside `docs/SPEC.md` (which targets
@@ -58,7 +60,7 @@
 </script>
 
 <svelte:head>
-  <title>Developer documentation — Bassam Social</title>
+  <title>Developer documentation — {$instanceName}</title>
 </svelte:head>
 
 <div class="docs-shell">
@@ -83,7 +85,7 @@
     <section id="overview" class="docs-section">
       <h1>Developer documentation</h1>
       <p class="lead">
-        Bassam Social exposes a Mastodon-compatible REST API. You can build clients,
+        {$instanceName} exposes a Mastodon-compatible REST API. You can build clients,
         automations, dashboards, scrapers (please don't), or bots that interact with
         the platform on your behalf or under their own identity.
       </p>
@@ -112,7 +114,7 @@
           <p>
             Acts as <strong>your account</strong>. Posts show up under your handle.
             Useful for a personal client, a side-script that posts on your behalf, or
-            integrating Bassam Social into something you control.
+            integrating {$instanceName} into something you control.
           </p>
           <ul class="choice-pros">
             <li>Set up in seconds — one button on the Developer Tools page.</li>
@@ -322,7 +324,7 @@
       <h3>Headers we send</h3>
       <ul>
         <li><code>content-type: application/json</code></li>
-        <li><code>user-agent: Bassam Social-Webhook/1.0</code></li>
+        <li><code>user-agent: {$instanceName}-Webhook/1.0</code></li>
         <li><code>x-webhook-event</code> — same string as <code>event</code> in the body, for routing without parsing.</li>
         <li><code>x-webhook-signature: sha256=&lt;hex&gt;</code> — HMAC-SHA256 of the raw request body, hex-encoded.</li>
         <li><code>x-webhook-delivery</code> — the delivery row's UUID. Idempotent retries reuse the same value.</li>

@@ -2081,7 +2081,7 @@
     background: var(--color-surface-container-lowest);
     border: 1px solid var(--color-primary);
     border-radius: 14px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-md);
     z-index: var(--z-sticky, 40);
     animation: draft-in 0.3s ease;
   }
@@ -2133,14 +2133,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 16px rgba(108, 62, 221, 0.3);
+    box-shadow: 0 2px 6px rgba(var(--color-primary-rgb), 0.2);
     transition: transform 150ms ease, box-shadow 150ms ease;
     z-index: var(--z-sticky);
   }
 
   .fab:hover {
     transform: scale(1.05);
-    box-shadow: 0 6px 24px rgba(108, 62, 221, 0.4);
+    box-shadow: 0 3px 10px rgba(var(--color-primary-rgb), 0.28);
   }
 
   .fab:focus-visible {
@@ -2207,7 +2207,7 @@
   .composer-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--scrim-medium);
     z-index: var(--z-modal-backdrop);
     animation: fade-in 0.15s ease;
   }
@@ -2261,7 +2261,7 @@
     background: var(--color-surface-container-lowest);
     border-radius: 14px;
     padding: 24px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-lg);
     z-index: var(--z-modal);
     /* Allow internal scroll once the content (textarea + many media
        tiles + footer) exceeds the panel's max-height — previously
@@ -2303,7 +2303,7 @@
 
   @media (min-width: 640px) {
     .composer-panel {
-      border: 1px solid rgba(188, 201, 200, 0.15);
+      border: 1px solid var(--color-border);
     }
   }
 
@@ -2690,7 +2690,7 @@
     width: 22px;
     height: 22px;
     border-radius: 9999px;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim-medium);
     color: white;
     border: none;
     cursor: pointer;
@@ -2704,7 +2704,7 @@
   }
 
   .media-preview-remove:hover {
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--scrim-strong);
   }
 
   .remove-icon {
@@ -2751,7 +2751,7 @@
   .schedule-input:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-soft, rgba(108, 62, 221, 0.1));
+    box-shadow: 0 0 0 2px var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.1));
   }
 
   .schedule-preview {
@@ -2987,7 +2987,7 @@
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg, 12px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-md);
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -3119,9 +3119,9 @@
     max-height: 240px;
     overflow-y: auto;
     background: var(--color-surface-container-lowest, #fff);
-    border: 1px solid rgba(188, 201, 200, 0.25);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(25, 28, 29, 0.1);
+    box-shadow: var(--shadow-md);
     z-index: 50;
   }
 
@@ -3196,7 +3196,7 @@
     border: none;
     padding: 2px 8px;
     border-radius: 9999px;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim-medium);
     color: #fff;
     font-size: 0.65rem;
     font-weight: 700;
@@ -3208,7 +3208,7 @@
   }
 
   .media-preview-alt:hover {
-    background: rgba(0, 0, 0, 0.85);
+    background: var(--scrim-strong);
   }
 
   .media-preview-alt-set {
@@ -3225,7 +3225,7 @@
     position: fixed;
     inset: 0;
     z-index: 10000;
-    background: rgba(0, 0, 0, 0.85);
+    background: var(--scrim-strong);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3248,7 +3248,7 @@
     height: 40px;
     border-radius: 50%;
     border: none;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim-medium);
     color: #fff;
     cursor: pointer;
     display: flex;
@@ -3257,7 +3257,7 @@
   }
 
   .video-preview-close:hover {
-    background: rgba(0, 0, 0, 0.85);
+    background: var(--scrim-strong);
   }
 
   /* Alt-text + discard-confirm overlays */
@@ -3265,7 +3265,7 @@
     position: fixed;
     inset: 0;
     z-index: 10000;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--scrim-medium);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     display: flex;

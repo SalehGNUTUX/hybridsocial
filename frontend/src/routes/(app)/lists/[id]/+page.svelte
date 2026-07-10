@@ -18,6 +18,7 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let list = $state<List | null>(null);
   let posts = $state<Post[]>([]);
@@ -189,7 +190,7 @@
 </script>
 
 <svelte:head>
-  <title>{list?.title ?? 'List'} - Bassam Social</title>
+  <title>{list?.title ?? 'List'} - {$instanceName}</title>
 </svelte:head>
 
 <div class="list-detail-page">

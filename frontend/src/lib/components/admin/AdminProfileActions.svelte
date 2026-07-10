@@ -653,7 +653,7 @@
     background: var(--color-surface-raised);
     border: 1px solid var(--color-warning, #f59e0b);
     border-radius: var(--radius-xl);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-xl);
     padding: var(--space-4);
     display: flex;
     flex-direction: column;
@@ -917,7 +917,7 @@
   .admin-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim-medium);
     backdrop-filter: blur(2px);
     display: flex;
     align-items: center;
@@ -942,7 +942,7 @@
     padding: var(--space-6, 1.5rem);
     max-width: 420px;
     width: 90%;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-xl);
     animation: admin-dialog-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   }
 

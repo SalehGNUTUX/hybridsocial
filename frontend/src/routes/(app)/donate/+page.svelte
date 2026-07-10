@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import { getFunding, type FundingMethod } from '$lib/api/funding.js';
 
@@ -44,7 +45,7 @@
 </script>
 
 <svelte:head>
-  <title>Support this instance - Bassam Social</title>
+  <title>Support this instance - {$instanceName}</title>
 </svelte:head>
 
 <div class="donate-page">
@@ -259,7 +260,7 @@
 
   .goal-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--color-primary), #6c3edd);
+    background: linear-gradient(90deg, var(--color-primary), var(--color-primary));
     border-radius: var(--radius-full);
     transition: width 0.5s ease;
   }

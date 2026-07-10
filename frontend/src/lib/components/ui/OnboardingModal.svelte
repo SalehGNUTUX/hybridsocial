@@ -314,7 +314,7 @@
   .onboarding-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim-medium);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;

@@ -591,11 +591,17 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   # ── Theme ────────────────────────────────────────────────────────────
 
   @theme_keys ~w(
+    mode
     color_primary color_primary_hover color_primary_soft color_primary_contrast
     color_secondary color_accent color_success color_warning color_danger color_info
     color_bg color_bg_wash color_surface color_border color_text color_text_secondary color_text_link
     gradient_start gradient_end gradient_direction border_radius density font_family
     logo_url favicon_url
+    dark_color_primary dark_color_primary_hover dark_color_primary_soft dark_color_primary_contrast
+    dark_color_secondary dark_color_accent dark_color_success dark_color_warning dark_color_danger dark_color_info
+    dark_color_bg dark_color_bg_wash dark_color_surface dark_color_border dark_color_text dark_color_text_secondary dark_color_text_link
+    dark_gradient_start dark_gradient_end dark_gradient_direction
+    dark_logo_url
   )
 
   def get_theme(conn, _params) do
@@ -640,12 +646,16 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     end
   end
 
-  def upload_logo(conn, %{"file" => %Plug.Upload{} = upload}) do
+  def upload_logo(conn, %{"file" => %Plug.Upload{} = upload} = params) do
     with :ok <- require_permission(conn, "theme.manage") do
+      # variant=dark stores a separate logo used when the theme resolves
+      # to dark; anything else is the default (light) logo.
+      key = if params["variant"] == "dark", do: "theme_dark_logo_url", else: "theme_logo_url"
+
       case Hybridsocial.Media.upload(conn.assigns.current_identity.id, upload, nil) do
         {:ok, media} ->
           url = Hybridsocial.Media.media_url(media)
-          Hybridsocial.Config.set("theme_logo_url", url)
+          Hybridsocial.Config.set(key, url)
           json(conn, %{url: url})
 
         {:error, reason} ->
@@ -688,6 +698,10 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
         {:ok, media} ->
           url = Hybridsocial.Media.media_url(media)
           Hybridsocial.Config.set("instance_og_image", url)
+          # Store the real dimensions so og:image:width/height reflect the
+          # actual upload instead of an assumed size.
+          Hybridsocial.Config.set("instance_og_image_width", media.width)
+          Hybridsocial.Config.set("instance_og_image_height", media.height)
           json(conn, %{url: url})
 
         {:error, reason} ->

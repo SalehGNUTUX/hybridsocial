@@ -320,9 +320,9 @@
     gap: 8px;
     padding: 12px 16px;
     margin-block-end: 16px;
-    background: #fef2f2;
+    background: var(--color-danger-soft);
     border-radius: 10px;
-    color: #dc2626;
+    color: var(--color-danger);
     font-size: 0.875rem;
   }
 
@@ -333,7 +333,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #dc2626;
+    background: var(--color-danger);
     color: white;
     font-size: 0.75rem;
     font-weight: 700;

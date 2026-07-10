@@ -31,6 +31,7 @@ defmodule Hybridsocial.Media do
          :ok <- Antivirus.scan(binary_data),
          :ok <- Hash.check_upload(path),
          :ok <- Validator.strip_metadata(path),
+         :ok <- maybe_sanitize_svg(path, content_type),
          {:ok, filtered} <-
            Filter.filter(%{path: path, filename: filename, content_type: content_type}) do
       # Resize / recompress / strip-metadata for image uploads. Runs
@@ -77,7 +78,8 @@ defmodule Hybridsocial.Media do
           {duration, width, height, metadata} =
             case video_meta do
               nil ->
-                {nil, nil, nil, base_metadata}
+                {w, h} = image_dimensions(final_path, final_content_type)
+                {nil, w, h, base_metadata}
 
               %{} = vm ->
                 extra = %{
@@ -194,6 +196,38 @@ defmodule Hybridsocial.Media do
       {:error, :invalid_content_type}
     end
   end
+
+  # Real pixel dimensions of an image via libvips (same toolchain as the
+  # optimizer). Populates the media record's width/height so og:image and
+  # layout code can use actual sizes instead of assuming any. Best-effort:
+  # returns {nil, nil} if vipsheader is unavailable or the file isn't an
+  # image.
+  defp image_dimensions(path, "image/" <> _) do
+    # Guard on the executable so environments without libvips (e.g. CI) get
+    # {nil, nil} instead of a raised :enoent from System.cmd.
+    with vips when is_binary(vips) <- System.find_executable("vipsheader"),
+         {w_out, 0} <- System.cmd(vips, ["-f", "width", path], stderr_to_stdout: true),
+         {h_out, 0} <- System.cmd(vips, ["-f", "height", path], stderr_to_stdout: true),
+         {w, _} <- Integer.parse(String.trim(w_out)),
+         {h, _} <- Integer.parse(String.trim(h_out)) do
+      {w, h}
+    else
+      _ -> {nil, nil}
+    end
+  end
+
+  defp image_dimensions(_path, _content_type), do: {nil, nil}
+
+  # SVG can carry <script>/on* handlers, so strip active content in place
+  # before the file continues down the pipeline to storage.
+  # sobelow_skip ["Traversal.FileModule"]
+  defp maybe_sanitize_svg(path, "image/svg+xml") do
+    with {:ok, raw} <- File.read(path) do
+      File.write(path, Hybridsocial.Media.SvgSanitizer.sanitize(raw))
+    end
+  end
+
+  defp maybe_sanitize_svg(_path, _content_type), do: :ok
 
   # Keep only the codec/sample-rate/bitrate fields we need to render
   # the player; drop the rest. ffprobe emits a lot of noise per

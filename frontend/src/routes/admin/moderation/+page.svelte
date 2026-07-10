@@ -884,12 +884,12 @@
 
   .status-pending {
     background: var(--color-warning-soft);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
   }
 
   .status-resolved {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-dismissed {
@@ -942,7 +942,7 @@
     padding: 2px var(--space-2);
     border-radius: var(--radius-full);
     background: var(--color-info-soft);
-    color: #1e40af;
+    color: var(--color-on-info-soft);
     text-transform: uppercase;
   }
 
@@ -963,7 +963,7 @@
 
   .badge-warn {
     background: var(--color-warning-soft);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
   }
 
   .badge-hide {
@@ -973,7 +973,7 @@
 
   .badge-reject {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .badge-scope {
@@ -999,7 +999,7 @@
   }
 
   /* Widen the handle cells + keep the whole handle on one line so a
-     long acct like @user@bassam.social can't collide with the next
+     long acct like @user@example.social can't collide with the next
      column's content. */
   :global(.data-table td:nth-child(2)),
   :global(.data-table td:nth-child(3)) {
@@ -1080,7 +1080,7 @@
     padding: 2px 6px;
     font-size: 0.65rem;
     font-weight: 600;
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
     background: var(--color-danger-soft);
     border-radius: var(--radius-sm);
   }
@@ -1107,7 +1107,7 @@
     padding: 2px var(--space-2);
     border-radius: var(--radius-full);
     background: var(--color-info-soft);
-    color: #1e40af;
+    color: var(--color-on-info-soft);
     text-transform: uppercase;
   }
 
@@ -1129,12 +1129,12 @@
 
   .status-approved {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-rejected {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   /* Verification requests list */
@@ -1215,7 +1215,7 @@
   }
 
   .verify-rejection {
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .verify-date {

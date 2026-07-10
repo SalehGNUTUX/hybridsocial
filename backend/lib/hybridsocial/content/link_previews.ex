@@ -282,7 +282,7 @@ defmodule Hybridsocial.Content.LinkPreviews do
 
   # Returns {:local, :post, id} | {:local, :profile, handle} |
   # {:local, :legal, slug} | {:local, :generic, nil} for own-host URLs;
-  # :remote otherwise. Generic catches arab.place homepage / unknown
+  # :remote otherwise. Generic catches an instance homepage / unknown
   # paths so a cookie banner / index URL still gets a sensible card
   # instead of an HTTP fetch that returns the SPA shell.
   defp classify_local_url(url) do

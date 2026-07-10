@@ -797,12 +797,12 @@
 
   .instance-up {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .instance-down {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .instance-unknown {
@@ -860,22 +860,22 @@
 
   .policy-allow {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .policy-silence {
     background: var(--color-warning-soft);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
   }
 
   .policy-suspend {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .policy-force_nsfw {
     background: var(--color-info-soft);
-    color: #1e40af;
+    color: var(--color-on-info-soft);
   }
 
   .policy-block_media {
@@ -940,8 +940,8 @@
     color: var(--color-text-tertiary);
   }
 
-  .delivery-ok { color: #16a34a; }
-  .delivery-warn { color: #b45309; }
+  .delivery-ok { color: var(--color-success); }
+  .delivery-warn { color: var(--color-on-warning-soft); }
   .delivery-failed { color: var(--color-danger); }
 
   .delivery-throughput {
@@ -1092,7 +1092,7 @@
     color: var(--color-text-secondary);
   }
 
-  .latency-warn { color: #b45309; font-weight: 600; }
+  .latency-warn { color: var(--color-on-warning-soft); font-weight: 600; }
   .latency-bad { color: var(--color-danger); font-weight: 700; }
 
   .dead-letter-groups {

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { instanceName } from '$lib/stores/instance.js';
   import Toast from '$lib/components/ui/Toast.svelte';
   import { cookieConsent, hasConsented } from '$lib/stores/consent.js';
   import CookieBanner from '$lib/components/ui/CookieBanner.svelte';
@@ -26,7 +28,7 @@
           <rect rx="6" width="28" height="28" fill="var(--color-primary)" />
           <text x="14" y="19.5" text-anchor="middle" fill="white" font-size="15" font-weight="700">H</text>
         </svg>
-        <span class="hero-logo-text">Bassam Social</span>
+        <span class="hero-logo-text">{$instanceName}</span>
       </div>
 
       <h1 class="hero-headline">
@@ -34,9 +36,13 @@
       </h1>
 
       <p class="hero-description">
-        Bassam Social is a decentralized social platform.
-        Run your own server, control your data, and connect
-        with others across the Fediverse.
+        {#if $page.data?.instance?.description}
+          {$page.data.instance.description}
+        {:else}
+          {$instanceName} is a decentralized social platform.
+          Run your own server, control your data, and connect
+          with others across the Fediverse.
+        {/if}
       </p>
 
       <div class="hero-features">
@@ -182,7 +188,7 @@
   .landing-outer {
     overflow-x: hidden;
     min-height: 100vh;
-    background: #f8fafb;
+    background: var(--color-surface);
   }
 
   .landing {
@@ -230,7 +236,7 @@
     justify-content: center;
     padding: var(--space-10);
     position: relative;
-    background: #f8fafb;
+    background: var(--color-surface);
   }
 
   /* Extend form background to right edge of viewport */
@@ -281,7 +287,7 @@
   .hero-description {
     font-size: var(--text-lg);
     line-height: 1.6;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     margin-block-end: var(--space-10);
     max-width: 480px;
   }
@@ -311,7 +317,7 @@
 
   .hero-feature-desc {
     font-size: var(--text-xs);
-    color: #6b7280;
+    color: var(--color-text-secondary);
     line-height: 1.4;
   }
 
@@ -324,7 +330,7 @@
 
   .hero-card {
     position: absolute;
-    background: white;
+    background: var(--color-surface-container-lowest);
     border-radius: 14px;
     padding: var(--space-4);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -378,7 +384,7 @@
 
   .mock-handle {
     font-size: var(--text-xs);
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .mock-text {
@@ -400,7 +406,7 @@
     display: flex;
     gap: var(--space-4);
     font-size: var(--text-xs);
-    color: #6b7280;
+    color: var(--color-text-secondary);
   }
 
   /* Visibility card */
@@ -423,7 +429,7 @@
     align-items: flex-start;
     gap: var(--space-2);
     padding: var(--space-2) 0;
-    color: #6b7280;
+    color: var(--color-text-secondary);
   }
 
   .vis-option svg {
@@ -447,7 +453,7 @@
 
   .vis-desc {
     font-size: 0.65rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   /* Group card */
@@ -480,13 +486,13 @@
 
   .group-handle {
     font-size: var(--text-xs);
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     margin-block-end: var(--space-2);
   }
 
   .group-desc {
     font-size: var(--text-xs);
-    color: #6b7280;
+    color: var(--color-text-secondary);
     line-height: 1.4;
     margin-block-end: var(--space-3);
   }
@@ -509,7 +515,7 @@
     border-radius: 50%;
     background: linear-gradient(135deg, #d1d5db, #9ca3af);
     margin-inline-start: -4px;
-    border: 1.5px solid white;
+    border: 1.5px solid var(--color-surface-container-lowest);
   }
 
   .group-avatar-dot:first-child {
@@ -518,7 +524,7 @@
 
   .group-count {
     font-size: 0.65rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .group-join {
@@ -679,12 +685,12 @@
     gap: var(--space-4);
     margin-block-start: var(--space-8);
     padding-block-start: var(--space-4);
-    border-block-start: 1px solid rgba(0, 0, 0, 0.06);
+    border-block-start: 1px solid var(--scrim-soft);
   }
 
   .landing-footer a {
     font-size: var(--text-xs);
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     text-decoration: none;
     transition: color 0.15s ease;
   }

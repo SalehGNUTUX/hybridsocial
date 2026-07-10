@@ -176,7 +176,7 @@
   }
 
   .stitch-section-content {
-    background: #f2f4f5;
+    background: var(--color-surface-container-low);
     border-radius: 16px;
     overflow: hidden;
   }
@@ -190,7 +190,7 @@
 
   .stitch-description {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     line-height: 1.5;
   }
 
@@ -199,14 +199,14 @@
     align-items: center;
     gap: 8px;
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--color-text-secondary);
   }
 
   .stitch-list {
     display: flex;
     flex-direction: column;
     gap: 1px;
-    background: rgba(0, 0, 0, 0.06);
+    background: var(--scrim-soft);
     border-radius: 12px;
     overflow: hidden;
   }
@@ -216,7 +216,7 @@
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
   }
 
   .stitch-list-avatar {
@@ -264,12 +264,12 @@
     align-items: center;
     gap: 4px;
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .stitch-list-handle {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .stitch-list-dot {
@@ -288,7 +288,7 @@
     justify-content: center;
     width: 36px;
     height: 36px;
-    background: #16a34a;
+    background: var(--color-success);
     color: white;
     border: none;
     border-radius: 50%;
@@ -312,7 +312,7 @@
     justify-content: center;
     width: 36px;
     height: 36px;
-    background: #dc2626;
+    background: var(--color-danger);
     color: white;
     border: none;
     border-radius: 50%;

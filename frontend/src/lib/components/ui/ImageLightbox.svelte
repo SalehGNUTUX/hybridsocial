@@ -488,7 +488,7 @@
   .lightbox {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.92);
+    background: var(--scrim-strong);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     z-index: 10000;

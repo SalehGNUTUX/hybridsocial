@@ -3,12 +3,13 @@
   import { settingsGroups } from '$lib/settings-nav.js';
   import type { Identity } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let user = $derived($currentUser as Identity | null);
 </script>
 
 <svelte:head>
-  <title>Settings - Bassam Social</title>
+  <title>Settings - {$instanceName}</title>
 </svelte:head>
 
 <div class="settings-index">

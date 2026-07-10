@@ -8,6 +8,7 @@
   import Tabs from '$lib/components/ui/Tabs.svelte';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import InfiniteScroll from '$lib/components/ui/InfiniteScroll.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let items: Notification[] = $state([]);
   let loading = $state(true);
@@ -153,7 +154,7 @@
 </script>
 
 <svelte:head>
-  <title>Notifications - Bassam Social</title>
+  <title>Notifications - {$instanceName}</title>
 </svelte:head>
 
 <div class="notifications-page">
@@ -271,7 +272,7 @@
     place-items: center;
     color: var(--color-primary);
     background: var(--color-secondary-container);
-    box-shadow: 0 8px 24px rgba(108, 62, 221, 0.12);
+    box-shadow: 0 8px 24px rgba(var(--color-primary-rgb), 0.12);
     margin-block-end: var(--space-5);
   }
 

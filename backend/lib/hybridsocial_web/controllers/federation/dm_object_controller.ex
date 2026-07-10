@@ -4,7 +4,7 @@ defmodule HybridsocialWeb.Federation.DmObjectController do
 
   ActivityPub object IDs are globally unique URIs — Mastodon stores
   `object.id` and may dereference it later (e.g. when it displays the
-  "See more replies on arab.place" link in its UI, or when another
+  "See more replies on the origin instance" link in its UI, or when another
   peer attempts to fetch context).
 
   DMs are private, so we never expose their contents over a public

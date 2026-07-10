@@ -1,5 +1,9 @@
+<script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
+</script>
+
 <svelte:head>
-  <title>Messages - Bassam Social</title>
+  <title>Messages - {$instanceName}</title>
 </svelte:head>
 
 <div class="no-selection">

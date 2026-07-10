@@ -234,7 +234,7 @@
   }
 
   .stitch-section-content {
-    background: #f2f4f5;
+    background: var(--color-surface-container-low);
     border-radius: 16px;
     overflow: hidden;
   }
@@ -248,7 +248,7 @@
 
   .stitch-description {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     line-height: 1.5;
   }
 
@@ -257,14 +257,14 @@
     align-items: center;
     gap: 8px;
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--color-text-secondary);
   }
 
   .stitch-sessions-list {
     display: flex;
     flex-direction: column;
     gap: 1px;
-    background: rgba(0, 0, 0, 0.06);
+    background: var(--scrim-soft);
     border-radius: 12px;
     overflow: hidden;
   }
@@ -274,15 +274,15 @@
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
   }
 
   .stitch-session-current {
-    background: rgba(var(--color-primary-rgb, 59, 130, 246), 0.08);
+    background: rgba(var(--color-primary-rgb), 0.08);
   }
 
   .stitch-session-icon {
-    color: #6b7280;
+    color: var(--color-text-secondary);
     flex-shrink: 0;
   }
 
@@ -310,14 +310,14 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--color-primary);
-    background: white;
+    background: var(--color-surface-container-lowest);
     padding: 1px 8px;
     border-radius: 9999px;
   }
 
   .stitch-session-meta {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -333,7 +333,7 @@
     background: transparent;
     border: none;
     border-radius: 9999px;
-    color: #dc2626;
+    color: var(--color-danger);
     font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
@@ -344,7 +344,7 @@
   }
 
   .stitch-session-revoke:hover:not(:disabled) {
-    background: #fef2f2;
+    background: var(--color-danger-soft);
   }
 
   .stitch-session-revoke:disabled {
@@ -364,7 +364,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 24px;
-    background: #dc2626;
+    background: var(--color-danger);
     color: white;
     border: none;
     border-radius: 9999px;

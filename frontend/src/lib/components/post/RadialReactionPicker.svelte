@@ -205,11 +205,11 @@
     padding: var(--pad);
     /* Tinted, translucent surface that echoes the feed wash without
        matching it — a frosted panel that reads clearly over any post. */
-    background: color-mix(in oklab, var(--color-bg-wash, #f4f1fd) 82%, #ffffff);
+    background: color-mix(in oklab, var(--color-bg-wash, #f4f1fd) 82%, var(--color-surface-container-lowest));
     background: color-mix(
       in oklab,
       var(--color-bg-wash, #f4f1fd) 70%,
-      color-mix(in oklab, var(--color-primary, #6c3edd) 8%, #ffffff)
+      color-mix(in oklab, var(--color-primary, #6c3edd) 8%, var(--color-surface-container-lowest))
     );
     border: 1px solid color-mix(in oklab, var(--color-primary, #6c3edd) 14%, transparent);
     border-radius: 24px;
@@ -293,7 +293,7 @@
     background: color-mix(
       in oklab,
       var(--color-bg-wash, #f4f1fd) 70%,
-      color-mix(in oklab, var(--color-primary, #6c3edd) 8%, #ffffff)
+      color-mix(in oklab, var(--color-primary, #6c3edd) 8%, var(--color-surface-container-lowest))
     );
     border-right: 1px solid color-mix(in oklab, var(--color-primary, #6c3edd) 14%, transparent);
     border-bottom: 1px solid color-mix(in oklab, var(--color-primary, #6c3edd) 14%, transparent);

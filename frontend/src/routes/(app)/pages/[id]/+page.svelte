@@ -15,6 +15,7 @@
   import AdminProfileActions from '$lib/components/admin/AdminProfileActions.svelte';
   import EntityHeader from '$lib/components/entity/EntityHeader.svelte';
   import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let pageId = $state('');
   let pageData: any = $state(null);
@@ -112,7 +113,7 @@
 </script>
 
 <svelte:head>
-  <title>{pageData?.display_name || pageData?.name || 'Page'} - Bassam Social</title>
+  <title>{pageData?.display_name || pageData?.name || 'Page'} - {$instanceName}</title>
 </svelte:head>
 
 <div class="page-detail">
@@ -472,7 +473,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim-medium);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -509,7 +510,7 @@
   }
 
   .modal-title-danger {
-    color: #dc2626;
+    color: var(--color-danger);
     margin-block-end: var(--space-2);
   }
 
@@ -563,7 +564,7 @@
   }
 
   .modal-error {
-    color: #dc2626;
+    color: var(--color-danger);
     font-size: var(--text-sm);
     margin: 0;
   }

@@ -5,6 +5,7 @@
   import { addToast } from '$lib/stores/toast.js';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Dropdown from '$lib/components/ui/Dropdown.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let lists = $state<List[]>([]);
   let loading = $state(true);
@@ -98,7 +99,7 @@
 </script>
 
 <svelte:head>
-  <title>Lists - Bassam Social</title>
+  <title>Lists - {$instanceName}</title>
 </svelte:head>
 
 <div class="lists-page">

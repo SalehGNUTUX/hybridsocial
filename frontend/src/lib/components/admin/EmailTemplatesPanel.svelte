@@ -317,8 +317,8 @@
   }
 
   .template-item-badge.badge-off {
-    color: #b45309;
-    background: #fef3c7;
+    color: var(--color-on-warning-soft);
+    background: var(--color-warning-soft);
   }
 
   .template-item-key {

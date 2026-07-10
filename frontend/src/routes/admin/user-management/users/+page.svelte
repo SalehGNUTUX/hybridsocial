@@ -1674,17 +1674,17 @@
 
   .status-active {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-suspended {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .status-pending {
     background: var(--color-warning-soft);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
   }
 
   .flag-badges {
@@ -1704,7 +1704,7 @@
 
   .flag-silenced {
     background: var(--color-warning-soft);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
   }
 
   .flag-shadow {
@@ -1714,7 +1714,7 @@
 
   .flag-sensitive {
     background: var(--color-info-soft);
-    color: #1e40af;
+    color: var(--color-on-info-soft);
   }
 
   .trust-level {
@@ -2024,7 +2024,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: #92400e;
+    color: var(--color-on-warning-soft);
     background: rgba(234, 179, 8, 0.18);
     padding: 1px 6px;
     border-radius: 4px;

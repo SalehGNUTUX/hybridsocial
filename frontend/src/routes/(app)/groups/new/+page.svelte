@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { goto } from '$app/navigation';
   import { createGroup, type FederationMode } from '$lib/api/groups.js';
 
@@ -45,7 +46,7 @@
 </script>
 
 <svelte:head>
-  <title>New group — Bassam Social</title>
+  <title>New group — {$instanceName}</title>
 </svelte:head>
 
 <div class="new-group-page">

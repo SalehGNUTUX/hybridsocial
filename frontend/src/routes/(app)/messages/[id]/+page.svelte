@@ -24,6 +24,7 @@
   import { addToast } from '$lib/stores/toast.js';
   import { slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let conversation = $state<Conversation | null>(null);
   let messages = $state<Message[]>([]);
@@ -430,7 +431,7 @@
 </script>
 
 <svelte:head>
-  <title>{displayName} - Messages - Bassam Social</title>
+  <title>{displayName} - Messages - {$instanceName}</title>
 </svelte:head>
 
 <div class="conversation-detail">

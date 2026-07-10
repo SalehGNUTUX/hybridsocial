@@ -5,6 +5,7 @@
   import { getCurrentUser } from '$lib/api/auth.js';
   import { subscribeToPush } from '$lib/utils/push.js';
   import { tError } from '$lib/utils/i18n.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let email = $state('');
   let password = $state('');
@@ -202,7 +203,7 @@
 </script>
 
 <svelte:head>
-  <title>Sign in - Bassam Social</title>
+  <title>Sign in - {$instanceName}</title>
 </svelte:head>
 
 <div class="auth-card">
@@ -413,7 +414,7 @@
 
 {#if !otpRequired}
   <div class="auth-info-card">
-    <h3 class="auth-info-title">New to Bassam Social?</h3>
+    <h3 class="auth-info-title">New to {$instanceName}?</h3>
     <p class="auth-info-desc">
       Create your own server in minutes or join a community run by others.
     </p>
@@ -425,7 +426,7 @@
 <style>
   /* ---- Card ---- */
   .auth-card {
-    background: white;
+    background: var(--color-surface-container-lowest);
     border-radius: 14px;
     padding: 32px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 24px rgba(0, 0, 0, 0.06);
@@ -448,7 +449,7 @@
 
   .auth-subtitle {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     text-align: center;
     margin-block-end: 24px;
   }
@@ -460,9 +461,9 @@
     gap: 8px;
     padding: 12px 16px;
     margin-block-end: 16px;
-    background: #fef2f2;
+    background: var(--color-danger-soft);
     border-radius: 10px;
-    color: #dc2626;
+    color: var(--color-danger);
     font-size: 0.875rem;
   }
 
@@ -473,7 +474,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #dc2626;
+    background: var(--color-danger);
     color: white;
     font-size: 0.75rem;
     font-weight: 700;
@@ -491,14 +492,14 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     margin-block-end: 6px;
     margin-inline-start: 4px;
   }
 
   .auth-hint {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     margin-block-end: 8px;
     margin-inline-start: 4px;
   }
@@ -508,7 +509,7 @@
     width: 100%;
     height: 46px;
     padding: 0 16px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
     border: none;
     border-radius: 10px;
     font-size: 0.875rem;
@@ -517,13 +518,13 @@
   }
 
   .auth-input::placeholder {
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .auth-input:focus {
     outline: none;
-    background: white;
-    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 59, 130, 246), 0.2);
+    background: var(--color-surface-container-lowest);
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
   }
 
   .auth-input:disabled {
@@ -550,13 +551,13 @@
     justify-content: center;
     background: none;
     border: none;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     cursor: pointer;
     transition: color 0.15s ease;
   }
 
   .auth-password-toggle:hover {
-    color: #6b7280;
+    color: var(--color-text-secondary);
   }
 
   .auth-field-footer {
@@ -593,15 +594,15 @@
     font-family: var(--font-mono, monospace);
     font-size: 0.8125rem;
     font-weight: 600;
-    color: #6b7280;
-    background: #e6e8e9;
+    color: var(--color-text-secondary);
+    background: var(--color-surface-container-high);
     padding: 4px 10px;
     border-radius: 8px;
   }
 
   .auth-otp-timer-warning {
-    color: #dc2626;
-    background: #fef2f2;
+    color: var(--color-danger);
+    background: var(--color-danger-soft);
   }
 
   .auth-otp-expired {
@@ -610,7 +611,7 @@
   }
 
   .auth-otp-expired-text {
-    color: #dc2626;
+    color: var(--color-danger);
     font-size: 0.875rem;
     font-weight: 500;
   }
@@ -639,12 +640,12 @@
     font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb, 59, 130, 246), 0.25);
+    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.25);
     transition: box-shadow 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
   }
 
   .auth-submit:hover:not(:disabled) {
-    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb, 59, 130, 246), 0.35);
+    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.35);
   }
 
   .auth-submit:active:not(:disabled) {
@@ -664,7 +665,7 @@
     background: transparent;
     border: none;
     border-radius: 9999px;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     font-size: 0.875rem;
     cursor: pointer;
     transition: color 0.15s ease;
@@ -687,12 +688,12 @@
     content: '';
     flex: 1;
     height: 1px;
-    background: rgba(0, 0, 0, 0.08);
+    background: var(--scrim-soft);
   }
 
   .auth-divider span {
     font-size: 0.8125rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   /* ---- Create account ---- */
@@ -716,7 +717,7 @@
 
   .auth-passkey-btn:hover:not(:disabled) {
     border-color: var(--color-primary);
-    background: var(--color-primary-soft, rgba(108, 62, 221, 0.05));
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.05));
   }
 
   .auth-passkey-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -724,14 +725,14 @@
   /* Passkey modal */
   .passkey-overlay {
     position: fixed; inset: 0;
-    background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px);
+    background: var(--scrim-medium); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
     z-index: 10000; animation: fade-in 0.15s ease;
   }
   @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
   .passkey-modal {
-    background: white; border-radius: 20px; padding: 32px;
+    background: var(--color-surface-container-lowest); border-radius: 20px; padding: 32px;
     max-width: 400px; width: 90%; position: relative;
     box-shadow: 0 20px 60px rgba(0,0,0,0.2);
     animation: modal-in 0.2s cubic-bezier(0.22,1,0.36,1);
@@ -741,29 +742,29 @@
 
   .passkey-close {
     position: absolute; top: 16px; inset-inline-end: 16px;
-    background: none; border: none; color: #9ca3af; cursor: pointer;
+    background: none; border: none; color: var(--color-text-tertiary); cursor: pointer;
     padding: 4px; border-radius: 50%;
   }
-  .passkey-close:hover { color: #374151; background: #f3f4f6; }
+  .passkey-close:hover { color: var(--color-text-secondary); background: #f3f4f6; }
 
   .passkey-icon-wrap { margin-bottom: 16px; }
   .passkey-icon { font-size: 40px; color: var(--color-primary); }
 
   .passkey-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 6px; }
-  .passkey-desc { font-size: 0.875rem; color: #6b7280; margin-bottom: 20px; line-height: 1.4; }
+  .passkey-desc { font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 20px; line-height: 1.4; }
 
   .passkey-error {
     padding: 10px 14px; margin-bottom: 16px;
-    background: #fef2f2; border-radius: 10px; color: #dc2626;
+    background: var(--color-danger-soft); border-radius: 10px; color: var(--color-danger);
     font-size: 0.8125rem;
   }
 
   .passkey-input {
     display: block; width: 100%; height: 46px;
-    padding: 0 16px; background: #e6e8e9; border: none; border-radius: 10px;
-    font-size: 0.875rem; color: #111; margin-bottom: 12px;
+    padding: 0 16px; background: var(--color-surface-container-high); border: none; border-radius: 10px;
+    font-size: 0.875rem; color: var(--color-text); margin-bottom: 12px;
   }
-  .passkey-input:focus { outline: none; background: white; box-shadow: 0 0 0 2px rgba(108,62,221,0.2); }
+  .passkey-input:focus { outline: none; background: var(--color-surface-container-lowest); box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb),0.2); }
 
   .passkey-next-btn {
     display: block; width: 100%; height: 46px;
@@ -772,12 +773,12 @@
     font-size: 0.875rem; font-weight: 600; cursor: pointer;
   }
   .passkey-next-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .passkey-next-btn:hover:not(:disabled) { box-shadow: 0 4px 14px rgba(108,62,221,0.25); }
+  .passkey-next-btn:hover:not(:disabled) { box-shadow: 0 4px 14px rgba(var(--color-primary-rgb),0.25); }
 
   .passkey-waiting { display: flex; justify-content: center; margin: 20px 0; }
   .passkey-pulse {
     width: 60px; height: 60px; border-radius: 50%;
-    background: var(--color-primary-soft, rgba(108,62,221,0.1));
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb),0.1));
     animation: pulse-ring 1.5s ease-in-out infinite;
   }
   @keyframes pulse-ring {
@@ -788,10 +789,10 @@
 
   .passkey-back {
     display: inline-flex; align-items: center; gap: 4px;
-    background: none; border: none; color: #6b7280;
+    background: none; border: none; color: var(--color-text-secondary);
     font-size: 0.8125rem; cursor: pointer; margin-top: 16px;
   }
-  .passkey-back:hover { color: #374151; }
+  .passkey-back:hover { color: var(--color-text-secondary); }
 
   .auth-alt-btn {
     display: flex;
@@ -799,7 +800,7 @@
     justify-content: center;
     width: 100%;
     height: 46px;
-    border: 1.5px solid rgba(0, 0, 0, 0.1);
+    border: 1.5px solid var(--scrim-soft);
     border-radius: 9999px;
     font-size: 0.875rem;
     font-weight: 600;
@@ -809,7 +810,7 @@
   }
 
   .auth-alt-btn:hover {
-    background: rgba(0, 0, 0, 0.02);
+    background: var(--scrim-tint);
     border-color: var(--color-primary);
   }
 
@@ -817,7 +818,7 @@
   .auth-info-card {
     margin-block-start: 16px;
     padding: 20px 24px;
-    background: white;
+    background: var(--color-surface-container-lowest);
     border-radius: 14px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 24px rgba(0, 0, 0, 0.06);
   }
@@ -832,7 +833,7 @@
 
   .auth-info-desc {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     line-height: 1.5;
     margin-block-end: 12px;
   }

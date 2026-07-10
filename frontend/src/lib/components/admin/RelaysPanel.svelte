@@ -205,10 +205,10 @@
     text-transform: capitalize;
   }
 
-  .status-accepted { background: var(--color-success-soft); color: #166534; }
-  .status-pending  { background: var(--color-warning-soft); color: #92400e; }
+  .status-accepted { background: var(--color-success-soft); color: var(--color-on-success-soft); }
+  .status-pending  { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
   .status-rejected,
-  .status-failed   { background: var(--color-danger-soft); color: #991b1b; }
+  .status-failed   { background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
 
   .relay-style {
     font-size: var(--text-xs);
@@ -220,7 +220,7 @@
   .relay-error {
     margin-block-start: var(--space-2);
     font-size: var(--text-xs);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
     background: var(--color-danger-soft);
     padding: 6px 10px;
     border-radius: var(--radius-sm);

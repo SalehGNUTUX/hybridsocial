@@ -171,7 +171,7 @@
   let isRemote = $derived(!!domain);
   // Prefer `acct` (already in webfinger form for remote accounts)
   // over our internal munged handle. A remote user like
-  // `ahmad_bassamso_2e8909` renders as `@ahmad@bassam.social` —
+  // `ahmad_bassamso_2e8909` renders as `@ahmad@example.social` —
   // what the user actually typed / expects to see.
   let handle = $derived('@' + (post.account.acct || post.account.handle));
   let instanceFavicon = $derived(domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : null);
@@ -1329,8 +1329,8 @@
     z-index: 5;
     box-shadow:
       0 2px 4px rgba(25, 28, 29, 0.05),
-      0 16px 36px rgba(108, 62, 221, 0.11);
-    border-color: rgba(108, 62, 221, 0.18);
+      0 4px 14px rgba(var(--color-primary-rgb), 0.1);
+    border-color: rgba(var(--color-primary-rgb), 0.18);
   }
 
   .post-card.detail:hover,
@@ -1898,7 +1898,7 @@
   }
 
   .content-toggle-btn:hover {
-    background: var(--color-primary-soft, rgba(108, 62, 221, 0.08));
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.08));
     color: var(--color-primary);
     border-color: var(--color-primary);
   }
@@ -2028,10 +2028,11 @@
     transition: opacity 0.3s ease;
   }
 
-  @media (prefers-color-scheme: dark) {
-    .nsfw-frost-glass {
-      background: rgba(0, 0, 0, 0.25);
-    }
+  /* Keyed on the app theme (which resolves the OS preference for 'auto')
+     rather than a bare prefers-color-scheme query, so a NSFW frost stays
+     dark even when the admin forces dark on a light-OS visitor. */
+  :global(:root[data-theme='dark']) .nsfw-frost-glass {
+    background: rgba(0, 0, 0, 0.25);
   }
 
   /* Overlay with badge, warning text, and button */
@@ -2131,7 +2132,7 @@
   .edit-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim-medium);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -2711,7 +2712,7 @@
 
   .post-actions-divider {
     height: 1px;
-    background: rgba(188, 201, 200, 0.35);
+    background: var(--color-border);
     margin-top: 20px;
     margin-bottom: 12px;
   }

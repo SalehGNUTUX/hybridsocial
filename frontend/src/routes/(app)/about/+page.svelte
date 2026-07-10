@@ -19,7 +19,7 @@
 </script>
 
 <svelte:head>
-  <title>About - {instance?.title || 'Bassam Social'}</title>
+  <title>About - {instance?.title || 'HybridSocial'}</title>
 </svelte:head>
 
 <div class="about-page">
@@ -157,7 +157,7 @@
 
   .about-hero {
     padding: var(--space-8) var(--space-6);
-    background: linear-gradient(135deg, var(--color-primary), #6c3edd);
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary));
     color: white;
     text-align: center;
   }

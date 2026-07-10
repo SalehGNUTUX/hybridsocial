@@ -1,5 +1,5 @@
 /* ============================================================
-   Bassam Social — Stitch Design System (Bassam Purple)
+   HybridSocial — Stitch Design System (brand purple)
    ============================================================ */
 
 /* --- Font Imports --- */
@@ -12,6 +12,12 @@
   --color-primary: #6c3edd;
   --color-primary-container: #7183da;
   --color-on-primary: #ffffff;
+  /* RGB channels of --color-primary, for rgba() alpha compositing
+     (tints, focus rings, selection). Components reference this as
+     rgba(var(--color-primary-rgb), <alpha>). Kept in sync with
+     --color-primary by applyTheme() when the admin overrides the
+     brand colour; this static default matches #6c3edd. */
+  --color-primary-rgb: 108, 62, 221;
 
   /* Secondary palette */
   --color-secondary: #3c6564;
@@ -58,14 +64,103 @@
   --color-overlay: rgba(25, 28, 29, 0.4);
   --color-primary-hover: #5a2fc4;
   --color-primary-soft: var(--color-secondary-container);
+
+  /* Status colours. Each family has three roles:
+       --color-<x>        solid fill / icon / border
+       --color-<x>-soft   tinted badge / alert background
+       --color-on-<x>-soft readable text/icon on the soft background
+     The -on-soft values are the darker shades components were
+     hardcoding (e.g. #991b1b text on a #fee2e2 danger badge). */
   --color-success: #22c55e;
   --color-success-soft: #dcfce7;
+  --color-on-success-soft: #166534;
   --color-warning: #f59e0b;
   --color-warning-soft: #fef3c7;
+  --color-on-warning-soft: #92400e;
   --color-danger: var(--color-error);
   --color-danger-soft: var(--color-error-container);
+  --color-on-danger-soft: #991b1b;
+  /* Alias: some components reference --color-destructive for
+     destructive actions. It was never defined (silently falling back
+     to a hardcoded red); point it at the canonical danger token. */
+  --color-destructive: var(--color-danger);
   --color-info: #3b82f6;
   --color-info-soft: #dbeafe;
+  --color-on-info-soft: #1e40af;
+
+  /* Status RGB channels — for rgba() tint compositing, same pattern as
+     --color-primary-rgb. Let translucent status backgrounds flip alpha
+     per mode without hardcoding the colour. */
+  --color-success-rgb: 34, 197, 94;
+  --color-warning-rgb: 245, 158, 11;
+  --color-danger-rgb: 186, 26, 26;
+  --color-info-rgb: 59, 130, 246;
+
+  /* Status hover fills — darker in light mode (a solid button darkens on
+     hover); the dark palette makes these LIGHTER instead. Replaces the
+     hardcoded #a01717 / #15803d / #b91c1c hover fills components used. */
+  --color-danger-hover: #a01717;
+  --color-success-hover: #15803d;
+  --color-warning-hover: #d97706;
+  --color-info-hover: #2563eb;
+
+  /* Status borders — the pastel outline on a soft badge, distinct from
+     the -soft fill. Kept separate so the border stays visible in both
+     modes (collapsing onto -soft erased it). */
+  --color-success-border: #bbf7d0;
+  --color-warning-border: #fde68a;
+  --color-danger-border: #fecaca;
+  --color-info-border: #bfdbfe;
+
+  /* Status translucent tints — a 10% wash for row/badge backgrounds that
+     need to sit over arbitrary content (vs the opaque -soft). */
+  --color-success-tint: rgba(var(--color-success-rgb), 0.1);
+  --color-warning-tint: rgba(var(--color-warning-rgb), 0.1);
+  --color-danger-tint: rgba(var(--color-danger-rgb), 0.1);
+  --color-info-tint: rgba(var(--color-info-rgb), 0.1);
+
+  /* Glass — translucent frosted surface (sticky header, floating chrome)
+     and its hairline. Light-specific white glass; dark palette swaps to a
+     dark translucent so it doesn't blow out over dark content. */
+  --color-glass: rgba(255, 255, 255, 0.8);
+  --color-glass-border: rgba(188, 201, 200, 0.15);
+
+  /* Scrims — layered black/transparent washes. Split by role because
+     dark mode flips only *some* of them: the elevation tints become
+     light (white-on-dark) while modal/media backdrops stay dark.
+       -tint  : hairline elevation/hover wash over a surface
+       -soft  : slightly stronger tonal wash
+       -medium: modal / dialog backdrop
+       -strong: media viewer / lightbox backdrop */
+  --scrim-tint: rgba(0, 0, 0, 0.04);
+  --scrim-soft: rgba(0, 0, 0, 0.08);
+  --scrim-medium: rgba(0, 0, 0, 0.5);
+  --scrim-strong: rgba(0, 0, 0, 0.85);
+
+  /* Aliases for token names components reference but that were never
+     defined. Until now these fell back to hardcoded light values, or —
+     where used without a fallback (e.g. --color-bg-tertiary, ×13) —
+     resolved to *invalid* and rendered with the inherited/initial
+     colour. Pointing them at canonical tokens fixes that and routes
+     them through the theme layer so the dark palette flips them too.
+     NOTE for dark mode: --color-text-inverse must flip (light text in
+     light mode, dark text in dark mode) — give it a real override in
+     the dark block rather than leaving it aliased to on-primary. */
+  --color-bg-secondary: var(--color-surface-container-low);
+  --color-bg-tertiary: var(--color-surface-container);
+  --color-surface-base: var(--color-background);
+  --color-surface-alt: var(--color-surface-container-low);
+  --color-surface-hover: var(--color-surface-container);
+  --color-primary-light: var(--color-primary-soft);
+  --color-primary-subtle: var(--color-primary-soft);
+  --color-primary-contrast: var(--color-on-primary);
+  --color-secondary-hover: var(--color-secondary);
+  --color-text-inverse: var(--color-on-primary);
+  --color-danger-light: var(--color-danger-soft);
+  --color-danger-surface: var(--color-danger-soft);
+  --color-success-light: var(--color-success-soft);
+  --color-warning-light: var(--color-warning-soft);
+  --color-warning-surface: var(--color-warning-soft);
 
   /* Gradient */
   --gradient-primary: linear-gradient(135deg, #6c3edd 0%, #7183da 100%);
@@ -132,6 +227,135 @@
   --z-modal: 40;
   --z-toast: 50;
   --z-tooltip: 60;
+}
+
+
+/* ============================================================
+   Dark palette
+   ============================================================
+   Applied when <html data-theme="dark">. The instance mode (light/
+   dark/auto) is admin-chosen; applyTheme() resolves 'auto' to dark/
+   light per the visitor's OS, so this block only ever sees an explicit
+   'dark'. Only *source* tokens are overridden — the var()-based aliases
+   in :root inherit automatically.
+
+   Design notes:
+   - Surfaces mirror the light scale's ORDERING (lowest = the raised
+     card, brightest; highest = deepest) inverted onto dark, so a
+     component using surface-container-high still reads as "recessed".
+   - Solid brand/status colours stay SATURATED: .btn-primary / .btn-danger
+     use them as fills with white text, so the light pastels live on the
+     -on-soft text roles instead.
+   - Elevation scrim tints flip to white; modal/media backdrops stay dark.
+   - Shadows go near-black + deeper so they still register. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Brand — a lifted brand violet: saturated enough to carry white text
+     as a fill, bright enough to read as a link/icon on dark. Hover
+     LIGHTENS. (applyTheme re-derives these from the light brand when the
+     admin changes it, so both modes track one source colour.) */
+  --color-primary: #8b5cf6;
+  --color-primary-rgb: 139, 92, 246;
+  --color-primary-container: #4c3a9e;
+  --color-primary-hover: #a78bfa;
+  --color-primary-soft: rgba(139, 92, 246, 0.16);
+
+  --color-secondary: #a7cbca;
+  --color-secondary-container: #2a2440;
+
+  --color-tertiary: #e6a56f;
+
+  /* Error kept saturated for white-text danger fills; container is the
+     dark tonal badge background. */
+  --color-error: #ef4444;
+  --color-error-container: #3a1512;
+
+  /* Surfaces — deep, near-black cool base for crisp contrast (not a
+     washed violet-gray). The card (lowest) clearly LIFTS above the page;
+     inputs (high) recess into a darker well. A faint violet undertone
+     keeps it on-brand without haze. */
+  --color-background: #0e0f15;
+  --color-bg-wash: #1c1546;
+  --color-surface: #0e0f15;
+  --color-surface-container-lowest: #1c1d27;
+  --color-surface-container-low: #17181f;
+  --color-surface-container: #131319;
+  --color-surface-container-high: #0a0a0f;
+  --color-surface-container-highest: #060609;
+
+  /* Text — crisp near-white primary; cool, legible secondary/tertiary. */
+  --color-on-surface: #f6f5fb;
+  --color-on-surface-variant: #aeb0c2;
+  --color-text-tertiary: #7e7f92;
+
+  /* Outline / hairline borders — a touch stronger so edges read sharp. */
+  --color-outline-variant: #3a3b48;
+  --color-border: rgba(202, 200, 230, 0.14);
+  --ghost-border: 1px solid rgba(202, 200, 230, 0.14);
+  --color-overlay: rgba(0, 0, 0, 0.72);
+
+  /* text-inverse flips: dark text for light chips / tooltips. */
+  --color-text-inverse: #191c1d;
+
+  /* Status — solids saturated (fills + white text); soft = dark tonal
+     badge bg; on-soft = light readable text; borders/tints via -rgb. */
+  --color-success: #22c55e;
+  --color-success-rgb: 34, 197, 94;
+  --color-success-soft: #0f2c1b;
+  --color-on-success-soft: #86efac;
+  --color-success-hover: #4ade80;
+  --color-success-border: rgba(34, 197, 94, 0.4);
+
+  --color-warning: #f59e0b;
+  --color-warning-rgb: 245, 158, 11;
+  --color-warning-soft: #38290a;
+  --color-on-warning-soft: #fcd34d;
+  --color-warning-hover: #fbbf24;
+  --color-warning-border: rgba(245, 158, 11, 0.4);
+
+  --color-danger-rgb: 239, 68, 68;
+  --color-danger-soft: #3a1512;
+  --color-on-danger-soft: #fca5a5;
+  --color-danger-hover: #f87171;
+  --color-danger-border: rgba(239, 68, 68, 0.4);
+
+  --color-info: #3b82f6;
+  --color-info-rgb: 59, 130, 246;
+  --color-info-soft: #10243d;
+  --color-on-info-soft: #93c5fd;
+  --color-info-hover: #60a5fa;
+  --color-info-border: rgba(59, 130, 246, 0.4);
+
+  /* Scrims — elevation tints flip to white; backdrops stay dark. */
+  --scrim-tint: rgba(255, 255, 255, 0.05);
+  --scrim-soft: rgba(255, 255, 255, 0.09);
+  --scrim-medium: rgba(0, 0, 0, 0.6);
+  --scrim-strong: rgba(0, 0, 0, 0.92);
+
+  /* Glass — dark translucent frosted chrome. */
+  --color-glass: rgba(20, 22, 26, 0.8);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+
+  /* Shadows — crisp near-black so they register on dark. */
+  --shadow-sm: 0px 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0px 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0px 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0px 16px 48px rgba(0, 0, 0, 0.7);
+
+  /* Brand gradient rebuilt on the lifted violet. applyTheme re-derives
+     this when the admin changes the brand colour. */
+  --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #6c3edd 100%);
+}
+
+/* Dark-mode depth: give the primary CTA a soft brand glow so it reads as
+   the hero action against the violet-ink surfaces (the light theme relies
+   on a drop shadow, which mostly vanishes on dark). */
+:root[data-theme='dark'] .btn-primary {
+  box-shadow: 0 1px 4px rgba(var(--color-primary-rgb), 0.22);
+}
+:root[data-theme='dark'] .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.3);
 }
 
 
@@ -559,12 +783,15 @@ ol {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-surface-container-highest);
+  /* outline-variant (not a surface step) so the thumb stays a visible
+     mid-gray in BOTH modes — surface-container-highest goes near-black in
+     dark and read as a stray black line. */
+  background: var(--color-outline-variant);
   border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-outline-variant);
+  background: var(--color-text-tertiary);
 }
 
 /* --- Mention & Hashtag Links (rendered from post content_html) --- */

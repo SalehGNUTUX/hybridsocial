@@ -414,8 +414,8 @@
   }
 
   .emoji-disabled-tag {
-    background: rgba(220, 38, 38, 0.12);
-    color: #dc2626;
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
     font-weight: 600;
   }
 
@@ -441,11 +441,11 @@
   }
 
   .btn-mini-danger {
-    color: #dc2626;
+    color: var(--color-danger);
     border-color: rgba(220, 38, 38, 0.3);
   }
 
   .btn-mini-danger:hover {
-    background: rgba(220, 38, 38, 0.08);
+    background: var(--color-danger-soft);
   }
 </style>

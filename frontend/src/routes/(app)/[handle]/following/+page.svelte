@@ -10,6 +10,7 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   // Section identifier — drives the modal title and which item-renderer
   // gets used. Keeping this explicit (instead of just a label) lets the
@@ -260,7 +261,7 @@
 </script>
 
 <svelte:head>
-  <title>Following - {handle} - Bassam Social</title>
+  <title>Following - {handle} - {$instanceName}</title>
 </svelte:head>
 
 <div class="following-page">
@@ -650,7 +651,7 @@
   .section-count {
     font-size: var(--text-sm);
     font-weight: 800;
-    background: #fff;
+    background: var(--color-surface-container-lowest);
     color: var(--gradient-start, var(--color-primary));
     padding: 2px 10px;
     border-radius: 999px;

@@ -6,6 +6,7 @@
     isWarningDisabled,
   } from '$lib/utils/external-link-trust.js';
   import SafeUrl from './SafeUrl.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let pendingUrl = $state<string | null>(null);
   let pendingDomain = $state<string>('');
@@ -145,7 +146,7 @@
     tabindex="-1"
   >
     <div class="elw-modal" role="document">
-      <h2 id="elw-title" class="elw-title">Leaving Bassam Social</h2>
+      <h2 id="elw-title" class="elw-title">Leaving {$instanceName}</h2>
       <p class="elw-sub">
         You're about to open a link on another site. Check the URL
         below carefully — phishing pages often use lookalike domains.
@@ -185,7 +186,7 @@
        thing in focus — matches the connection/session-expired dialog
        we ship elsewhere. Fall back to a plain dim on old browsers
        that don't support backdrop-filter. */
-    background: rgba(15, 23, 42, 0.55);
+    background: var(--scrim-medium);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: flex;
@@ -268,7 +269,7 @@
   }
 
   .elw-btn-ghost:hover {
-    background: rgba(0, 0, 0, 0.06);
+    background: var(--scrim-soft);
     color: var(--color-text);
   }
 

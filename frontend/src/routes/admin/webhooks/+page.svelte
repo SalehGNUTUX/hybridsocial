@@ -380,7 +380,7 @@
 
   .status-active {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-suspended {
@@ -394,7 +394,7 @@
     padding: 2px var(--space-2);
     border-radius: var(--radius-full);
     background: var(--color-info-soft);
-    color: #1e40af;
+    color: var(--color-on-info-soft);
   }
 
   .action-buttons {
@@ -492,17 +492,17 @@
 
   .status-delivered {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-pending {
     background: var(--color-warning-soft, #fef3c7);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
   }
 
   .status-failed {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .delivery-code,

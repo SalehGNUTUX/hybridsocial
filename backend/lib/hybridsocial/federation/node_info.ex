@@ -177,7 +177,7 @@ defmodule Hybridsocial.Federation.NodeInfo do
         # Some (mostly older or reverse-proxied) Fediverse servers
         # don't publish `/.well-known/nodeinfo` even though they
         # serve the actual NodeInfo doc at its canonical path.
-        # bassam.social / rebased behind nginx is one example:
+        # an instance rebased behind nginx is one example:
         # the 2.1/2.0 JSON is fine, the discovery doc 404s. Try
         # the direct paths as a fallback so those instances are
         # still detected.

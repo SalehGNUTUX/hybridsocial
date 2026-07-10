@@ -6,6 +6,7 @@
   import { addToast } from '$lib/stores/toast.js';
   import AsyncState from '$lib/components/ui/AsyncState.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let posts: Post[] = $state([]);
   let loading = $state(true);
@@ -114,7 +115,7 @@
 </script>
 
 <svelte:head>
-  <title>Scheduled Posts - Bassam Social</title>
+  <title>Scheduled Posts - {$instanceName}</title>
 </svelte:head>
 
 <div class="scheduled-page">

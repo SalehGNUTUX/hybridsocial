@@ -5,6 +5,7 @@
   import type { PublicSitePage } from '$lib/api/site-pages.js';
   import type { InstanceRule } from '$lib/api/types.js';
   import HostingPromo from '$lib/components/marketing/HostingPromo.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let sitePage: PublicSitePage | null = $state(null);
   let rules: InstanceRule[] = $state([]);
@@ -54,7 +55,7 @@
 </script>
 
 <svelte:head>
-  <title>{sitePage?.title || 'Page'} - Bassam Social</title>
+  <title>{sitePage?.title || 'Page'} - {$instanceName}</title>
 </svelte:head>
 
 {#if loading}

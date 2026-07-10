@@ -1017,6 +1017,18 @@ defmodule HybridsocialWeb.Router do
     get "/instance/info", InstanceController, :info
   end
 
+  # Public OG / social-share metadata (JSON). Privacy-aware: reuses the
+  # crawler's visibility rules so only strictly-public posts and
+  # unfurl-allowed profiles expose content; everything else returns a
+  # neutral placeholder. Consumed by the frontend SSR to render per-post /
+  # per-profile share cards.
+  scope "/api/v1/og", HybridsocialWeb do
+    pipe_through :api
+
+    get "/post/:id", CrawlerController, :post_meta
+    get "/profile/:handle", CrawlerController, :profile_meta
+  end
+
   # NodeInfo
   scope "/nodeinfo", HybridsocialWeb.Federation do
     pipe_through :federation
@@ -1091,5 +1103,6 @@ defmodule HybridsocialWeb.Router do
     get "/post/:id", CrawlerController, :post
     get "/@:handle", CrawlerController, :profile
     get "/legal/:slug", CrawlerController, :legal
+    get "/", CrawlerController, :home
   end
 end

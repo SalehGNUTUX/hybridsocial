@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import type { PostDraft } from '$lib/api/types.js';
   import { listDrafts, deleteDraft } from '$lib/api/drafts.js';
@@ -77,7 +78,7 @@
 </script>
 
 <svelte:head>
-  <title>Drafts — Bassam Social</title>
+  <title>Drafts — {$instanceName}</title>
 </svelte:head>
 
 <div class="drafts-page">

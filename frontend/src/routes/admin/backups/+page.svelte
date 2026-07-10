@@ -361,17 +361,17 @@
 
   .status-success {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-pending {
     background: var(--color-warning-soft);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
   }
 
   .status-failed {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .backup-date {
@@ -392,13 +392,13 @@
   }
 
   .restore-warning {
-    background: #fee2e2;
-    border: 1px solid #fecaca;
-    border-inline-start: 4px solid #dc2626;
+    background: var(--color-danger-soft);
+    border: 1px solid var(--color-danger-soft);
+    border-inline-start: 4px solid var(--color-danger);
     border-radius: var(--radius-md);
     padding: var(--space-4);
     margin-block-end: var(--space-4);
-    color: #7f1d1d;
+    color: var(--color-on-danger-soft);
   }
 
   .restore-warning-header {
@@ -411,7 +411,7 @@
 
   .restore-warning-icon {
     font-size: 22px;
-    color: #dc2626;
+    color: var(--color-danger);
     flex-shrink: 0;
   }
 

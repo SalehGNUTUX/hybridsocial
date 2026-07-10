@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
@@ -272,7 +273,7 @@
 </script>
 
 <svelte:head>
-  <title>Group Settings - Bassam Social</title>
+  <title>Group Settings - {$instanceName}</title>
 </svelte:head>
 
 <div class="settings-page">

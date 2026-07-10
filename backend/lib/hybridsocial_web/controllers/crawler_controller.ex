@@ -61,6 +61,17 @@ defmodule HybridsocialWeb.CrawlerController do
     end
   end
 
+  # JSON variant of `post/2` for the frontend SSR. Same privacy rules:
+  # only strictly-public local posts return content, everything else
+  # returns the neutral private placeholder.
+  def post_meta(conn, %{"id" => id}) do
+    case fetch_post(id) do
+      {:ok, :public, post} -> json(conn, post_og_public(post))
+      {:ok, :private, post} -> json(conn, post_og_private(post))
+      {:error, :not_found} -> conn |> put_status(:not_found) |> json(%{error: "not_found"})
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # GET /@:handle
   # ---------------------------------------------------------------------------
@@ -82,9 +93,34 @@ defmodule HybridsocialWeb.CrawlerController do
     end
   end
 
+  # JSON variant of `profile/2` for the frontend SSR. Only unfurl-allowed,
+  # live profiles expose bio/avatar; others get a neutral placeholder so a
+  # private/locked profile never leaks content.
+  def profile_meta(conn, %{"handle" => handle}) do
+    case Accounts.get_identity_by_handle(handle) do
+      %{allow_unfurl: true, deleted_at: nil, is_suspended: false} = identity ->
+        json(conn, profile_og_full(identity))
+
+      %{deleted_at: nil, is_suspended: false} = identity ->
+        json(conn, profile_og_placeholder(identity))
+
+      _ ->
+        conn |> put_status(:not_found) |> json(%{error: "not_found"})
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # GET /legal/:slug
   # ---------------------------------------------------------------------------
+
+  @doc "GET / — server-rendered OG shell for the instance home page."
+  def home(conn, _params) do
+    if UserAgent.crawler?(conn) do
+      render_og(conn, home_og())
+    else
+      send_spa_handoff(conn)
+    end
+  end
 
   def legal(conn, %{"slug" => slug}) do
     if UserAgent.crawler?(conn) do
@@ -331,6 +367,24 @@ defmodule HybridsocialWeb.CrawlerController do
   # OG builders — return a map of {title, description, image, type, url}
   # ---------------------------------------------------------------------------
 
+  defp home_og do
+    instance = instance_name()
+
+    description =
+      Config.get("instance_short_description", Config.get("instance_description", ""))
+      |> default_if_blank("#{instance} — a decentralized social network")
+
+    %{
+      title: instance,
+      description: description,
+      image: default_instance_image(),
+      type: "website",
+      url: base_url() <> "/",
+      site_name: instance,
+      author: nil
+    }
+  end
+
   defp post_og_public(post) do
     post = Repo.preload(post, [:identity, :media_attachments])
     instance = instance_name()
@@ -343,10 +397,14 @@ defmodule HybridsocialWeb.CrawlerController do
       |> truncate(300)
       |> default_if_blank("A post on #{instance}")
 
+    img = post_image_meta(post)
+
     %{
       title: title,
       description: description,
-      image: post_image(post),
+      image: img.url,
+      image_width: img.width,
+      image_height: img.height,
       type: "article",
       url: "#{base_url()}/post/#{post.id}",
       site_name: instance,
@@ -527,7 +585,10 @@ defmodule HybridsocialWeb.CrawlerController do
     String.starts_with?(ap_id, base)
   end
 
-  defp post_image(%Post{} = post) do
+  # Returns the OG image url + its real pixel dimensions (nil when the
+  # image is a fallback we don't have dimensions for, so callers omit the
+  # width/height tags rather than assume a size).
+  defp post_image_meta(%Post{} = post) do
     attachments =
       case post.media_attachments do
         %Ecto.Association.NotLoaded{} ->
@@ -544,8 +605,11 @@ defmodule HybridsocialWeb.CrawlerController do
       end
 
     case attachments do
-      [media | _] -> Hybridsocial.Media.media_url(media)
-      _ -> post_card_image(post) || default_instance_image()
+      [%MediaFile{} = media | _] ->
+        %{url: Hybridsocial.Media.media_url(media), width: media.width, height: media.height}
+
+      _ ->
+        %{url: post_card_image(post) || default_instance_image(), width: nil, height: nil}
     end
   end
 

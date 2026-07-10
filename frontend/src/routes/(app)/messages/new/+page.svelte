@@ -7,6 +7,7 @@
   import { createConversation } from '$lib/api/conversations.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let query = $state('');
   let results = $state<Identity[]>([]);
@@ -151,7 +152,7 @@
 </script>
 
 <svelte:head>
-  <title>New Message - Bassam Social</title>
+  <title>New Message - {$instanceName}</title>
 </svelte:head>
 
 <div class="new-message-page">

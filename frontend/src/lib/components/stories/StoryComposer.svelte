@@ -301,7 +301,7 @@
     text-align: center;
     text-shadow: 0 2px 6px rgba(0,0,0,0.8);
     padding: 8px 12px;
-    background: rgba(0,0,0,0.35);
+    background: var(--scrim-medium);
     border-radius: 10px;
     backdrop-filter: blur(4px);
   }
@@ -313,7 +313,7 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: rgba(0,0,0,0.6);
+    background: var(--scrim-medium);
     border: none;
     color: white;
     cursor: pointer;

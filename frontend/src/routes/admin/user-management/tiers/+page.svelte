@@ -295,7 +295,7 @@
     margin-block-start: var(--space-3);
     padding: var(--space-3);
     background: var(--color-warning-soft);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
   }

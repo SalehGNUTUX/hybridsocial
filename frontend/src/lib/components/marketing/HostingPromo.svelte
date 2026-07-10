@@ -5,7 +5,7 @@
     variant = 'card',
     href = 'https://hybridsocial.io/hosting',
     headline = 'Launch your own server',
-    subhead = 'Get a fully managed Bassam Social instance. We handle the infrastructure, updates, and security — you focus on building your community.',
+    subhead = 'Get a fully managed instance. We handle the infrastructure, updates, and security — you focus on building your community.',
   }: {
     variant?: 'card' | 'inline';
     href?: string;

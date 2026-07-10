@@ -1,4 +1,4 @@
-// Bassam Social API type definitions
+// HybridSocial API type definitions
 
 export interface TierLimits {
   char_limit: number;
@@ -415,6 +415,13 @@ export interface InstanceStats {
 }
 
 export interface ThemeConfig {
+  // Instance dark-mode policy. 'auto' follows the visitor's OS (default).
+  // Dark is derived from the light theme (hybrid model); any dark_<key>
+  // below overrides the derived/ramped value for that token.
+  mode?: 'light' | 'dark' | 'auto';
+  // Optional per-token dark overrides, e.g. dark_color_primary,
+  // dark_color_bg, dark_color_surface, dark_color_text …
+  [key: `dark_${string}`]: string | undefined;
   color_primary?: string;
   color_primary_hover?: string;
   color_primary_soft?: string;
@@ -876,4 +883,9 @@ export interface AdminThemeConfig {
   logo_url: string | null;
   favicon_url: string | null;
   og_image_url: string | null;
+  // Dark-mode policy + optional dark logo (shown when the theme resolves
+  // to dark; falls back to logo_url). Dark colours are derived from the
+  // light theme, so dark_* colour overrides are optional and not required.
+  mode?: 'light' | 'dark' | 'auto';
+  dark_logo_url?: string | null;
 }

@@ -5,6 +5,7 @@
   import EntityCard from '$lib/components/entity/EntityCard.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let pages: any[] = $state([]);
   let loading = $state(true);
@@ -173,7 +174,7 @@
 </script>
 
 <svelte:head>
-  <title>Pages - Bassam Social</title>
+  <title>Pages - {$instanceName}</title>
 </svelte:head>
 
 <div class="pages-page">

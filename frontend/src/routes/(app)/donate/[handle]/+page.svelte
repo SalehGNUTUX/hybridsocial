@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { instanceName } from '$lib/stores/instance.js';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { api } from '$lib/api/client.js';
@@ -47,7 +48,7 @@
 </script>
 
 <svelte:head>
-  <title>Donate to @{handle} - Bassam Social</title>
+  <title>Donate to @{handle} - {$instanceName}</title>
 </svelte:head>
 
 <div class="donate-page">
@@ -111,7 +112,7 @@
       {/if}
 
       <p class="donate-disclaimer">
-        Donations are sent directly to the user's wallet. Bassam Social does not process or take a cut of any donations.
+        Donations are sent directly to the user's wallet. {$instanceName} does not process or take a cut of any donations.
       </p>
     </div>
 
@@ -139,7 +140,7 @@
     border: 1px solid var(--color-border);
     border-radius: 18px;
     padding: 28px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-sm);
   }
 
   .donate-header {

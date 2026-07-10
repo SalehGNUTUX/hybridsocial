@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { settingsItemForPath } from '$lib/settings-nav.js';
+  import { instanceName } from '$lib/stores/instance.js';
 
   let { children } = $props();
 
@@ -9,7 +10,7 @@
 </script>
 
 <svelte:head>
-  <title>Settings - Bassam Social</title>
+  <title>Settings - {$instanceName}</title>
 </svelte:head>
 
 <div class="settings-shell" class:is-index={isIndex}>
