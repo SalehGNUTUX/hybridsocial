@@ -387,7 +387,7 @@
   .story-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.92);
+    background: var(--scrim-strong);
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -542,7 +542,7 @@
     text-align: center;
     text-shadow: 0 2px 6px rgba(0,0,0,0.8);
     padding: 8px 12px;
-    background: rgba(0,0,0,0.35);
+    background: var(--scrim-medium);
     border-radius: 10px;
     backdrop-filter: blur(4px);
     z-index: 2;
@@ -577,7 +577,7 @@
   .reactions {
     display: flex;
     gap: 6px;
-    background: rgba(0,0,0,0.4);
+    background: var(--scrim-medium);
     padding: 6px 10px;
     border-radius: 999px;
     backdrop-filter: blur(8px);
@@ -603,7 +603,7 @@
   }
 
   .viewer-count {
-    background: rgba(0,0,0,0.5);
+    background: var(--scrim-medium);
     color: white;
     border: none;
     padding: 8px 16px;
@@ -640,7 +640,7 @@
   .viewers-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: var(--scrim-medium);
     z-index: 1100;
     display: flex;
     align-items: flex-end;

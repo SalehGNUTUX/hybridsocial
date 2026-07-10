@@ -410,7 +410,7 @@
   .send-btn.active {
     background: var(--gradient-primary);
     color: var(--color-text-on-primary);
-    box-shadow: 0 2px 8px rgba(108, 62, 221, 0.28);
+    box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.28);
   }
 
   .send-btn.active:hover:not(:disabled) {
@@ -520,7 +520,7 @@
     width: 20px;
     height: 20px;
     border-radius: var(--radius-full);
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim-medium);
     color: #fff;
     border: none;
     cursor: pointer;
@@ -531,7 +531,7 @@
   }
 
   .attachment-remove:hover {
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--scrim-strong);
   }
 
   .attachment-tile-loading {

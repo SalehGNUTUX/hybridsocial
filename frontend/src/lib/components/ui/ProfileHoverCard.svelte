@@ -367,15 +367,15 @@
   }
 
   .hc-action-mute:hover {
-    background: #f59e0b;
+    background: var(--color-warning);
     color: white;
-    border-color: #f59e0b;
+    border-color: var(--color-warning);
   }
 
   .hc-action-block:hover {
-    background: #dc2626;
+    background: var(--color-danger);
     color: white;
-    border-color: #dc2626;
+    border-color: var(--color-danger);
   }
 
   /* Active states reflect current relationship — already-following,
@@ -388,14 +388,14 @@
     border-color: var(--color-primary);
   }
   .hc-action-mute.hc-action-active {
-    background: #f59e0b;
+    background: var(--color-warning);
     color: white;
-    border-color: #f59e0b;
+    border-color: var(--color-warning);
   }
   .hc-action-block.hc-action-active {
-    background: #dc2626;
+    background: var(--color-danger);
     color: white;
-    border-color: #dc2626;
+    border-color: var(--color-danger);
   }
 
   .hc-action-btn:disabled {

@@ -100,7 +100,7 @@
     bottom: 3px;
     background: var(--gradient-primary);
     border-radius: 9999px;
-    box-shadow: 0 2px 8px rgba(108, 62, 221, 0.28);
+    box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.28);
     transition:
       left 0.25s cubic-bezier(0.22, 1, 0.36, 1),
       width 0.25s cubic-bezier(0.22, 1, 0.36, 1);

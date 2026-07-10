@@ -270,7 +270,7 @@
 
   .radial-item-active {
     transform: translate(-50%, -50%) scale(1.5);
-    background: var(--color-primary-soft, #e0f2fe);
+    background: var(--color-primary-soft);
     box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
     z-index: 1;
   }

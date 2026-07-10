@@ -371,17 +371,17 @@
 
   .action-success {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .action-danger {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .action-auth {
     background: var(--color-info-soft);
-    color: #1e40af;
+    color: var(--color-on-info-soft);
   }
 
   .action-neutral {

@@ -215,7 +215,7 @@
     max-width: 440px;
     width: 100%;
     text-align: center;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 24px var(--scrim-soft);
   }
 
   .otp-gate-icon {

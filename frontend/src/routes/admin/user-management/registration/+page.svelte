@@ -395,7 +395,7 @@
 
   .status-active {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-expired {
@@ -405,7 +405,7 @@
 
   .status-disabled {
     background: var(--color-danger-soft);
-    color: #991b1b;
+    color: var(--color-on-danger-soft);
   }
 
   .form-group {

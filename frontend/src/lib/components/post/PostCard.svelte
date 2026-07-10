@@ -1329,8 +1329,8 @@
     z-index: 5;
     box-shadow:
       0 2px 4px rgba(25, 28, 29, 0.05),
-      0 16px 36px rgba(108, 62, 221, 0.11);
-    border-color: rgba(108, 62, 221, 0.18);
+      0 16px 36px rgba(var(--color-primary-rgb), 0.11);
+    border-color: rgba(var(--color-primary-rgb), 0.18);
   }
 
   .post-card.detail:hover,
@@ -1898,7 +1898,7 @@
   }
 
   .content-toggle-btn:hover {
-    background: var(--color-primary-soft, rgba(108, 62, 221, 0.08));
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.08));
     color: var(--color-primary);
     border-color: var(--color-primary);
   }
@@ -2131,7 +2131,7 @@
   .edit-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim-medium);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;

@@ -149,7 +149,7 @@
   .addr-list { display: flex; flex-direction: column; gap: 8px; }
   .addr-item { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; background: var(--color-surface); border-radius: 10px; position: relative; }
   .addr-coin { display: flex; align-items: center; gap: 6px; }
-  .coin-badge { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--color-primary-soft, rgba(108,62,221,0.1)); color: var(--color-primary); }
+  .coin-badge { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--color-primary-soft, rgba(var(--color-primary-rgb),0.1)); color: var(--color-primary); }
   .coin-name { font-size: 0.8125rem; font-weight: 600; }
   .addr-value { font-family: monospace; font-size: 0.75rem; color: var(--color-text-secondary); word-break: break-all; flex: 1; }
   .addr-label { font-size: 0.75rem; color: var(--color-text-tertiary); }

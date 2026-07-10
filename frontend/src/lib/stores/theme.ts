@@ -37,6 +37,20 @@ const PROPERTY_MAP: Record<string, string[]> = {
 // attributes so the app's CSS can key off them if it wants.
 const ATTR_KEYS: Array<keyof ThemeConfig> = ['border_radius', 'density'];
 
+// Parse a #rgb / #rrggbb string into "r, g, b" channels for use inside
+// rgba(var(--color-primary-rgb), <alpha>). Returns null for anything
+// that isn't a valid hex colour so we leave the CSS default in place.
+function hexToRgbChannels(hex: string): string | null {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
+}
+
 export function applyTheme(config: ThemeConfig | null): void {
   themeStore.set(config);
   if (!browser || !config) return;
@@ -48,6 +62,14 @@ export function applyTheme(config: ThemeConfig | null): void {
     if (typeof value === 'string' && value !== '') {
       for (const v of cssVars) root.style.setProperty(v, value);
     }
+  }
+
+  // Keep --color-primary-rgb (used for rgba() tints/focus rings) in sync
+  // with the brand colour so alpha-composited accents match the override
+  // instead of falling back to the CSS default.
+  if (typeof config.color_primary === 'string' && config.color_primary !== '') {
+    const channels = hexToRgbChannels(config.color_primary);
+    if (channels) root.style.setProperty('--color-primary-rgb', channels);
   }
 
   for (const key of ATTR_KEYS) {
@@ -66,6 +88,7 @@ export function clearTheme(): void {
   for (const cssVars of Object.values(PROPERTY_MAP)) {
     for (const v of cssVars) root.style.removeProperty(v);
   }
+  root.style.removeProperty('--color-primary-rgb');
   for (const key of ATTR_KEYS) {
     root.removeAttribute(`data-${(key as string).replace('_', '-')}`);
   }

@@ -146,7 +146,7 @@
 
   .user-mgmt-tab:hover {
     color: var(--color-text);
-    background: var(--color-surface-hover, rgba(0, 0, 0, 0.04));
+    background: var(--color-surface-hover, var(--scrim-tint));
   }
 
   .user-mgmt-tab-active {

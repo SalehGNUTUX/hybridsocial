@@ -145,8 +145,8 @@
     border-color: var(--color-danger);
   }
   .btn-danger:hover:not(:disabled) {
-    background: #dc2626;
-    border-color: #dc2626;
+    background: var(--color-danger);
+    border-color: var(--color-danger);
   }
 
   /* Loading */

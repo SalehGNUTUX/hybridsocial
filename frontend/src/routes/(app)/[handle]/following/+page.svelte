@@ -650,7 +650,7 @@
   .section-count {
     font-size: var(--text-sm);
     font-weight: 800;
-    background: #fff;
+    background: var(--color-surface-container-lowest);
     color: var(--gradient-start, var(--color-primary));
     padding: 2px 10px;
     border-radius: 999px;

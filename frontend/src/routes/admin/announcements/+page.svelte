@@ -256,7 +256,7 @@
 
   .status-active {
     background: var(--color-success-soft);
-    color: #166534;
+    color: var(--color-on-success-soft);
   }
 
   .status-inactive {

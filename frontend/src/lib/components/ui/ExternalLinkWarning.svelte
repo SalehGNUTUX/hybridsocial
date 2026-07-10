@@ -185,7 +185,7 @@
        thing in focus — matches the connection/session-expired dialog
        we ship elsewhere. Fall back to a plain dim on old browsers
        that don't support backdrop-filter. */
-    background: rgba(15, 23, 42, 0.55);
+    background: var(--scrim-medium);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: flex;
@@ -268,7 +268,7 @@
   }
 
   .elw-btn-ghost:hover {
-    background: rgba(0, 0, 0, 0.06);
+    background: var(--scrim-soft);
     color: var(--color-text);
   }
 

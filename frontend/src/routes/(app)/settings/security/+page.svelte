@@ -1005,7 +1005,7 @@
   }
 
   .stitch-section-content {
-    background: #f2f4f5;
+    background: var(--color-surface-container-low);
     border-radius: 16px;
     overflow: hidden;
   }
@@ -1019,7 +1019,7 @@
 
   .stitch-description {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     line-height: 1.5;
   }
 
@@ -1035,7 +1035,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     margin-inline-start: 4px;
   }
 
@@ -1043,7 +1043,7 @@
     display: block;
     width: 100%;
     padding: 12px 16px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
     border: none;
     border-radius: 10px;
     font-size: 0.875rem;
@@ -1052,13 +1052,13 @@
   }
 
   .stitch-input::placeholder {
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .stitch-input:focus {
     outline: none;
-    background: white;
-    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 59, 130, 246), 0.2);
+    background: var(--color-surface-container-lowest);
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
   }
 
   /* ---- Status row (2FA enabled) ---- */
@@ -1068,7 +1068,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 12px 0;
-    border-block-end: 1px solid rgba(0, 0, 0, 0.06);
+    border-block-end: 1px solid var(--scrim-soft);
   }
 
   .stitch-status-info {
@@ -1089,7 +1089,7 @@
   }
 
   .stitch-status-enabled {
-    color: #16a34a;
+    color: var(--color-success);
   }
 
   /* ---- QR & backup codes ---- */
@@ -1103,7 +1103,7 @@
     width: 200px;
     height: 200px;
     border-radius: 10px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--scrim-soft);
   }
 
   .stitch-secret {
@@ -1116,7 +1116,7 @@
     font-family: var(--font-mono);
     font-size: 0.875rem;
     padding: 10px 14px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
     border-radius: 10px;
     word-break: break-all;
     user-select: all;
@@ -1138,7 +1138,7 @@
     font-family: var(--font-mono);
     font-size: 0.875rem;
     padding: 6px 10px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
     border-radius: 8px;
     text-align: center;
     user-select: all;
@@ -1147,16 +1147,16 @@
   /* ---- Error / Success ---- */
   .stitch-error {
     padding: 12px 16px;
-    background: #fef2f2;
-    color: #dc2626;
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
     border-radius: 10px;
     font-size: 0.875rem;
   }
 
   .stitch-success {
     padding: 12px 16px;
-    background: #f0fdf4;
-    color: #16a34a;
+    background: var(--color-success-soft);
+    color: var(--color-success);
     border-radius: 10px;
     font-size: 0.875rem;
   }
@@ -1181,13 +1181,13 @@
     font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb, 59, 130, 246), 0.2);
+    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.2);
     transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
   }
 
   .stitch-btn-primary:hover:not(:disabled) {
     background: var(--color-primary-hover);
-    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb, 59, 130, 246), 0.3);
+    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.3);
   }
 
   .stitch-btn-primary:active:not(:disabled) {
@@ -1206,14 +1206,14 @@
     border-radius: 9999px;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     cursor: pointer;
     transition: color 0.15s ease, background-color 0.15s ease;
   }
 
   .stitch-btn-ghost:hover {
     color: var(--color-text);
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--scrim-tint);
   }
 
   .stitch-btn-outline {
@@ -1232,7 +1232,7 @@
   }
 
   .stitch-btn-outline:hover:not(:disabled) {
-    background: rgba(var(--color-primary-rgb, 59, 130, 246), 0.06);
+    background: rgba(var(--color-primary-rgb), 0.06);
   }
 
   .stitch-btn-outline:disabled {
@@ -1245,7 +1245,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 24px;
-    background: #dc2626;
+    background: var(--color-danger);
     color: white;
     border: none;
     border-radius: 9999px;
@@ -1299,7 +1299,7 @@
     background: none; border: none; color: var(--color-text-tertiary); cursor: pointer;
     padding: 4px; border-radius: 50%;
   }
-  .key-remove:hover { color: var(--color-danger); background: rgba(239,68,68,0.1); }
+  .key-remove:hover { color: var(--color-danger); background: var(--color-danger-soft); }
 
   .key-add-form { display: flex; gap: 8px; }
 

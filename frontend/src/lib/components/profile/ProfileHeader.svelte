@@ -425,8 +425,8 @@
     height: 100%;
     background:
       radial-gradient(120% 140% at 18% 12%, hsl(var(--cover-h) 68% 55% / 0.85) 0%, transparent 45%),
-      radial-gradient(120% 130% at 88% 8%, #7183da 0%, transparent 52%),
-      linear-gradient(135deg, #6c3edd 0%, hsl(var(--cover-h) 52% 34%) 100%);
+      radial-gradient(120% 130% at 88% 8%, var(--color-primary-container) 0%, transparent 52%),
+      linear-gradient(135deg, var(--color-primary) 0%, hsl(var(--cover-h) 52% 34%) 100%);
   }
 
   /* Soft bottom scrim so the card edge and avatar read against busy

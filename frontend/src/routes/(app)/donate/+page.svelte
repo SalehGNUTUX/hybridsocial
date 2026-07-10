@@ -259,7 +259,7 @@
 
   .goal-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--color-primary), #6c3edd);
+    background: linear-gradient(90deg, var(--color-primary), var(--color-primary));
     border-radius: var(--radius-full);
     transition: width 0.5s ease;
   }

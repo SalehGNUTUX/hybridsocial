@@ -160,7 +160,7 @@
   .lazy-placeholder:hover,
   .lazy-placeholder:focus-visible {
     background: var(--color-surface-hover, rgba(0, 0, 0, 0.08));
-    border-color: var(--color-primary, #3b82f6);
+    border-color: var(--color-primary);
     color: var(--color-text);
     outline: none;
   }

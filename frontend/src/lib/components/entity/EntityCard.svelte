@@ -97,8 +97,8 @@
 
   .ec:hover {
     transform: translateY(-2px);
-    box-shadow: 0 2px 4px rgba(25, 28, 29, 0.05), 0 14px 34px rgba(108, 62, 221, 0.1);
-    border-color: rgba(108, 62, 221, 0.18);
+    box-shadow: 0 2px 4px rgba(25, 28, 29, 0.05), 0 14px 34px rgba(var(--color-primary-rgb), 0.1);
+    border-color: rgba(var(--color-primary-rgb), 0.18);
     text-decoration: none;
   }
 

@@ -84,15 +84,15 @@
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
-    background: rgba(234, 179, 8, 0.12);
+    background: var(--color-warning-soft);
     border-block-end: 1px solid rgba(234, 179, 8, 0.4);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
     font-size: 0.875rem;
   }
 
   .banner-icon {
     font-size: 22px;
-    color: #b45309;
+    color: var(--color-on-warning-soft);
     flex-shrink: 0;
   }
 

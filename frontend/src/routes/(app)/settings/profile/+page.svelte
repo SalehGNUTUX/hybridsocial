@@ -355,7 +355,7 @@
 
   /* ---- Section content container ---- */
   .stitch-section-content {
-    background: #f2f4f5;
+    background: var(--color-surface-container-low);
     border-radius: 16px;
     padding: 0;
     overflow: hidden;
@@ -367,7 +367,7 @@
     cursor: pointer;
     position: relative;
     overflow: hidden;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
   }
 
   .stitch-header-img {
@@ -385,14 +385,14 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     font-size: 0.8125rem;
   }
 
   .stitch-header-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--scrim-medium);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -445,7 +445,7 @@
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--scrim-medium);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -539,7 +539,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     margin-inline-start: 4px;
   }
 
@@ -547,7 +547,7 @@
     display: block;
     width: 100%;
     padding: 12px 16px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
     border: none;
     border-radius: 10px;
     font-size: 0.875rem;
@@ -556,13 +556,13 @@
   }
 
   .stitch-input::placeholder {
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .stitch-input:focus {
     outline: none;
-    background: white;
-    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 59, 130, 246), 0.2);
+    background: var(--color-surface-container-lowest);
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
   }
 
   .stitch-input-disabled {
@@ -574,7 +574,7 @@
     display: block;
     width: 100%;
     padding: 12px 16px;
-    background: #e6e8e9;
+    background: var(--color-surface-container-high);
     border: none;
     border-radius: 10px;
     font-size: 0.875rem;
@@ -585,18 +585,18 @@
   }
 
   .stitch-textarea::placeholder {
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
   }
 
   .stitch-textarea:focus {
     outline: none;
-    background: white;
-    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 59, 130, 246), 0.2);
+    background: var(--color-surface-container-lowest);
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
   }
 
   .stitch-hint {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     margin-inline-start: 4px;
   }
 
@@ -607,7 +607,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 12px 0;
-    border-block-start: 1px solid rgba(0, 0, 0, 0.06);
+    border-block-start: 1px solid var(--scrim-soft);
   }
 
   .stitch-toggle-info {
@@ -624,7 +624,7 @@
 
   .stitch-toggle-desc {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: var(--color-text-tertiary);
     line-height: 1.4;
   }
 
@@ -646,7 +646,7 @@
   .stitch-switch-track {
     width: 44px;
     height: 24px;
-    background: #d1d5db;
+    background: var(--color-border);
     border-radius: 12px;
     position: relative;
     transition: background-color 0.2s ease;
@@ -688,14 +688,14 @@
     border-radius: 9999px;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     cursor: pointer;
     transition: color 0.15s ease, background-color 0.15s ease;
   }
 
   .stitch-btn-ghost:hover {
     color: var(--color-text);
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--scrim-tint);
   }
 
   .stitch-btn-primary {
@@ -710,13 +710,13 @@
     font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb, 59, 130, 246), 0.2);
+    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.2);
     transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
   }
 
   .stitch-btn-primary:hover:not(:disabled) {
     background: var(--color-primary-hover);
-    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb, 59, 130, 246), 0.3);
+    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.3);
   }
 
   .stitch-btn-primary:active:not(:disabled) {

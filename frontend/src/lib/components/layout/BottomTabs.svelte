@@ -272,7 +272,7 @@
   .more-sheet-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--scrim-medium);
     z-index: 28;
     animation: more-fade 0.15s ease;
   }

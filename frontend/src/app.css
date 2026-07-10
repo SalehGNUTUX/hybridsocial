@@ -12,6 +12,12 @@
   --color-primary: #6c3edd;
   --color-primary-container: #7183da;
   --color-on-primary: #ffffff;
+  /* RGB channels of --color-primary, for rgba() alpha compositing
+     (tints, focus rings, selection). Components reference this as
+     rgba(var(--color-primary-rgb), <alpha>). Kept in sync with
+     --color-primary by applyTheme() when the admin overrides the
+     brand colour; this static default matches #6c3edd. */
+  --color-primary-rgb: 108, 62, 221;
 
   /* Secondary palette */
   --color-secondary: #3c6564;
@@ -58,14 +64,66 @@
   --color-overlay: rgba(25, 28, 29, 0.4);
   --color-primary-hover: #5a2fc4;
   --color-primary-soft: var(--color-secondary-container);
+
+  /* Status colours. Each family has three roles:
+       --color-<x>        solid fill / icon / border
+       --color-<x>-soft   tinted badge / alert background
+       --color-on-<x>-soft readable text/icon on the soft background
+     The -on-soft values are the darker shades components were
+     hardcoding (e.g. #991b1b text on a #fee2e2 danger badge). */
   --color-success: #22c55e;
   --color-success-soft: #dcfce7;
+  --color-on-success-soft: #166534;
   --color-warning: #f59e0b;
   --color-warning-soft: #fef3c7;
+  --color-on-warning-soft: #92400e;
   --color-danger: var(--color-error);
   --color-danger-soft: var(--color-error-container);
+  --color-on-danger-soft: #991b1b;
+  /* Alias: some components reference --color-destructive for
+     destructive actions. It was never defined (silently falling back
+     to a hardcoded red); point it at the canonical danger token. */
+  --color-destructive: var(--color-danger);
   --color-info: #3b82f6;
   --color-info-soft: #dbeafe;
+  --color-on-info-soft: #1e40af;
+
+  /* Scrims — layered black/transparent washes. Split by role because
+     dark mode flips only *some* of them: the elevation tints become
+     light (white-on-dark) while modal/media backdrops stay dark.
+       -tint  : hairline elevation/hover wash over a surface
+       -soft  : slightly stronger tonal wash
+       -medium: modal / dialog backdrop
+       -strong: media viewer / lightbox backdrop */
+  --scrim-tint: rgba(0, 0, 0, 0.04);
+  --scrim-soft: rgba(0, 0, 0, 0.08);
+  --scrim-medium: rgba(0, 0, 0, 0.5);
+  --scrim-strong: rgba(0, 0, 0, 0.85);
+
+  /* Aliases for token names components reference but that were never
+     defined. Until now these fell back to hardcoded light values, or —
+     where used without a fallback (e.g. --color-bg-tertiary, ×13) —
+     resolved to *invalid* and rendered with the inherited/initial
+     colour. Pointing them at canonical tokens fixes that and routes
+     them through the theme layer so the dark palette flips them too.
+     NOTE for dark mode: --color-text-inverse must flip (light text in
+     light mode, dark text in dark mode) — give it a real override in
+     the dark block rather than leaving it aliased to on-primary. */
+  --color-bg-secondary: var(--color-surface-container-low);
+  --color-bg-tertiary: var(--color-surface-container);
+  --color-surface-base: var(--color-background);
+  --color-surface-alt: var(--color-surface-container-low);
+  --color-surface-hover: var(--color-surface-container);
+  --color-primary-light: var(--color-primary-soft);
+  --color-primary-subtle: var(--color-primary-soft);
+  --color-primary-contrast: var(--color-on-primary);
+  --color-secondary-hover: var(--color-secondary);
+  --color-text-inverse: var(--color-on-primary);
+  --color-danger-light: var(--color-danger-soft);
+  --color-danger-surface: var(--color-danger-soft);
+  --color-success-light: var(--color-success-soft);
+  --color-warning-light: var(--color-warning-soft);
+  --color-warning-surface: var(--color-warning-soft);
 
   /* Gradient */
   --gradient-primary: linear-gradient(135deg, #6c3edd 0%, #7183da 100%);

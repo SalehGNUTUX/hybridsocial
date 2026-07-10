@@ -1601,11 +1601,11 @@
 
   /* Like hover + active */
   .action-like:hover {
-    color: #ef4444;
+    color: var(--color-danger);
   }
 
   .active-reaction {
-    color: #ef4444;
+    color: var(--color-danger);
   }
 
   /* Share hover */
@@ -1778,7 +1778,7 @@
   .reactions-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--scrim-medium);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -2154,7 +2154,7 @@
   .dialog-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim-medium);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -2308,7 +2308,7 @@
     font-size: 0.8em;
     padding: 1px 5px;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.06);
+    background: var(--scrim-soft);
   }
 
   .report-checkbox {

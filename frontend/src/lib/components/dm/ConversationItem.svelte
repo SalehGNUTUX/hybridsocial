@@ -218,22 +218,22 @@
 
   /* Amber: encrypted at rest, server can decrypt. Not full E2E. */
   .encryption-at-rest {
-    color: var(--color-warning, #d97706);
+    color: var(--color-warning);
   }
 
   /* Red + open lock: federated DM, remote server saw plaintext. */
   .encryption-federated {
-    color: var(--color-danger, #dc2626);
+    color: var(--color-danger);
   }
 
   /* Reserved for future end-to-end encryption (green = fully private). */
   .encryption-e2ee {
-    color: var(--color-success, #16a34a);
+    color: var(--color-success);
   }
 
   .conversation-pending {
     font-size: var(--text-xs);
-    color: var(--color-warning, #f59e0b);
+    color: var(--color-warning);
     font-weight: 600;
     margin-block-start: 2px;
   }

@@ -454,20 +454,20 @@
     border-radius: var(--radius-full);
   }
 
-  .vis-public, .badge-info { background: var(--color-info-soft); color: #1e40af; }
+  .vis-public, .badge-info { background: var(--color-info-soft); color: var(--color-on-info-soft); }
   .vis-unlisted { background: var(--color-surface); color: var(--color-text-secondary); }
   .vis-followers { background: var(--color-secondary-container); color: var(--color-primary); }
-  .vis-direct { background: #fef3c7; color: #92400e; }
-  .badge-warning { background: #fef3c7; color: #92400e; }
-  .badge-danger { background: var(--color-danger-soft); color: #991b1b; }
+  .vis-direct { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+  .badge-warning { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+  .badge-danger { background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
   .badge-neutral { background: var(--color-surface); color: var(--color-text-secondary); }
 
   .spoiler {
     font-size: var(--text-sm);
     padding: var(--space-2) var(--space-3);
-    background: #fef3c7;
+    background: var(--color-warning-soft);
     border-radius: var(--radius-md);
-    color: #92400e;
+    color: var(--color-on-warning-soft);
     margin-block-end: var(--space-3);
   }
 

@@ -246,22 +246,22 @@
   }
 
   .status-up {
-    background: var(--color-success-soft, rgba(34, 197, 94, 0.15));
-    color: var(--color-success, #16a34a);
+    background: var(--color-success-soft);
+    color: var(--color-success);
   }
 
   .status-degraded {
-    background: rgba(234, 179, 8, 0.15);
-    color: #b45309;
+    background: var(--color-warning-soft);
+    color: var(--color-on-warning-soft);
   }
 
   .status-down {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--color-danger, #dc2626);
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
   }
 
   .status-stale {
-    background: var(--color-surface-container-high, rgba(0, 0, 0, 0.06));
+    background: var(--color-surface-container-high);
     color: var(--color-text-tertiary);
   }
 
@@ -280,8 +280,8 @@
 
   .service-panel-error {
     font-size: 0.75rem;
-    color: var(--color-danger, #dc2626);
-    background: rgba(239, 68, 68, 0.08);
+    color: var(--color-danger);
+    background: var(--color-danger-soft);
     padding: 6px 10px;
     border-radius: 8px;
   }
@@ -347,7 +347,7 @@
   .metric-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--scrim-medium);
     display: flex;
     align-items: center;
     justify-content: center;

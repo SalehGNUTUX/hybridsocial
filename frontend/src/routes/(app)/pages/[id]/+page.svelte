@@ -472,7 +472,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim-medium);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -509,7 +509,7 @@
   }
 
   .modal-title-danger {
-    color: #dc2626;
+    color: var(--color-danger);
     margin-block-end: var(--space-2);
   }
 
@@ -563,7 +563,7 @@
   }
 
   .modal-error {
-    color: #dc2626;
+    color: var(--color-danger);
     font-size: var(--text-sm);
     margin: 0;
   }
