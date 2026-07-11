@@ -66,25 +66,48 @@
   let trayWidth = $derived(cols * cellSize + (cols - 1) * GAP + PAD * 2 + BORDER * 2);
   let trayHeight = $derived(rows * cellSize + (rows - 1) * GAP + PAD * 2 + BORDER * 2);
 
-  // Position the tray above the button, its tail lined up under the
-  // button centre. Clamp the tray box into the viewport, but keep the
-  // tail glued to the button so the pointer always aims at it even when
-  // the tray itself had to slide inward from a screen edge.
-  const TAIL = 9; // gap between tail tip and button
+  // Position the tray relative to the button. It prefers to sit above,
+  // but flips below when there isn't room above (button near the top of
+  // the screen) — otherwise the tray rendered at a short/negative top and
+  // appeared detached from the post. Whichever side is chosen, the tail
+  // stays pinned to the button centre so the pointer always aims at it,
+  // even when the tray itself had to slide inward from a screen edge.
+  const BUTTON_GAP = 12; // gap between button edge and tray edge
+  const HALF_BTN = 22;   // ~half the like button's height
+  const TAIL_INSET = 14; // keep the tail this far from the rounded corners
   let layout = $derived.by(() => {
     const vw = typeof window !== 'undefined' ? window.innerWidth : 9999;
-    // Preferred: tray horizontally centred on the button.
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 9999;
+
+    // Horizontal: centre the tray on the button, clamped into the viewport.
     let left = originX - trayWidth / 2;
     left = Math.min(Math.max(left, EDGE_MARGIN), vw - EDGE_MARGIN - trayWidth);
-    // Tray sits above the button with room for the tail.
-    const top = originY - trayHeight - 20 - TAIL;
-    // Tail x is the button centre, expressed relative to the tray's left
-    // edge, and kept a little inside the rounded corners.
+
+    // Vertical: decide above vs below by which side actually has room for
+    // the whole tray. Prefer above when it fits; else below; else (a very
+    // small viewport) pick the side with more space. Then clamp so it
+    // never runs off the top or bottom.
+    const aboveTop = originY - HALF_BTN - BUTTON_GAP - trayHeight;
+    const belowTop = originY + HALF_BTN + BUTTON_GAP;
+    const fitsAbove = aboveTop >= EDGE_MARGIN;
+    const fitsBelow = belowTop + trayHeight <= vh - EDGE_MARGIN;
+    let placeBelow;
+    if (fitsAbove) placeBelow = false;
+    else if (fitsBelow) placeBelow = true;
+    else placeBelow = (vh - originY) > originY;
+
+    const top = placeBelow
+      ? Math.min(belowTop, vh - EDGE_MARGIN - trayHeight)
+      : Math.max(aboveTop, EDGE_MARGIN);
+
+    // Tail x: exactly the button centre relative to the tray's left edge,
+    // only pulled in if it would land on a rounded corner.
     const tailX = Math.min(
-      Math.max(originX - left, 16),
-      trayWidth - 16,
+      Math.max(originX - left, TAIL_INSET),
+      trayWidth - TAIL_INSET,
     );
-    return { left, top, tailX };
+
+    return { left, top, tailX, placeBelow };
   });
 
   // Which cell the finger is over — lets the existing press-drag-release
@@ -171,7 +194,11 @@
     <!-- Pointer tail: a rotated square hanging off the tray's bottom
          edge, its x locked to the button centre so it always aims at the
          button the tray erupted from. -->
-    <span class="tray-tail" style="left: {layout.tailX}px;"></span>
+    <span
+      class="tray-tail"
+      class:tray-tail-below={layout.placeBelow}
+      style="left: {layout.tailX}px;"
+    ></span>
   </div>
 </div>
 
@@ -299,6 +326,21 @@
     border-bottom: 1px solid color-mix(in oklab, var(--color-primary, #6c3edd) 14%, transparent);
     border-bottom-right-radius: 4px;
     box-shadow: 2px 4px 7px color-mix(in oklab, var(--color-primary, #6c3edd) 12%, transparent);
+  }
+
+  /* When the tray sits below the button, the beak points UP from the
+     tray's top edge instead. */
+  .tray-tail-below {
+    top: auto;
+    bottom: 100%;
+    transform: translateY(11px) rotate(45deg);
+    border-right: none;
+    border-bottom: none;
+    border-left: 1px solid color-mix(in oklab, var(--color-primary, #6c3edd) 14%, transparent);
+    border-top: 1px solid color-mix(in oklab, var(--color-primary, #6c3edd) 14%, transparent);
+    border-bottom-right-radius: 0;
+    border-top-left-radius: 4px;
+    box-shadow: -2px -4px 7px color-mix(in oklab, var(--color-primary, #6c3edd) 12%, transparent);
   }
 
   @media (prefers-reduced-motion: reduce) {

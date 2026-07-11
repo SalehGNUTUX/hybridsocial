@@ -448,6 +448,10 @@
         window.getSelection()?.removeAllRanges();
       }
       radialOpen = true;
+      // Claim the shared single-popover slot so any menu or tray open on
+      // another post closes immediately (and ours closes if another claims
+      // it — see the effect above).
+      openMenuId.set(trayTag);
       // Belt and suspenders — if the desktop picker somehow opened
       // (e.g. a stray mouseenter slipped through before suppressHover
       // armed), close it so the two pickers never stack.
@@ -545,7 +549,33 @@
     radialOpen = false;
     radialHighlighted = null;
     radialArmedForTap = false;
+    // Tapping a tray cell dispatches pointer/mouse events that the
+    // browser follows with a synthesized `click` at the finger point.
+    // Because the tray overlay is pointer-events:none except on the
+    // cells, that click would fall through to whatever post/button sits
+    // behind the tray (the "second click" seen on device). Swallow the
+    // next click once, in the capture phase, before it reaches anything.
+    swallowNextClick();
     handleReaction(type);
+  }
+
+  let clickSwallower: ((e: MouseEvent) => void) | null = null;
+  function swallowNextClick() {
+    if (typeof window === 'undefined') return;
+    if (clickSwallower) window.removeEventListener('click', clickSwallower, true);
+    clickSwallower = (e: MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      window.removeEventListener('click', clickSwallower!, true);
+      clickSwallower = null;
+    };
+    window.addEventListener('click', clickSwallower, true);
+    setTimeout(() => {
+      if (clickSwallower) {
+        window.removeEventListener('click', clickSwallower, true);
+        clickSwallower = null;
+      }
+    }, 700);
   }
 
   function reactionTouchCancel() {
@@ -625,7 +655,9 @@
   // store can identify which menu is currently expanded across the
   // whole feed. Without this, opening a second post's ⋯ menu left
   // the first one stacked on screen — see the screenshot in PR review.
-  const menuTag = `post-actions:${post.id}:${Math.random().toString(36).slice(2, 8)}`;
+  const instanceId = Math.random().toString(36).slice(2, 8);
+  const menuTag = `post-actions:${post.id}:${instanceId}`;
+  const trayTag = `reaction-tray:${post.id}:${instanceId}`;
 
   // Close the menu the moment another instance becomes the active
   // one, or when something clears the store (window click outside,
@@ -644,6 +676,53 @@
   $effect(() => {
     if (showMoreMenu) return;
     if (get(openMenuId) === menuTag) openMenuId.set(null);
+  });
+
+  function closeRadial() {
+    radialOpen = false;
+    radialHighlighted = null;
+    radialArmedForTap = false;
+  }
+
+  // Same single-popover coordination for the reaction tray: close it the
+  // moment any other menu or tray becomes the active popover, and release
+  // the slot when the tray closes by any path. Ensures two posts can't
+  // both show a tray at once.
+  $effect(() => {
+    const active = $openMenuId;
+    if (radialOpen && active !== trayTag) {
+      closeRadial();
+    }
+  });
+  $effect(() => {
+    if (radialOpen) return;
+    if (get(openMenuId) === trayTag) openMenuId.set(null);
+  });
+
+  // The tray is positioned from the button's viewport rect captured at
+  // press time. Once the page scrolls (or rotates) that rect is stale, so
+  // a genuine scroll dismisses it. But opening the tray can itself nudge
+  // the scroll position (a short post whose tray extends past the
+  // viewport, or iOS rubber-banding), and that incidental scroll must NOT
+  // close the tray we just opened — that was the "first tap does nothing"
+  // symptom. So ignore scrolls for a short grace period after opening, and
+  // only dismiss on a scroll that actually moves the page.
+  $effect(() => {
+    if (!radialOpen || typeof window === 'undefined') return;
+    const openedAt = Date.now();
+    const startScrollY = window.scrollY;
+    const onScroll = () => {
+      if (Date.now() - openedAt < 350) return;
+      if (Math.abs(window.scrollY - startScrollY) < 4) return;
+      closeRadial();
+    };
+    const onResize = () => closeRadial();
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll, { capture: true });
+      window.removeEventListener('resize', onResize);
+    };
   });
 
   // One window-level click + escape listener per instance is fine —
