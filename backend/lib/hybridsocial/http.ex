@@ -129,6 +129,9 @@ defmodule Hybridsocial.HTTP do
   # Surface the underlying reason atom (:nxdomain, :timeout, :econnrefused)
   # so callers that pattern-match/log `reason` behave as they did with
   # HTTPoison; fall back to the exception itself otherwise.
+  # Redirect-cap overflow: some Req versions return this struct, others
+  # raise (handled by the rescue above). Normalise both to one clean atom.
+  defp error_reason(%Req.TooManyRedirectsError{}), do: :too_many_redirects
   defp error_reason(%{reason: reason}), do: reason
   defp error_reason(exception), do: exception
 end
