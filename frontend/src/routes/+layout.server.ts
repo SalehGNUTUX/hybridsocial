@@ -13,7 +13,15 @@ export const load: LayoutServerLoad = async ({ fetch }) => {
   const base = env.INTERNAL_API_URL || 'http://backend:4000';
 
   try {
-    const res = await fetch(`${base}/api/v1/instance`);
+    // The backend forces SSL (rewrite_on: [:x_forwarded_proto]) and only
+    // excludes localhost, so a plain http://backend:4000 call gets 301'd to
+    // the public https host — which hairpins/fails during SSR, leaving the
+    // <title> and og: tags on their "HybridSocial" fallbacks. We're an
+    // internal client behind the same TLS edge, so declare the forwarded
+    // proto and the backend serves us directly instead of redirecting.
+    const res = await fetch(`${base}/api/v1/instance`, {
+      headers: { 'x-forwarded-proto': 'https' },
+    });
     if (!res.ok) return { instance: null };
 
     const info = (await res.json()) as Record<string, unknown>;
