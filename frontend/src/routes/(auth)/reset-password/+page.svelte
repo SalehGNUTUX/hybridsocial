@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import BrandMark from '$lib/components/ui/BrandMark.svelte';
   import { api } from '$lib/api/client.js';
   import { ApiError } from '$lib/api/client.js';
   import { instanceName } from '$lib/stores/instance.js';
@@ -110,10 +111,7 @@
     </a>
   {:else if step === 'request'}
     <div class="auth-logo">
-      <svg width="40" height="40" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-        <rect rx="6" width="28" height="28" fill="var(--color-primary)" />
-        <text x="14" y="19.5" text-anchor="middle" fill="white" font-size="15" font-weight="700">H</text>
-      </svg>
+      <BrandMark size={40} />
     </div>
 
     <h1 class="auth-title">Reset your password</h1>
@@ -168,10 +166,7 @@
     {/if}
   {:else}
     <div class="auth-logo">
-      <svg width="40" height="40" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-        <rect rx="6" width="28" height="28" fill="var(--color-primary)" />
-        <text x="14" y="19.5" text-anchor="middle" fill="white" font-size="15" font-weight="700">H</text>
-      </svg>
+      <BrandMark size={40} />
     </div>
 
     <h1 class="auth-title">Set new password</h1>

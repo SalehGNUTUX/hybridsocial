@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppLayout from '$lib/components/layout/AppLayout.svelte';
+  import BrandMark from '$lib/components/ui/BrandMark.svelte';
   import HostingPromo from '$lib/components/marketing/HostingPromo.svelte';
   import { isLoggedIn } from '$lib/stores/auth.js';
   import { instanceName } from '$lib/stores/instance.js';
@@ -23,10 +24,7 @@
   <header class="public-header">
     <div class="public-header-inner">
       <a href="/" class="public-logo">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-          <rect rx="6" width="28" height="28" fill="var(--color-primary)" />
-          <text x="14" y="19.5" text-anchor="middle" fill="white" font-size="15" font-weight="700">H</text>
-        </svg>
+        <BrandMark size={28} />
         <span>{$instanceName}</span>
       </a>
       <nav class="public-header-nav">

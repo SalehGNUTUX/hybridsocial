@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { instanceName } from '$lib/stores/instance.js';
+  import BrandMark from '$lib/components/ui/BrandMark.svelte';
   import Toast from '$lib/components/ui/Toast.svelte';
   import { cookieConsent, hasConsented } from '$lib/stores/consent.js';
   import CookieBanner from '$lib/components/ui/CookieBanner.svelte';
@@ -24,10 +25,7 @@
   <div class="landing-hero">
     <div class="landing-hero-inner">
       <div class="hero-logo">
-        <svg width="36" height="36" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-          <rect rx="6" width="28" height="28" fill="var(--color-primary)" />
-          <text x="14" y="19.5" text-anchor="middle" fill="white" font-size="15" font-weight="700">H</text>
-        </svg>
+        <BrandMark size={36} />
         <span class="hero-logo-text">{$instanceName}</span>
       </div>
 
