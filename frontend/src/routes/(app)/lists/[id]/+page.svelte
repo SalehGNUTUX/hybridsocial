@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import type { Post, Identity } from '$lib/api/types.js';
+  import type { Identity } from '$lib/api/types.js';
   import type { List } from '$lib/api/lists.js';
   import {
     getList,
@@ -15,18 +15,23 @@
   } from '$lib/api/lists.js';
   import { search } from '$lib/api/search.js';
   import FeedList from '$lib/components/feed/FeedList.svelte';
+  import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import { instanceName } from '$lib/stores/instance.js';
 
   let list = $state<List | null>(null);
-  let posts = $state<Post[]>([]);
   let members = $state<Identity[]>([]);
   let loading = $state(true);
-  let postsLoading = $state(false);
-  let postsCursor = $state<string | null>(null);
-  let hasMorePosts = $state(true);
+
+  let listId = $derived(page.params.id!);
+
+  // List posts paginate on a server `next_cursor` envelope.
+  const feed = createEntityFeed(async (cursor) => {
+    const result = await getListTimeline(listId, cursor ?? undefined);
+    return { items: result.data, nextCursor: result.next_cursor };
+  });
 
   // Edit title
   let editingTitle = $state(false);
@@ -45,41 +50,18 @@
   let adding = $state(false);
   let addTimeout: ReturnType<typeof setTimeout> | undefined;
 
-  let listId = $derived(page.params.id!);
-
   onMount(async () => {
     try {
-      const [l, timeline] = await Promise.all([
-        getList(listId),
-        getListTimeline(listId)
-      ]);
+      // Load list metadata and the first page of posts in parallel.
+      const [l] = await Promise.all([getList(listId), feed.reset()]);
       list = l;
       editTitle = l.title || l.name;
-      posts = timeline.data;
-      postsCursor = timeline.next_cursor;
-      hasMorePosts = !!timeline.next_cursor;
     } catch {
       // Error loading
     } finally {
       loading = false;
     }
   });
-
-  async function loadMorePosts() {
-    if (!postsCursor || !hasMorePosts || postsLoading) return;
-    postsLoading = true;
-    try {
-      const result = await getListTimeline(listId, postsCursor);
-      const seen = new Set(posts.map((p) => p.id));
-      posts = [...posts, ...result.data.filter((p) => !seen.has(p.id))];
-      postsCursor = result.next_cursor;
-      hasMorePosts = !!result.next_cursor;
-    } catch {
-      // Error
-    } finally {
-      postsLoading = false;
-    }
-  }
 
   function startEditTitle() {
     if (list) {
@@ -243,11 +225,11 @@
     </div>
 
     <FeedList
-      {posts}
-      loading={postsLoading}
-      hasMore={hasMorePosts}
+      posts={feed.posts}
+      loading={feed.loading}
+      hasMore={feed.hasMore}
       emptyMessage="No posts from list members yet. Add some members to get started."
-      onloadmore={loadMorePosts}
+      onloadmore={feed.loadMore}
     />
   {:else}
     <div class="page-error">

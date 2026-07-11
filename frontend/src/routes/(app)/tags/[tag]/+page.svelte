@@ -2,35 +2,23 @@
   import { instanceName } from '$lib/stores/instance.js';
   import { untrack } from 'svelte';
   import { page } from '$app/state';
-  import type { Post } from '$lib/api/types.js';
   import { api } from '$lib/api/client.js';
   import { getHashtagTimeline } from '$lib/api/timelines.js';
   import FeedList from '$lib/components/feed/FeedList.svelte';
+  import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
 
   let tag = $derived(page.params.tag!);
-  let posts: Post[] = $state([]);
-  let loading = $state(true);
-  let hasMore = $state(true);
-  let cursor: string | null = $state(null);
   let isFollowing = $state(false);
   let followLoading = $state(false);
   let isMuted = $state(false);
   let muteLoading = $state(false);
 
-  async function loadTimeline(reset = false) {
-    if (reset) { posts = []; cursor = null; hasMore = true; }
-    loading = true;
-    try {
-      const params: Record<string, string> = {};
-      if (cursor) params.cursor = cursor;
-      const result = await getHashtagTimeline(tag, params);
-      const items = Array.isArray(result) ? result : (result as any).data || [];
-      posts = reset ? items : [...posts, ...items];
-      cursor = items.length > 0 ? items[items.length - 1]?.id : null;
-      hasMore = items.length >= 20;
-    } catch { /* */ }
-    finally { loading = false; }
-  }
+  // The closure reads the current `tag` at call time, so a reset after a
+  // /tags/a -> /tags/b navigation fetches the new tag.
+  const feed = createEntityFeed(async (cursor) => {
+    const result = await getHashtagTimeline(tag, cursor ? { cursor } : {});
+    return Array.isArray(result) ? result : ((result as any).data ?? []);
+  });
 
   async function checkTagStatus() {
     // Single round-trip for both "following" and "muted" flags so the
@@ -81,7 +69,7 @@
   $effect(() => {
     if (tag) {
       untrack(() => {
-        loadTimeline(true);
+        feed.reset();
         checkTagStatus();
       });
     }
@@ -131,10 +119,10 @@
   </div>
 
   <FeedList
-    {posts}
-    {loading}
-    {hasMore}
-    onloadmore={() => loadTimeline(false)}
+    posts={feed.posts}
+    loading={feed.loading}
+    hasMore={feed.hasMore}
+    onloadmore={feed.loadMore}
     emptyMessage="No posts with #{tag} yet."
   />
 </div>

@@ -46,6 +46,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import FeedList from './FeedList.svelte';
+  import { createEntityFeed } from '$lib/feed/entity-feed.svelte.js';
   import FeedTabs from './FeedTabs.svelte';
   import NewPostsBanner from './NewPostsBanner.svelte';
   import {
@@ -70,10 +71,6 @@
   // Hydrate synchronously from the cache (if any) so the DOM keeps its
   // heights for scroll restoration and we can skip the initial fetch.
   const cached = cache?.read() ?? null;
-  let posts: Post[] = $state(cached?.posts ?? []);
-  let loading = $state(cached === null);
-  let hasMore = $state(cached?.hasMore ?? true);
-  let cursor: string | null = $state(cached?.cursor ?? null);
   let activeId = $state<string>(cached?.tabId ?? tabs[0]?.id);
 
   let activeTab = $derived(tabs.find((t) => t.id === activeId) ?? tabs[0]);
@@ -84,42 +81,33 @@
   let lastScrollY = cached?.scrollY ?? 0;
 
   function persist() {
-    cache?.write({ posts, cursor, hasMore, tabId: activeId, scrollY: lastScrollY });
+    cache?.write({
+      posts: feed.posts,
+      cursor: feed.cursor,
+      hasMore: feed.hasMore,
+      tabId: activeId,
+      scrollY: lastScrollY,
+    });
   }
 
-  async function loadFeed(reset = false) {
-    if (reset) {
-      posts = [];
-      cursor = null;
-      hasMore = true;
-    }
-    loading = true;
-    try {
-      const items = await activeTab.load(cursor);
-      if (reset) {
-        posts = items;
-      } else {
-        // Dedupe on append — the boundary post can repeat across pages.
-        const seen = new Set(posts.map((p) => p.id));
-        posts = [...posts, ...items.filter((p) => !seen.has(p.id))];
-      }
-      // Cursor must be a POST id — reach through a boost entry at the
-      // tail so the next page's row-tuple WHERE anchors to a real row.
-      const last: any = items.length > 0 ? items[items.length - 1] : null;
-      cursor = last?.type === 'boost' ? (last.post?.id ?? null) : (last?.id ?? null);
-      hasMore = items.length >= 20;
-      persist();
-    } catch {
-      // Handle silently
-    } finally {
-      loading = false;
-    }
-  }
+  // The single shared feed engine — the same one profile/group/page/tags/
+  // bookmarks/lists use. Pagination, dedupe and cursor live there; this
+  // component only layers the real-time stream, new-posts banner,
+  // optimistic composer updates and scroll restoration on top. The fetch
+  // closure reads `activeTab` at call time, so a reset after switchTab
+  // fetches the newly-selected tab.
+  const feed = createEntityFeed((cursor) => activeTab.load(cursor), 20, {
+    initial: cached
+      ? { posts: cached.posts, cursor: cached.cursor, hasMore: cached.hasMore }
+      : null,
+    initialLoading: cached === null,
+    onChange: persist,
+  });
 
   function switchTab(id: string) {
     if (id === activeId) return;
     activeId = id;
-    loadFeed(true);
+    feed.reset();
     wireStream();
   }
 
@@ -136,10 +124,9 @@
   function mergeQueued() {
     const queued = flushQueue();
     if (queued.length > 0) {
-      const existing = new Set(posts.map((p) => p.id));
+      const existing = new Set(feed.posts.map((p) => p.id));
       const fresh = queued.filter((p) => !existing.has(p.id));
-      posts = maybeTruncate([...fresh, ...posts]);
-      persist();
+      feed.set(maybeTruncate([...fresh, ...feed.posts]));
     }
     scrollToTop();
   }
@@ -210,9 +197,7 @@
     const p = (e as CustomEvent<Post>).detail;
     if (!p || p.parent_id) return;
     if (activeTab.accepts && !activeTab.accepts(p)) return;
-    if (posts.some((x) => x.id === p.id)) return;
-    posts = [p, ...posts];
-    persist();
+    feed.prepend(p);
   }
 
   // Swap an optimistic post for the real server response. Guard against
@@ -220,34 +205,31 @@
   function handlePostReplace(e: Event) {
     const { oldId, post } = (e as CustomEvent<{ oldId: string; post: Post }>).detail;
     if (!oldId || !post) return;
-    const realPresent = posts.some((p) => p.id === post.id && p.id !== oldId);
-    if (realPresent) posts = posts.filter((p) => p.id !== oldId);
-    else posts = posts.map((p) => (p.id === oldId ? post : p));
-    persist();
+    feed.replaceById(oldId, post);
   }
 
   // Live post from the stream (already audience-filtered by the store).
+  // Prepend + truncate the tail so a long-running stream doesn't grow the
+  // list unbounded.
   function handleTimelineUpdate(e: Event) {
     const post = (e as CustomEvent<Post>).detail;
     if (!post || post.parent_id) return;
-    if (posts.some((p) => p.id === post.id)) return;
-    posts = maybeTruncate([post, ...posts]);
-    persist();
+    if (feed.posts.some((p) => p.id === post.id)) return;
+    feed.set(maybeTruncate([post, ...feed.posts]));
   }
 
   // In-place edit of an already-visible post.
   function handleStatusUpdate(e: Event) {
     const updated = (e as CustomEvent<Post>).detail;
     if (!updated) return;
-    posts = posts.map((p) => (p.id === updated.id ? updated : p));
-    persist();
+    feed.updateById(updated);
   }
 
   onMount(() => {
     // Skip the initial fetch when hydrated from cache — refetching would
     // wipe the posts and break scroll restoration.
     if (cached === null) {
-      loadFeed(true);
+      feed.reset();
     } else {
       // Same posts are already in the DOM; put the user back where they
       // were before they opened the post.
@@ -290,10 +272,10 @@
   {/if}
 
   <FeedList
-    {posts}
-    {loading}
-    {hasMore}
-    onloadmore={() => loadFeed(false)}
+    posts={feed.posts}
+    loading={feed.loading}
+    hasMore={feed.hasMore}
+    onloadmore={feed.loadMore}
     emptyMessage={activeTab?.emptyMessage ?? 'Nothing here yet'}
     {filterContext}
   />
