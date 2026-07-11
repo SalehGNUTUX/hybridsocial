@@ -1393,9 +1393,13 @@
     }
 
     /* Clear the absolutely-positioned avatar for the header rows only; the
-       body below spans the full width. 52px = avatar (44) + ~8px gap. */
-    .post-pinned-indicator,
-    .post-author-line {
+       body below spans the full width. 52px = avatar (44) + ~8px gap.
+       The `.post-layout` prefix bumps specificity above the base
+       `.post-pinned-indicator { padding-inline-start: 2px }` rule, which
+       is later in the stylesheet and would otherwise win in LTR and slide
+       the "Pinned" label under the avatar (clipping it to "...ed"). */
+    .post-layout .post-pinned-indicator,
+    .post-layout .post-author-line {
       padding-left: 52px;
       min-height: 44px;
     }
