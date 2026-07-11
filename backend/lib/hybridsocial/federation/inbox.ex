@@ -374,6 +374,18 @@ defmodule Hybridsocial.Federation.Inbox do
             notify_remote_reply(post, parent_id)
             notify_remote_quote(post, ap_object)
 
+            # Live-feed streaming: push new TOP-LEVEL remote posts to the same
+            # streams local posts use (Posts.create_post) so the Global feed
+            # shows them in real time and ticks its "N new posts" banner, and a
+            # local user following a remote account gets a live home update.
+            # Without this, only LOCAL posts ever reached `timeline:public`, so
+            # the (federated) Global feed never updated. Replies are skipped —
+            # they don't belong in the public/global timeline (which filters on
+            # parent_ap_id) and the client drops them anyway. Backfilled thread
+            # ancestors never reach this path, so old posts don't masquerade as
+            # new.
+            if is_nil(parent_ap_id), do: stream_remote_post(post)
+
             # Thread-bump the ancestors if we linked a local parent —
             # same semantics as local reply creation in Posts.create_post.
             # Without this, a reply from federation wouldn't surface the
@@ -455,6 +467,21 @@ defmodule Hybridsocial.Federation.Inbox do
     body_tags = Posts.extract_hashtags(post.content)
     Posts.link_hashtags(post, ap_tags ++ body_tags)
     :ok
+  end
+
+  # Serialize a freshly-ingested remote post and push it to the live streams
+  # exactly as Posts.create_post does for local posts (public timeline +
+  # follower home fan-out + hashtag topics). Best-effort: a serialization
+  # hiccup on an odd remote object must never fail the ingestion.
+  defp stream_remote_post(%Post{} = post) do
+    # The post is fresh from Repo.insert with no associations loaded; the
+    # serializer needs the same preloads Posts.create_post uses. Attachments
+    # and poll were persisted just above, so they're in the DB now.
+    post = Repo.preload(post, [:media_attachments, :identity, poll: :options])
+    serialized = HybridsocialWeb.Serializers.PostSerializer.serialize(post, [])
+    Hybridsocial.Streaming.broadcast_post(serialized)
+  rescue
+    e -> Logger.warning("Failed to stream remote post #{post.id}: #{inspect(e)}")
   end
 
   # Persist a remote poll's options + cached vote counts so the

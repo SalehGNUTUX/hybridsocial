@@ -352,6 +352,58 @@ defmodule Hybridsocial.Federation.InboxTest do
       assert {:ok, _deleted} = Inbox.process(delete_activity)
       assert Repo.get!(Post, parent.id).reply_count == 0
     end
+
+    test "streams a new top-level public remote post to the public timeline" do
+      # Without this the (federated) Global feed never shows new posts nor
+      # ticks its "N new posts" banner — only local posts reached the stream.
+      Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "timeline:public")
+      remote_ap_id = "https://remote.example/users/streamer"
+      create_remote_identity(remote_ap_id, "streamer_remote")
+
+      activity = %{
+        "@context" => "https://www.w3.org/ns/activitystreams",
+        "id" => "https://remote.example/activities/create-stream-1",
+        "type" => "Create",
+        "actor" => remote_ap_id,
+        "object" => %{
+          "id" => "https://remote.example/objects/stream-note-1",
+          "type" => "Note",
+          "content" => "<p>Streamed remote post</p>",
+          "attributedTo" => remote_ap_id,
+          "published" => "2026-03-22T10:00:00Z",
+          "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+        }
+      }
+
+      assert {:ok, _post} = Inbox.process(activity)
+      assert_receive %{event: "update", payload: _payload}, 1000
+    end
+
+    test "does NOT stream a remote reply to the public timeline" do
+      Phoenix.PubSub.subscribe(Hybridsocial.PubSub, "timeline:public")
+      remote_ap_id = "https://remote.example/users/streamreplier"
+      create_remote_identity(remote_ap_id, "streamreplier_remote")
+
+      activity = %{
+        "@context" => "https://www.w3.org/ns/activitystreams",
+        "id" => "https://remote.example/activities/create-stream-reply-1",
+        "type" => "Create",
+        "actor" => remote_ap_id,
+        "object" => %{
+          "id" => "https://remote.example/objects/stream-reply-1",
+          "type" => "Note",
+          "content" => "<p>A reply</p>",
+          "attributedTo" => remote_ap_id,
+          # inReplyTo makes parent_ap_id non-nil -> it's a reply -> not streamed.
+          "inReplyTo" => "https://remote.example/objects/some-parent",
+          "published" => "2026-03-22T10:00:00Z",
+          "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+        }
+      }
+
+      assert {:ok, _reply} = Inbox.process(activity)
+      refute_receive %{event: "update"}, 300
+    end
   end
 
   describe "process/1 - Update (poll-vote contract)" do
