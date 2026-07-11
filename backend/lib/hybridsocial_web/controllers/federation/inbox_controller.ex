@@ -2,7 +2,7 @@ defmodule HybridsocialWeb.Federation.InboxController do
   use HybridsocialWeb, :controller
 
   alias Hybridsocial.Federation
-  alias Hybridsocial.Federation.{Inbox, ActivityMapper}
+  alias Hybridsocial.Federation.{ActivityMapper, Containment, Inbox, ObjectResolver}
 
   plug HybridsocialWeb.Plugs.DigestPlug
 
@@ -26,10 +26,9 @@ defmodule HybridsocialWeb.Federation.InboxController do
 
   defp process_inbox(conn, activity) do
     with {:ok, key_id} <- verify_http_signature(conn),
-         :ok <- check_actor_matches_key(activity, key_id),
          :ok <- check_sender_policy(activity),
          :ok <- check_dedup(activity),
-         {:ok, _result} <- Inbox.process(activity) do
+         {:ok, _result} <- authorize_and_process(activity, key_id) do
       # Record the activity for dedup
       record_activity_dedup(activity)
 
@@ -109,11 +108,12 @@ defmodule HybridsocialWeb.Federation.InboxController do
         {:error, :signature_invalid}
 
       actor_origin != key_origin ->
-        Logger.warning(
-          "Inbox: cross-origin signature rejected — actor origin #{actor_origin} != keyId origin #{key_origin}"
-        )
-
-        {:error, :signature_invalid}
+        # Not necessarily an attack: this is what a RELAY or a reply-
+        # forwarding server looks like (server B forwards server C's
+        # activity, signing the delivery with B's key). We can't trust B's
+        # copy, but we can accept the content if it genuinely exists on the
+        # author's own origin — see authorize_and_process/2.
+        {:error, :cross_origin}
 
       true ->
         :ok
@@ -121,6 +121,76 @@ defmodule HybridsocialWeb.Federation.InboxController do
   end
 
   defp check_actor_matches_key(_activity, _key_id), do: {:error, :missing_actor}
+
+  # Decide whether to process the delivered activity as-is or, for a
+  # cross-origin (forwarded/relayed) delivery, re-derive and process the
+  # authentic object from its own origin.
+  defp authorize_and_process(activity, key_id) do
+    case check_actor_matches_key(activity, key_id) do
+      :ok ->
+        # Same-origin signature (or signature checks disabled): the signer
+        # owns the actor, so the delivered body is trusted.
+        Inbox.process(activity)
+
+      {:error, :cross_origin} ->
+        verify_forwarded_activity(activity)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # A forwarded/relayed activity is signed by a server other than the
+  # author's. Rather than hard-reject it (which silently drops legitimate
+  # relayed replies and breaks threads), we dereference the object from ITS
+  # OWN origin and process that authentic copy — never the forwarder's. We
+  # only accept when the object genuinely lives on, and is authored by, the
+  # claimed actor's origin; anything else is treated as spoofing and rejected
+  # exactly as before.
+  defp verify_forwarded_activity(activity) do
+    actor = Containment.get_actor(activity)
+    object_id = Containment.get_object(activity)
+    actor_origin = actor && origin(actor)
+
+    cond do
+      is_nil(actor_origin) or is_nil(object_id) ->
+        log_forward_reject("no dereferenceable object", actor)
+        {:error, :signature_invalid}
+
+      origin(object_id) != actor_origin ->
+        # The object isn't hosted on the claimed author's server.
+        log_forward_reject("object #{object_id} off actor origin #{actor_origin}", actor)
+        {:error, :signature_invalid}
+
+      true ->
+        case ObjectResolver.resolve(object_id) do
+          {:ok, obj} when is_map(obj) ->
+            author = obj["attributedTo"] || obj["actor"]
+
+            if origin(actor_id(author)) == actor_origin do
+              Logger.info("Inbox: accepted forwarded activity via origin fetch of #{object_id}")
+              # Trust ONLY the freshly-fetched object, not the forwarder's.
+              Inbox.process(Map.put(activity, "object", obj))
+            else
+              log_forward_reject("fetched object attributedTo mismatch (#{object_id})", actor)
+              {:error, :signature_invalid}
+            end
+
+          other ->
+            log_forward_reject("dereference failed #{inspect(other)} (#{object_id})", actor)
+            {:error, :signature_invalid}
+        end
+    end
+  end
+
+  # attributedTo/actor may be a bare id or an embedded map.
+  defp actor_id(id) when is_binary(id), do: id
+  defp actor_id(%{"id" => id}) when is_binary(id), do: id
+  defp actor_id(_), do: nil
+
+  defp log_forward_reject(why, actor) do
+    Logger.warning("Inbox: forwarded activity rejected — #{why} (actor #{inspect(actor)})")
+  end
 
   defp origin(url) do
     case URI.parse(url) do
