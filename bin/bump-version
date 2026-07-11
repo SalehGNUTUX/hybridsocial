@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#
+# Bump the platform version across the monorepo and tag the release.
+#
+#   bin/bump-version 0.2.0
+#
+# backend/mix.exs is the single source of truth — Hybridsocial.Instance.version/0
+# derives from it via the compiled app spec, and frontend shows it from the
+# instance API, so only mix.exs (and package.json, for tooling parity) change.
+# Creates the commit + annotated tag v<version>; the git SHA is stamped into
+# each build automatically at deploy time, so you only bump when cutting a
+# meaningful release (semver: MAJOR breaking / MINOR feature / PATCH fix).
+set -euo pipefail
+
+VERSION="${1:-}"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+  echo "usage: bin/bump-version <semver>    e.g. bin/bump-version 0.2.0" >&2
+  exit 1
+fi
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "error: working tree not clean — commit or stash first" >&2
+  exit 1
+fi
+if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+  echo "error: tag v$VERSION already exists" >&2
+  exit 1
+fi
+
+CURRENT="$(sed -nE 's/.*version: "([0-9]+\.[0-9]+\.[0-9]+[^"]*)".*/\1/p' backend/mix.exs | head -1)"
+echo "bumping $CURRENT -> $VERSION"
+
+# backend/mix.exs — the source of truth
+sed -i -E "s/(version: )\"[0-9]+\.[0-9]+\.[0-9]+[^\"]*\"/\1\"$VERSION\"/" backend/mix.exs
+# frontend/package.json — display comes from the API, but keep it in sync
+sed -i -E "s/(\"version\": )\"[0-9]+\.[0-9]+\.[0-9]+[^\"]*\"/\1\"$VERSION\"/" frontend/package.json
+
+git add backend/mix.exs frontend/package.json
+git commit -m "chore(release): v$VERSION"
+git tag -a "v$VERSION" -m "Release v$VERSION"
+
+cat <<EOF
+
+Bumped to v$VERSION and created tag v$VERSION.
+Next:
+  git push && git push origin v$VERSION
+  # then deploy — the build stamps the git SHA automatically:
+  #   GIT_SHA=\$(git rev-parse --short HEAD) BUILD_DATE=\$(date -u +%FT%TZ) \\
+  #   docker compose -f docker-compose-production.yml build \\
+  #     --build-arg GIT_SHA=\$GIT_SHA --build-arg BUILD_DATE=\$BUILD_DATE backend
+EOF

@@ -33,6 +33,15 @@ ENV MIX_ENV=prod \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
+# Build identity — pass with `docker compose build --build-arg GIT_SHA=... `
+# so the running release reports exactly which commit it was built from
+# (deploys are rsync + rebuild, so semver alone can't identify a build).
+# Defaults to "dev" when not supplied.
+ARG GIT_SHA=dev
+ARG BUILD_DATE=
+ENV HS_GIT_SHA=$GIT_SHA \
+    HS_BUILD_DATE=$BUILD_DATE
+
 WORKDIR /app
 
 # Install runtime dependencies (Elixir/OTP already present from base)

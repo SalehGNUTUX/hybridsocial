@@ -110,6 +110,7 @@
   // so admins who configure a fork's source_url (or bump the version
   // in mix.exs) don't need a frontend redeploy to see it.
   let instanceVersion = $state<string | null>(null);
+  let instanceBuildSha = $state<string>('');
   let instanceSourceUrl = $state<string>('https://github.com/qfiber/hybridsocial');
 
   // Promoted first, then server suggestions, then any prop-passed
@@ -218,11 +219,16 @@
     // Instance meta for the footer. Non-blocking — if this 404s or
     // errors, the footer just omits the version/source line.
     try {
-      const info = await api.get<{ version?: string; source_url?: string }>(
-        '/api/v1/instance/info'
-      );
+      const info = await api.get<{
+        version?: string;
+        source_url?: string;
+        build?: { sha?: string; date?: string };
+      }>('/api/v1/instance/info');
       if (info?.version) instanceVersion = info.version;
       if (info?.source_url) instanceSourceUrl = info.source_url;
+      // The exact commit the running build was made from. 'dev' = a build
+      // that wasn't stamped (e.g. local), so we just omit it.
+      if (info?.build?.sha && info.build.sha !== 'dev') instanceBuildSha = info.build.sha;
     } catch {
       // ignore
     }
@@ -552,7 +558,7 @@
         </svg>
         HybridSocial
       </a>
-      {#if instanceVersion}<span class="footer-version">v{instanceVersion}</span>{/if}
+      {#if instanceVersion}<span class="footer-version" title={instanceBuildSha ? `build ${instanceBuildSha}` : ''}>v{instanceVersion}{#if instanceBuildSha}<span class="footer-build"> ({instanceBuildSha})</span>{/if}</span>{/if}
     </p>
   </section>
 </aside>
@@ -1333,6 +1339,10 @@
     padding: 1px 6px;
     border-radius: var(--radius-full);
     color: var(--color-text-secondary);
+  }
+
+  .footer-build {
+    color: var(--color-text-tertiary);
   }
 
   @media (max-width: 1280px) {

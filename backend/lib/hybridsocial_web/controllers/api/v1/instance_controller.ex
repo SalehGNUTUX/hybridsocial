@@ -14,6 +14,12 @@ defmodule HybridsocialWeb.Api.V1.InstanceController do
       turnstile_site_key: turnstile_key,
       registration_mode: reg_mode,
       version: Hybridsocial.Instance.version(),
+      # Build identity so admins can confirm exactly which commit is running
+      # (deploys are rsync + rebuild, so the semver alone isn't enough).
+      build: %{
+        sha: Hybridsocial.Instance.build_sha(),
+        date: Hybridsocial.Instance.build_date()
+      },
       # Upstream source — admins can point this at a fork in config,
       # otherwise defaults to the canonical repo. Used by the footer
       # "view source" link.

@@ -4,10 +4,29 @@ defmodule Hybridsocial.Instance do
   alias Hybridsocial.Repo
   alias Hybridsocial.Config
 
-  @version "0.1.0"
+  @doc """
+  Canonical semver — read from mix.exs via the compiled app spec, so it's
+  a single source of truth (no more hand-syncing a hardcoded copy).
+  """
+  def version, do: to_string(Application.spec(:hybridsocial, :vsn) || ~c"0.0.0")
 
-  @doc "Canonical version string. Kept in sync with mix.exs."
-  def version, do: @version
+  @doc """
+  Short git SHA the running release was built from ('dev' when built
+  without it, e.g. locally). Injected at Docker build time as HS_GIT_SHA
+  (see backend/Dockerfile) so you can tell exactly which commit is deployed.
+  """
+  def build_sha, do: System.get_env("HS_GIT_SHA") || "dev"
+
+  @doc "UTC build timestamp of the running release (ISO 8601), or '' locally."
+  def build_date, do: System.get_env("HS_BUILD_DATE") || ""
+
+  @doc "Version plus build metadata, e.g. `0.2.0+abc1234`."
+  def full_version do
+    case build_sha() do
+      s when s in [nil, "", "dev"] -> version()
+      sha -> "#{version()}+#{sha}"
+    end
+  end
 
   @features [
     "mastodon_api",
@@ -48,7 +67,7 @@ defmodule Hybridsocial.Instance do
         Config.get("instance_short_description", Config.get("instance_description", "")),
       description: Config.get("instance_description", ""),
       email: Config.get("contact_email", ""),
-      version: "2.7.2 (compatible; Pleroma 2.6.50; HybridSocial #{@version})",
+      version: "2.7.2 (compatible; Pleroma 2.6.50; HybridSocial #{version()})",
       urls: %{
         streaming_api: String.replace(base_url, "http", "ws") <> "/socket"
       },
@@ -186,7 +205,7 @@ defmodule Hybridsocial.Instance do
   def nodeinfo do
     %{
       version: "2.0",
-      software: %{name: "hybridsocial", version: @version},
+      software: %{name: "hybridsocial", version: version()},
       protocols: ["activitypub"],
       usage: %{
         users: %{total: user_count(), activeMonth: active_users_count(30)},
