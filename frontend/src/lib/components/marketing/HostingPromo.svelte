@@ -52,7 +52,17 @@
   .hosting-promo {
     --promo-accent: var(--color-primary);
     display: block;
-    background: linear-gradient(180deg, var(--color-primary-soft, #e8fbf7) 0%, var(--color-surface-raised, #ffffff) 100%);
+    /* Opaque surface base UNDER the gradient: the top stop
+       (--color-primary-soft) is translucent in dark mode, so without a
+       solid base it composites over whatever is behind the card (e.g. a
+       light page bg) and washes out. Anchoring to --color-surface-raised
+       keeps it correct in both themes. */
+    background-color: var(--color-surface-raised);
+    background-image: linear-gradient(
+      180deg,
+      var(--color-primary-soft, #e8fbf7) 0%,
+      var(--color-surface-raised, #ffffff) 100%
+    );
     border: 1px solid var(--color-primary-soft, #cbeee6);
     border-radius: var(--radius-xl);
     padding: var(--space-5);

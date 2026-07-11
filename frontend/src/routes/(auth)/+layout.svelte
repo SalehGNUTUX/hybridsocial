@@ -207,7 +207,13 @@
     padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
     position: relative;
     overflow: visible;
-    background: linear-gradient(180deg, #f7f8fa 0%, #e8ecf1 100%);
+    /* Token-based so it flips with the dark theme — hardcoded light hex
+       here left light text unreadable on the marketing side in dark mode. */
+    background: linear-gradient(
+      180deg,
+      var(--color-surface-container-low) 0%,
+      var(--color-surface-container) 100%
+    );
   }
 
   /* Extend hero background to left edge of viewport */

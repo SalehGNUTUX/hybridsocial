@@ -91,7 +91,7 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: #f5f6f8;
+    background: var(--color-bg);
   }
 
   /* ---- Header ---- */

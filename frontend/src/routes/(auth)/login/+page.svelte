@@ -745,7 +745,7 @@
     background: none; border: none; color: var(--color-text-tertiary); cursor: pointer;
     padding: 4px; border-radius: 50%;
   }
-  .passkey-close:hover { color: var(--color-text-secondary); background: #f3f4f6; }
+  .passkey-close:hover { color: var(--color-text-secondary); background: var(--color-surface-container); }
 
   .passkey-icon-wrap { margin-bottom: 16px; }
   .passkey-icon { font-size: 40px; color: var(--color-primary); }
