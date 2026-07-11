@@ -10,7 +10,10 @@ defmodule Hybridsocial.HTTP do
 
   Semantics deliberately matched to HTTPoison, NOT Req defaults:
     * redirects are NOT followed unless `follow_redirect: true` (Req
-      follows by default — an SSRF-relevant difference).
+      follows by default — an SSRF-relevant difference). When they are
+      followed, the chain is capped at `max_redirect` (default 4, down
+      from Req's default of 10) so a misconfigured or hostile peer can't
+      send us around a long or looping chain.
     * no automatic retries (Req retries by default).
     * the body is returned raw (never auto-decoded) — callers Jason.decode
       themselves, as they did with HTTPoison.
@@ -47,25 +50,41 @@ defmodule Hybridsocial.HTTP do
         headers: headers,
         decode_body: false,
         retry: false,
-        redirect: Keyword.get(opts, :follow_redirect, false)
+        redirect: Keyword.get(opts, :follow_redirect, false),
+        # Bound the redirect chain (Req's default is 10). Callers may pass a
+        # lower `max_redirect`; anything past this stops rather than looping.
+        max_redirects: Keyword.get(opts, :max_redirect, 4)
       ]
       |> maybe_put(:body, request_body(method, body))
       |> maybe_put(:params, Keyword.get(opts, :params))
       |> put_receive_timeout(opts)
       |> put_connect_options(opts)
 
-    case Req.request(req_opts) do
-      {:ok, %Req.Response{status: status, body: rbody, headers: rheaders}} ->
-        {:ok,
-         %Response{
-           status_code: status,
-           body: to_binary(rbody),
-           headers: to_header_list(rheaders),
-           request_url: url
-         }}
+    try do
+      case Req.request(req_opts) do
+        {:ok, %Req.Response{status: status, body: rbody, headers: rheaders}} ->
+          {:ok,
+           %Response{
+             status_code: status,
+             body: to_binary(rbody),
+             headers: to_header_list(rheaders),
+             request_url: url
+           }}
 
-      {:error, exception} ->
-        {:error, %Error{reason: error_reason(exception)}}
+        {:error, exception} ->
+          {:error, %Error{reason: error_reason(exception)}}
+      end
+    rescue
+      # Req raises `RuntimeError "too many redirects (N)"` when a chain
+      # exceeds `max_redirects`. Surface it as a normal `{:error, _}` (like
+      # any other fetch failure) instead of letting it crash the caller.
+      # Re-raise anything else so real bugs aren't swallowed.
+      e in RuntimeError ->
+        if e.message =~ "too many redirects" do
+          {:error, %Error{reason: :too_many_redirects}}
+        else
+          reraise e, __STACKTRACE__
+        end
     end
   end
 
