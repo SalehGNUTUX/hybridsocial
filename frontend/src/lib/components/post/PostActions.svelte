@@ -1638,6 +1638,7 @@
   }
 
   .action-btn {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -1654,6 +1655,20 @@
 
   .action-btn:hover {
     background: var(--color-surface);
+  }
+
+  /* On touch devices, extend the tappable area to the 44px minimum without
+     changing the button's appearance: a transparent overlay grows only the
+     block axis (so adjacent buttons don't overlap across the 2px gap). The
+     visible button is untouched — this is a functional hit-target fix, not a
+     visual/design change. Coarse-pointer only, so mouse users are unaffected. */
+  @media (pointer: coarse) {
+    .action-btn::after {
+      content: '';
+      position: absolute;
+      inset-block: -8px;
+      inset-inline: 0;
+    }
   }
 
   .action-icon {
