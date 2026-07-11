@@ -16,8 +16,12 @@ COPY . .
 # Use production svelte config with adapter-node
 RUN cp svelte.config.node.js svelte.config.js
 
-# Build
+# Build. VITE_WEB_SHA is baked into the bundle (import.meta.env) so the
+# footer can show which frontend commit is deployed. Pass with
+# `docker compose build --build-arg GIT_SHA=<short-sha> frontend`.
+ARG GIT_SHA=dev
 ENV NODE_ENV=production
+ENV VITE_WEB_SHA=$GIT_SHA
 RUN npm run build
 
 # Stage 2: Runtime

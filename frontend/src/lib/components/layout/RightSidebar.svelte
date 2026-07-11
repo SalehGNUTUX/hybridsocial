@@ -113,6 +113,19 @@
   let instanceBuildSha = $state<string>('');
   let instanceSourceUrl = $state<string>('https://github.com/qfiber/hybridsocial');
 
+  // Frontend build commit, baked in at build time by Vite. instanceBuildSha
+  // (below) is the BACKEND's build commit from the API — the two are deployed
+  // independently and can differ, so the footer shows both (web · api).
+  const webSha =
+    import.meta.env.VITE_WEB_SHA && import.meta.env.VITE_WEB_SHA !== 'dev'
+      ? String(import.meta.env.VITE_WEB_SHA)
+      : '';
+  let buildLabel = $derived(
+    [webSha ? `web ${webSha}` : '', instanceBuildSha ? `api ${instanceBuildSha}` : '']
+      .filter(Boolean)
+      .join(' · '),
+  );
+
   // Promoted first, then server suggestions, then any prop-passed
   // accounts — deduped by handle so a promoted account can't appear twice.
   let allPool = $derived.by(() => {
@@ -558,7 +571,7 @@
         </svg>
         HybridSocial
       </a>
-      {#if instanceVersion}<span class="footer-version" title={instanceBuildSha ? `build ${instanceBuildSha}` : ''}>v{instanceVersion}{#if instanceBuildSha}<span class="footer-build"> ({instanceBuildSha})</span>{/if}</span>{/if}
+      {#if instanceVersion}<span class="footer-version" title={buildLabel}>v{instanceVersion}{#if buildLabel}<span class="footer-build"> ({buildLabel})</span>{/if}</span>{/if}
     </p>
   </section>
 </aside>
