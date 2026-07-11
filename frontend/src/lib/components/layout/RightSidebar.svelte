@@ -120,11 +120,6 @@
     import.meta.env.VITE_WEB_SHA && import.meta.env.VITE_WEB_SHA !== 'dev'
       ? String(import.meta.env.VITE_WEB_SHA)
       : '';
-  let buildLabel = $derived(
-    [webSha ? `web ${webSha}` : '', instanceBuildSha ? `api ${instanceBuildSha}` : '']
-      .filter(Boolean)
-      .join(' · '),
-  );
 
   // Promoted first, then server suggestions, then any prop-passed
   // accounts — deduped by handle so a promoted account can't appear twice.
@@ -571,8 +566,14 @@
         </svg>
         HybridSocial
       </a>
-      {#if instanceVersion}<span class="footer-version" title={buildLabel}>v{instanceVersion}{#if buildLabel}<span class="footer-build"> ({buildLabel})</span>{/if}</span>{/if}
+      {#if instanceVersion}<span class="footer-version">v{instanceVersion}</span>{/if}
     </p>
+    {#if webSha || instanceBuildSha}
+      <div class="footer-build">
+        {#if webSha}<span><span class="footer-build-label">web</span>{webSha}</span>{/if}
+        {#if instanceBuildSha}<span><span class="footer-build-label">api</span>{instanceBuildSha}</span>{/if}
+      </div>
+    {/if}
   </section>
 </aside>
 
@@ -1354,8 +1355,27 @@
     color: var(--color-text-secondary);
   }
 
+  /* Build commits, stacked under the version so the row stays clean:
+       web  d7801d5
+       api  7e62b19  */
   .footer-build {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-block-start: 5px;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    line-height: 1.5;
     color: var(--color-text-tertiary);
+  }
+
+  .footer-build-label {
+    display: inline-block;
+    width: 30px;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-size: 0.6rem;
   }
 
   @media (max-width: 1280px) {
