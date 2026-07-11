@@ -8,7 +8,7 @@ defmodule Hybridsocial.Federation.Publisher do
 
   import Ecto.Query
   alias Hybridsocial.Repo
-  alias Hybridsocial.Federation.{Delivery, HTTPSignature}
+  alias Hybridsocial.Federation.{CircuitBreaker, Delivery, HTTPSignature}
   alias Hybridsocial.Social.Follow
 
   @content_type "application/activity+json"
@@ -138,26 +138,38 @@ defmodule Hybridsocial.Federation.Publisher do
       # p50/p95 latency per destination. Wall-clock includes DNS,
       # connect, TLS handshake, request, and read — same thing a real
       # client would experience.
-      started_at_ns = System.monotonic_time(:nanosecond)
+      if not CircuitBreaker.allow?(inbox_url) do
+        # Instance is in the open (persistently-unreachable) state — skip the
+        # network call entirely until its next probe window. Cheap, so the
+        # retry loop can keep flowing without hammering a dead host.
+        {:error, "Skipped: instance circuit open (persistently unreachable)"}
+      else
+        started_at_ns = System.monotonic_time(:nanosecond)
 
-      result =
-        case Hybridsocial.HTTP.post(inbox_url, body, headers,
-               recv_timeout: 15_000,
-               timeout: 15_000
-             ) do
-          {:ok, %{status_code: status}} when status in 200..299 ->
-            {:ok, status}
+        {result, category} =
+          case Hybridsocial.HTTP.post(inbox_url, body, headers,
+                 recv_timeout: 15_000,
+                 timeout: 15_000
+               ) do
+            {:ok, %{status_code: status}} when status in 200..299 ->
+              {{:ok, status}, :ok}
 
-          {:ok, %{status_code: status, body: resp_body}} ->
-            {:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}
+            {:ok, %{status_code: status, body: resp_body}} ->
+              # Server answered — up, just rejected this activity. Soft: does
+              # not trip the breaker (e.g. a 500 on one Delete, 404 per-user).
+              {{:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}, :soft}
 
-          {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
-            {:error, "Connection error: #{inspect(reason)}"}
-        end
+            {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
+              # Connection-level failure — the instance itself is down. Hard.
+              {{:error, "Connection error: #{inspect(reason)}"}, :hard}
+          end
 
-      duration_ms = div(System.monotonic_time(:nanosecond) - started_at_ns, 1_000_000)
-      Process.put(:hs_last_delivery_ms, duration_ms)
-      result
+        CircuitBreaker.record_result(inbox_url, category)
+
+        duration_ms = div(System.monotonic_time(:nanosecond) - started_at_ns, 1_000_000)
+        Process.put(:hs_last_delivery_ms, duration_ms)
+        result
+      end
     end
   end
 
@@ -198,15 +210,26 @@ defmodule Hybridsocial.Federation.Publisher do
         | Enum.map(sig_headers, fn {k, v} -> {k, v} end)
       ]
 
-      case Hybridsocial.HTTP.post(inbox_url, body, headers, recv_timeout: 15_000, timeout: 15_000) do
-        {:ok, %{status_code: status}} when status in 200..299 ->
-          {:ok, status}
+      if not CircuitBreaker.allow?(inbox_url) do
+        {:error, "Skipped: instance circuit open (persistently unreachable)"}
+      else
+        {result, category} =
+          case Hybridsocial.HTTP.post(inbox_url, body, headers,
+                 recv_timeout: 15_000,
+                 timeout: 15_000
+               ) do
+            {:ok, %{status_code: status}} when status in 200..299 ->
+              {{:ok, status}, :ok}
 
-        {:ok, %{status_code: status, body: resp_body}} ->
-          {:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}
+            {:ok, %{status_code: status, body: resp_body}} ->
+              {{:error, "HTTP #{status}: #{String.slice(resp_body, 0, 500)}"}, :soft}
 
-        {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
-          {:error, "Connection error: #{inspect(reason)}"}
+            {:error, %Hybridsocial.HTTP.Error{reason: reason}} ->
+              {{:error, "Connection error: #{inspect(reason)}"}, :hard}
+          end
+
+        CircuitBreaker.record_result(inbox_url, category)
+        result
       end
     else
       Logger.error(

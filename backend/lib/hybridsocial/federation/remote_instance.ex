@@ -25,6 +25,11 @@ defmodule Hybridsocial.Federation.RemoteInstance do
     field :fetched_at, :utc_datetime_usec
     field :last_error, :string
 
+    # Delivery circuit breaker (see Federation.CircuitBreaker).
+    field :consecutive_failures, :integer, default: 0
+    field :unreachable_since, :utc_datetime_usec
+    field :circuit_reopen_at, :utc_datetime_usec
+
     timestamps(type: :utc_datetime_usec)
   end
 
@@ -37,7 +42,10 @@ defmodule Hybridsocial.Federation.RemoteInstance do
       :features,
       :chat_capable_override,
       :fetched_at,
-      :last_error
+      :last_error,
+      :consecutive_failures,
+      :unreachable_since,
+      :circuit_reopen_at
     ])
     |> validate_required([:domain])
     |> unique_constraint(:domain)
