@@ -5,7 +5,7 @@
 	import ExternalLinkWarning from '$lib/components/ui/ExternalLinkWarning.svelte';
 	import { onMount } from 'svelte';
 	import { initAuth } from '$lib/stores/auth.js';
-	import { initializeI18n, isRtl } from '$lib/stores/i18n.js';
+	import { initializeI18n, isRtl, locale } from '$lib/stores/i18n.js';
 	import { applyTheme, themeStore } from '$lib/stores/theme.js';
 	import { getInstanceInfo } from '$lib/api/instance.js';
 	import { browser } from '$app/environment';
@@ -56,10 +56,13 @@
 		}
 	});
 
-	// Reactively set dir attribute based on locale direction
+	// Reactively set dir + lang on <html> from the active locale. dir drives
+	// RTL/LTR layout; lang (previously hardcoded en in app.html) is needed for
+	// a11y, correct font/hyphenation heuristics, and Arabic screen readers.
 	$effect(() => {
 		if (browser) {
 			document.documentElement.dir = $isRtl ? 'rtl' : 'ltr';
+			document.documentElement.lang = $locale;
 		}
 	});
 </script>

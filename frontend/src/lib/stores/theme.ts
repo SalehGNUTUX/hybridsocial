@@ -220,6 +220,14 @@ function render(cfg: Record<string, unknown>, mode: ThemeMode): void {
 
   const dark = resolved === 'dark';
 
+  // Keep the mobile browser chrome / URL bar colour in step with the resolved
+  // mode. Seeded by the no-FOUC boot script in app.html; updated here whenever
+  // the mode changes (user picks a mode, OS flips while on 'auto', etc.).
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute('content', dark ? '#0e0f15' : '#6c3edd');
+  }
+
   for (const [key, cssVars] of Object.entries(PROPERTY_MAP)) {
     const darkOverride = str(cfg[`dark_${key}`]);
     const lightVal = str(cfg[key]);

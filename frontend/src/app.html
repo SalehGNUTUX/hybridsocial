@@ -2,25 +2,36 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<script>
 			// No-FOUC theme boot: set data-theme before first paint from the
 			// last-known instance mode (cached by applyTheme) resolving 'auto'
 			// against the OS. Default is 'auto' so dark-OS visitors get dark
 			// immediately. applyTheme() re-asserts this after instance info loads.
+			// Also seed the theme-color meta so the mobile browser chrome / URL
+			// bar matches the resolved mode from the very first paint; render()
+			// keeps it in sync afterwards (respecting a manual override on any
+			// device, so it isn't OS-only like a media-query meta would be).
 			(function () {
+				function setThemeColor(dark) {
+					var meta = document.createElement('meta');
+					meta.name = 'theme-color';
+					meta.content = dark ? '#0e0f15' : '#6c3edd';
+					document.head.appendChild(meta);
+				}
 				try {
 					var mode = localStorage.getItem('hs-theme-mode') || 'auto';
 					var dark = mode === 'dark' || (mode === 'auto' &&
 						window.matchMedia('(prefers-color-scheme: dark)').matches);
 					document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+					setThemeColor(dark);
 				} catch (e) {
 					document.documentElement.setAttribute('data-theme', 'light');
+					setThemeColor(false);
 				}
 			})();
 		</script>
 		<link rel="manifest" href="/manifest.json">
-		<meta name="theme-color" content="#6c3edd">
 		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="default">
 		<meta name="apple-mobile-web-app-title" content="HybridSocial">
