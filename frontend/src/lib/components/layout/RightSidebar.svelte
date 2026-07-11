@@ -1349,9 +1349,6 @@
 
   .footer-version {
     font-family: var(--font-mono);
-    background: var(--color-surface);
-    padding: 1px 6px;
-    border-radius: var(--radius-full);
     color: var(--color-text-secondary);
   }
 
