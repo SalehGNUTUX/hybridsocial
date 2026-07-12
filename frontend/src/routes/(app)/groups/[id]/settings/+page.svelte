@@ -7,6 +7,7 @@
   import type { GroupDetail, GroupApplication, GroupMember } from '$lib/api/groups.js';
   import {
     getGroup,
+    getGroupScreening,
     updateGroup,
     getGroupApplications,
     approveApplication,
@@ -99,6 +100,21 @@
         goto(`/groups/${groupId}`);
         return;
       }
+
+      // Prefill the Screening tab from the group's current config. Without
+      // this it always opened blank, so saving other settings — or the
+      // Screening tab itself — wiped the real questions/rules (data loss).
+      if (MANAGE_ROLES.includes(g.role ?? '')) {
+        try {
+          const s = await getGroupScreening(groupId);
+          screeningQuestions = s.questions ?? [];
+          minAccountAgeDays = s.min_account_age_days ?? 0;
+          requireProfileImage = s.require_profile_image ?? false;
+        } catch {
+          // Non-fatal — leave screening at defaults.
+        }
+      }
+
       if (!canManage && activeTab === 'general') {
         activeTab = 'applications';
       }

@@ -58,6 +58,16 @@ export function getGroup(id: string): Promise<GroupDetail> {
   return api.get(`/api/v1/groups/${id}`);
 }
 
+export interface GroupScreening {
+  questions: string[];
+  min_account_age_days: number;
+  require_profile_image: boolean;
+}
+
+export function getGroupScreening(id: string): Promise<GroupScreening> {
+  return api.get(`/api/v1/groups/${id}/screening`);
+}
+
 export type FederationMode = 'local_only' | 'public_federated';
 
 export function createGroup(data: {
