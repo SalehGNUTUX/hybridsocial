@@ -119,6 +119,7 @@
     'Government',
     'Health',
     'Sports',
+    'Religious',
     'Other',
   ];
 
