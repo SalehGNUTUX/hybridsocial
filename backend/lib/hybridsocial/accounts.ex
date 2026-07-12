@@ -155,8 +155,14 @@ defmodule Hybridsocial.Accounts do
     |> Repo.transaction()
     |> case do
       {:ok, %{identity: identity, user: user}} ->
-        # Send confirmation email with plaintext token for the link
-        email_user = %{user | confirmation_token: user.confirmation_token_plaintext}
+        # Send confirmation email with plaintext token for the link. Attach
+        # the identity so the email renders @handle (handle lives on Identity,
+        # not User — otherwise the welcome line reads "@!").
+        email_user = %{
+          user
+          | confirmation_token: user.confirmation_token_plaintext,
+            identity: identity
+        }
 
         try do
           email_user

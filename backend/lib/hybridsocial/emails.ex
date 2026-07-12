@@ -10,7 +10,9 @@ defmodule Hybridsocial.Emails do
 
   import Swoosh.Email
 
+  alias Hybridsocial.Accounts.Identity
   alias Hybridsocial.Emails.Renderer
+  alias Hybridsocial.Repo
 
   @default_from {"HybridSocial", "noreply@hybridsocial.local"}
 
@@ -247,11 +249,32 @@ defmodule Hybridsocial.Emails do
   end
 
   defp user_assigns(user) do
+    identity = resolve_identity(user)
+
     %{
-      "display_name" => user_display_name(user),
-      "handle" => Map.get(user, :handle) || ""
+      "display_name" => user_display_name(user, identity),
+      "handle" => user_handle(user, identity)
     }
   end
+
+  # handle + display_name live on the Identity, but callers routinely pass the
+  # User struct (e.g. the confirmation email fired right after registration, so
+  # the account read `@!` with a blank handle). Resolve the backing identity
+  # from an already-loaded assoc, an Identity struct, or a lookup by id.
+  defp resolve_identity(%Identity{} = identity), do: identity
+  defp resolve_identity(%{identity: %Identity{} = identity}), do: identity
+  defp resolve_identity(%{identity_id: id}) when is_binary(id), do: Repo.get(Identity, id)
+  defp resolve_identity(_), do: nil
+
+  defp user_handle(user, identity) do
+    cond do
+      present?(identity && Map.get(identity, :handle)) -> identity.handle
+      present?(Map.get(user, :handle)) -> Map.get(user, :handle)
+      true -> ""
+    end
+  end
+
+  defp present?(v), do: is_binary(v) and v != ""
 
   defp from_address do
     contact_email = Hybridsocial.Config.get("contact_email", "")
@@ -282,16 +305,15 @@ defmodule Hybridsocial.Emails do
     end
   end
 
-  defp user_display_name(user) do
+  defp user_display_name(user, identity \\ nil) do
+    identity = identity || resolve_identity(user)
+
     cond do
-      Map.has_key?(user, :display_name) and user.display_name ->
-        user.display_name
-
-      Map.has_key?(user, :handle) and user.handle ->
-        user.handle
-
-      true ->
-        "User"
+      present?(identity && Map.get(identity, :display_name)) -> identity.display_name
+      present?(identity && Map.get(identity, :handle)) -> identity.handle
+      present?(Map.get(user, :display_name)) -> Map.get(user, :display_name)
+      present?(Map.get(user, :handle)) -> Map.get(user, :handle)
+      true -> "User"
     end
   end
 
