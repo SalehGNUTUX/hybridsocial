@@ -33,9 +33,91 @@
   let deleteTarget: InviteCode | null = $state(null);
   let deleteModalOpen = $state(false);
 
+  // --- Bot protection (Proof of Work + one captcha provider) ---
+  type CaptchaProvider = 'none' | 'turnstile' | 'hcaptcha' | 'recaptcha';
+  const CAPTCHA_PROVIDERS: { value: CaptchaProvider; label: string; hint: string }[] = [
+    { value: 'none',      label: 'None',                 hint: 'No captcha challenge.' },
+    { value: 'turnstile', label: 'Cloudflare Turnstile', hint: 'Privacy-friendly, no puzzles. Free.' },
+    { value: 'hcaptcha',  label: 'hCaptcha',             hint: 'Checkbox challenge. Free tier available.' },
+    { value: 'recaptcha', label: 'Google reCAPTCHA v3',  hint: 'Invisible, score-based. No user interaction.' }
+  ];
+  let powEnabled = $state(false);
+  let powDifficulty = $state(16);
+  let captchaProvider = $state<CaptchaProvider>('none');
+  // Site keys are public; secret keys are write-only (never returned by the
+  // API), so a blank secret field on save means "keep the existing secret".
+  let turnstileSiteKey = $state('');
+  let turnstileSecret = $state('');
+  let hcaptchaSiteKey = $state('');
+  let hcaptchaSecret = $state('');
+  let recaptchaSiteKey = $state('');
+  let recaptchaSecret = $state('');
+  let recaptchaMinScore = $state(0.5);
+  let botLoading = $state(true);
+  let botSaving = $state(false);
+
   onMount(async () => {
-    await Promise.all([loadInvites(), loadRegistrationMode()]);
+    await Promise.all([loadInvites(), loadRegistrationMode(), loadBotProtection()]);
   });
+
+  async function loadBotProtection() {
+    botLoading = true;
+    try {
+      const all = await getAdminSettings();
+      const map = new Map<string, unknown>(all.map((s) => [s.key, s.value]));
+      const truthy = (v: unknown) => v === true || v === 'true';
+      powEnabled = truthy(map.get('pow_enabled'));
+      powDifficulty = Number(map.get('pow_difficulty') ?? 16) || 16;
+      const prov = String(map.get('captcha_provider') ?? 'none');
+      captchaProvider = (['turnstile', 'hcaptcha', 'recaptcha'].includes(prov)
+        ? prov
+        : 'none') as CaptchaProvider;
+      turnstileSiteKey = String(map.get('turnstile_site_key') ?? '');
+      hcaptchaSiteKey = String(map.get('hcaptcha_site_key') ?? '');
+      recaptchaSiteKey = String(map.get('recaptcha_site_key') ?? '');
+      recaptchaMinScore = Number(map.get('recaptcha_min_score') ?? 0.5) || 0.5;
+    } catch {
+      // Non-fatal — leave defaults so the section still renders.
+    } finally {
+      botLoading = false;
+    }
+  }
+
+  async function saveBotProtection() {
+    botSaving = true;
+    try {
+      const settings: { key: string; value: string | number | boolean }[] = [
+        { key: 'pow_enabled', value: powEnabled },
+        { key: 'pow_difficulty', value: powDifficulty },
+        { key: 'captcha_provider', value: captchaProvider }
+      ];
+      // Only push the selected provider's keys so switching providers doesn't
+      // wipe the others' stored config. Secrets go only when (re)entered.
+      if (captchaProvider === 'turnstile') {
+        settings.push({ key: 'turnstile_site_key', value: turnstileSiteKey.trim() });
+        if (turnstileSecret.trim())
+          settings.push({ key: 'turnstile_secret_key', value: turnstileSecret.trim() });
+      } else if (captchaProvider === 'hcaptcha') {
+        settings.push({ key: 'hcaptcha_site_key', value: hcaptchaSiteKey.trim() });
+        if (hcaptchaSecret.trim())
+          settings.push({ key: 'hcaptcha_secret_key', value: hcaptchaSecret.trim() });
+      } else if (captchaProvider === 'recaptcha') {
+        settings.push({ key: 'recaptcha_site_key', value: recaptchaSiteKey.trim() });
+        settings.push({ key: 'recaptcha_min_score', value: recaptchaMinScore });
+        if (recaptchaSecret.trim())
+          settings.push({ key: 'recaptcha_secret_key', value: recaptchaSecret.trim() });
+      }
+      await updateAdminSettings(settings);
+      turnstileSecret = '';
+      hcaptchaSecret = '';
+      recaptchaSecret = '';
+      addToast('Bot protection updated', 'success');
+    } catch {
+      addToast('Failed to update bot protection', 'error');
+    } finally {
+      botSaving = false;
+    }
+  }
 
   async function loadRegistrationMode() {
     regModeLoading = true;
@@ -201,6 +283,100 @@
             </div>
           </label>
         {/each}
+      </div>
+    {/if}
+  </section>
+
+  <section class="reg-mode card">
+    <div class="reg-mode-head">
+      <h2 class="reg-mode-title">Bot protection</h2>
+      <p class="reg-mode-sub">
+        Applied to sign-up and account-recovery. Proof of Work runs in the
+        visitor's browser; a captcha provider adds a second check.
+      </p>
+    </div>
+
+    {#if botLoading}
+      <div class="skeleton" style="height: 120px;"></div>
+    {:else}
+      <!-- Proof of Work -->
+      <div class="bot-block">
+        <label class="bot-toggle">
+          <input type="checkbox" bind:checked={powEnabled} />
+          <span>
+            <span class="bot-toggle-label">Proof of Work</span>
+            <span class="bot-toggle-hint">Requires each signup to solve a small hashing puzzle. Free, no third party.</span>
+          </span>
+        </label>
+        {#if powEnabled}
+          <div class="bot-field bot-field-inline">
+            <label for="pow-difficulty">Difficulty (leading zero bits)</label>
+            <input id="pow-difficulty" type="number" min="8" max="24" class="input bot-num" bind:value={powDifficulty} />
+            <span class="bot-toggle-hint">16 is a good default. Higher = slower for users.</span>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Captcha provider -->
+      <div class="bot-block">
+        <span class="bot-toggle-label">Captcha provider</span>
+        <div class="reg-mode-options bot-providers">
+          {#each CAPTCHA_PROVIDERS as p (p.value)}
+            <label class="reg-mode-option" class:selected={captchaProvider === p.value}>
+              <input type="radio" name="captcha_provider" value={p.value} bind:group={captchaProvider} class="reg-mode-radio" />
+              <div class="reg-mode-option-body">
+                <span class="reg-mode-option-label">{p.label}</span>
+                <span class="reg-mode-option-hint">{p.hint}</span>
+              </div>
+            </label>
+          {/each}
+        </div>
+
+        {#if captchaProvider === 'turnstile'}
+          <div class="bot-keys">
+            <div class="bot-field">
+              <label for="ts-site">Site key</label>
+              <input id="ts-site" type="text" class="input" bind:value={turnstileSiteKey} placeholder="0x4AAA..." />
+            </div>
+            <div class="bot-field">
+              <label for="ts-secret">Secret key</label>
+              <input id="ts-secret" type="password" class="input" bind:value={turnstileSecret} placeholder="Leave blank to keep current" autocomplete="off" />
+            </div>
+          </div>
+        {:else if captchaProvider === 'hcaptcha'}
+          <div class="bot-keys">
+            <div class="bot-field">
+              <label for="hc-site">Site key</label>
+              <input id="hc-site" type="text" class="input" bind:value={hcaptchaSiteKey} placeholder="10000000-ffff-..." />
+            </div>
+            <div class="bot-field">
+              <label for="hc-secret">Secret key</label>
+              <input id="hc-secret" type="password" class="input" bind:value={hcaptchaSecret} placeholder="Leave blank to keep current" autocomplete="off" />
+            </div>
+          </div>
+        {:else if captchaProvider === 'recaptcha'}
+          <div class="bot-keys">
+            <div class="bot-field">
+              <label for="rc-site">Site key</label>
+              <input id="rc-site" type="text" class="input" bind:value={recaptchaSiteKey} placeholder="6Lc..." />
+            </div>
+            <div class="bot-field">
+              <label for="rc-secret">Secret key</label>
+              <input id="rc-secret" type="password" class="input" bind:value={recaptchaSecret} placeholder="Leave blank to keep current" autocomplete="off" />
+            </div>
+            <div class="bot-field">
+              <label for="rc-score">Minimum score (0–1)</label>
+              <input id="rc-score" type="number" min="0" max="1" step="0.1" class="input bot-num" bind:value={recaptchaMinScore} />
+              <span class="bot-toggle-hint">Requests scoring below this are rejected. 0.5 is Google's default.</span>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <div class="bot-actions">
+        <button class="btn btn-primary" type="button" onclick={saveBotProtection} disabled={botSaving}>
+          {botSaving ? 'Saving…' : 'Save bot protection'}
+        </button>
       </div>
     {/if}
   </section>
@@ -498,6 +674,83 @@
   .reg-mode-option-label {
     font-weight: 600;
     font-size: var(--text-sm);
+  }
+
+  .bot-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 12px);
+    padding-block: var(--space-3, 12px);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .bot-block:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .bot-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .bot-toggle input[type='checkbox'] {
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .bot-toggle-label {
+    display: block;
+    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--color-text);
+  }
+
+  .bot-toggle-hint {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+
+  .bot-providers {
+    margin-top: 4px;
+  }
+
+  .bot-keys {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 12px);
+    max-width: 460px;
+  }
+
+  .bot-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .bot-field label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .bot-field-inline {
+    max-width: 320px;
+  }
+
+  .bot-num {
+    max-width: 160px;
+  }
+
+  .bot-actions {
+    margin-top: var(--space-2, 8px);
   }
 
   .reg-mode-option-hint {

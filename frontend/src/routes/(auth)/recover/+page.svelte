@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client.js';
   import { solvePow, type PowChallenge, type PowSolution } from '$lib/utils/pow.js';
   import { validateRecovery, completeRecovery } from '$lib/api/recovery.js';
+  import Captcha from '$lib/components/auth/Captcha.svelte';
 
   type Step = 'verify' | 'reset' | 'done';
 
@@ -16,10 +17,14 @@
   let powSolution = $state<PowSolution | null>(null);
   let powSolving = $state(false);
 
-  // Turnstile
-  let turnstileToken = $state('');
-  let turnstileEnabled = $state(false);
-  let turnstileContainer: HTMLDivElement | undefined = $state();
+  // Captcha (provider selected by the admin: turnstile | hcaptcha | recaptcha)
+  let captchaProvider = $state('none');
+  let captchaSiteKey = $state('');
+  let captchaToken = $state('');
+  let captcha: { getToken: () => Promise<string> } | undefined = $state();
+  let captchaWidget = $derived(
+    captchaProvider === 'turnstile' || captchaProvider === 'hcaptcha'
+  );
 
   // Step 2 — reset
   let recoveryToken = $state<string | null>(null);
@@ -41,7 +46,7 @@
       currentEmail.trim().length > 0 &&
       recoveryCode.trim().length > 0 &&
       otpCode.trim().length >= 6 &&
-      (!turnstileEnabled || turnstileToken.length > 0) &&
+      (!captchaWidget || captchaToken.length > 0) &&
       !powSolving &&
       !submitting,
   );
@@ -65,54 +70,24 @@
     }
   }
 
-  async function checkTurnstile() {
+  async function checkCaptcha() {
     try {
       const info = await api.get<{
-        turnstile_enabled?: boolean;
-        turnstile_site_key?: string;
+        captcha_provider?: string;
+        captcha_site_key?: string;
       }>('/api/v1/instance/info');
-      if (info.turnstile_enabled && info.turnstile_site_key) {
-        turnstileEnabled = true;
-        loadTurnstileScript(info.turnstile_site_key);
+      if (info.captcha_provider && info.captcha_provider !== 'none' && info.captcha_site_key) {
+        captchaProvider = info.captcha_provider;
+        captchaSiteKey = info.captcha_site_key;
       }
     } catch {
       // No-op — treat as disabled
     }
   }
 
-  function loadTurnstileScript(siteKey: string) {
-    if (document.querySelector('script[src*="challenges.cloudflare.com"]')) {
-      renderTurnstile(siteKey);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src =
-      'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoadRecover';
-    script.async = true;
-    (window as unknown as Record<string, unknown>).onTurnstileLoadRecover = () =>
-      renderTurnstile(siteKey);
-    document.head.appendChild(script);
-  }
-
-  function renderTurnstile(siteKey: string) {
-    if (turnstileContainer) {
-      (
-        window as unknown as Record<
-          string,
-          { render: (el: HTMLElement, opts: Record<string, unknown>) => void }
-        >
-      ).turnstile.render(turnstileContainer, {
-        sitekey: siteKey,
-        callback: (token: string) => {
-          turnstileToken = token;
-        },
-      });
-    }
-  }
-
   // Kick off on mount
   loadPow();
-  checkTurnstile();
+  checkCaptcha();
 
   async function submitVerify() {
     if (!canVerify) return;
@@ -127,7 +102,7 @@
         current_email: string;
         pow_prefix?: string;
         pow_nonce?: string;
-        cf_turnstile_token?: string;
+        captcha_token?: string;
       } = {
         handle: handle.trim().replace(/^@/, ''),
         recovery_code: recoveryCode.trim(),
@@ -138,8 +113,8 @@
         payload.pow_prefix = powSolution.challenge;
         payload.pow_nonce = String(powSolution.nonce);
       }
-      if (turnstileEnabled && turnstileToken) {
-        payload.cf_turnstile_token = turnstileToken;
+      if (captchaProvider !== 'none' && captcha) {
+        payload.captcha_token = await captcha.getToken();
       }
 
       const res = await validateRecovery(payload);
@@ -388,9 +363,15 @@
         </span>
       </div>
 
-      {#if turnstileEnabled}
+      {#if captchaProvider !== 'none' && captchaSiteKey}
         <div class="turnstile-wrap">
-          <div bind:this={turnstileContainer}></div>
+          <Captcha
+            bind:this={captcha}
+            provider={captchaProvider}
+            siteKey={captchaSiteKey}
+            bind:token={captchaToken}
+            action="recover"
+          />
         </div>
       {/if}
 

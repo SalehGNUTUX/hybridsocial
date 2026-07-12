@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BrandMark from '$lib/components/ui/BrandMark.svelte';
+  import Captcha from '$lib/components/auth/Captcha.svelte';
   import { api } from '$lib/api/client.js';
   import { ApiError } from '$lib/api/client.js';
   import { solvePow, type PowChallenge, type PowSolution } from '$lib/utils/pow.js';
@@ -30,10 +31,16 @@
   let powSolution = $state<PowSolution | null>(null);
   let powSolving = $state(false);
 
-  // Turnstile
-  let turnstileToken = $state('');
-  let turnstileEnabled = $state(false);
-  let turnstileContainer: HTMLDivElement | undefined = $state();
+  // Captcha (provider selected by the admin: turnstile | hcaptcha | recaptcha)
+  let captchaProvider = $state('none');
+  let captchaSiteKey = $state('');
+  let captchaToken = $state('');
+  let captcha: { getToken: () => Promise<string> } | undefined = $state();
+  // Widget providers require the user to complete a challenge before submit;
+  // reCAPTCHA v3 is invisible and executed at submit time.
+  let captchaWidget = $derived(
+    captchaProvider === 'turnstile' || captchaProvider === 'hcaptcha'
+  );
 
   // Registration mode (open | invite_only | approval | closed). The
   // public info endpoint reports it; we gate the form accordingly so
@@ -98,12 +105,13 @@
     password === passwordConfirm &&
     agreedToTerms &&
     !powSolving &&
-    (registrationMode !== 'invite_only' || inviteCode.trim().length > 0)
+    (registrationMode !== 'invite_only' || inviteCode.trim().length > 0) &&
+    (!captchaWidget || captchaToken.length > 0)
   );
 
   onMount(() => {
     fetchPowChallenge();
-    checkTurnstile();
+    checkCaptcha();
     fetchPlans();
   });
 
@@ -130,35 +138,19 @@
     }
   }
 
-  async function checkTurnstile() {
+  async function checkCaptcha() {
     try {
       const info = await api.get<{
-        turnstile_enabled?: boolean;
-        turnstile_site_key?: string;
+        captcha_provider?: string;
+        captcha_site_key?: string;
         registration_mode?: RegMode;
       }>('/api/v1/instance/info');
-      if (info.turnstile_enabled && info.turnstile_site_key) {
-        turnstileEnabled = true;
-        loadTurnstileScript(info.turnstile_site_key);
+      if (info.captcha_provider && info.captcha_provider !== 'none' && info.captcha_site_key) {
+        captchaProvider = info.captcha_provider;
+        captchaSiteKey = info.captcha_site_key;
       }
       if (info.registration_mode) registrationMode = info.registration_mode;
     } catch { /* */ }
-  }
-
-  function loadTurnstileScript(siteKey: string) {
-    if (typeof document === 'undefined') return;
-    const script = document.createElement('script');
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad';
-    script.async = true;
-    (window as unknown as Record<string, unknown>).onTurnstileLoad = () => {
-      if (turnstileContainer) {
-        (window as unknown as Record<string, { render: (el: HTMLElement, opts: Record<string, unknown>) => void }>).turnstile.render(
-          turnstileContainer,
-          { sitekey: siteKey, callback: (token: string) => { turnstileToken = token; } }
-        );
-      }
-    };
-    document.head.appendChild(script);
   }
 
   async function handleSubmit(e: SubmitEvent) {
@@ -186,8 +178,14 @@
     loading = true;
     try {
       const body: Record<string, unknown> = { handle, email, password, password_confirmation: passwordConfirm };
-      if (powSolution) body.pow_solution = powSolution;
-      if (turnstileEnabled && turnstileToken) body.turnstile_token = turnstileToken;
+      // Flat keys the backend expects (was sending a nested pow_solution).
+      if (powSolution) {
+        body.pow_prefix = powSolution.challenge;
+        body.pow_nonce = powSolution.nonce;
+      }
+      if (captchaProvider !== 'none' && captcha) {
+        body.captcha_token = await captcha.getToken();
+      }
       if (inviteCode.trim()) body.invite_code = inviteCode.trim();
 
       await api.post('/api/v1/auth/register', body);
@@ -374,9 +372,15 @@
           {/if}
         </div>
 
-        {#if turnstileEnabled}
+        {#if captchaProvider !== 'none' && captchaSiteKey}
           <div class="auth-field">
-            <div bind:this={turnstileContainer}></div>
+            <Captcha
+              bind:this={captcha}
+              provider={captchaProvider}
+              siteKey={captchaSiteKey}
+              bind:token={captchaToken}
+              action="register"
+            />
           </div>
         {/if}
 

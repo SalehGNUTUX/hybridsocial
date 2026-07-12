@@ -43,6 +43,7 @@ export function validateRecovery(input: {
   current_email: string;
   pow_prefix?: string;
   pow_nonce?: string;
+  captcha_token?: string;
   cf_turnstile_token?: string;
 }): Promise<RecoverValidateResponse> {
   return api.post('/api/v1/auth/recover/validate', input);

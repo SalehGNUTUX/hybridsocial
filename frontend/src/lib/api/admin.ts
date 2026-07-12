@@ -221,7 +221,13 @@ export function getAdminSettings(): Promise<AdminSetting[]> {
   return api.get('/api/v1/admin/settings');
 }
 
-export function updateAdminSettings(settings: { key: string; value: string }[]): Promise<AdminSetting[]> {
+// value may be a string, number, or boolean — the backend stores it as-is
+// (no coercion), and some settings are read back as typed (e.g. pow_enabled
+// is compared `== true`, pow_difficulty is used as an integer), so callers
+// must send the right JSON type, not a stringified one.
+export function updateAdminSettings(
+  settings: { key: string; value: string | number | boolean }[],
+): Promise<AdminSetting[]> {
   return api.put('/api/v1/admin/settings', { settings });
 }
 
