@@ -656,6 +656,12 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
         {:ok, media} ->
           url = Hybridsocial.Media.media_url(media)
           Hybridsocial.Config.set(key, url)
+
+          # Auto-derive an email-safe PNG from the (light) logo — email clients
+          # don't render SVG. Keeps branding per-instance with no hardcoded
+          # asset; best-effort, non-fatal (emails fall back to text).
+          if key == "theme_logo_url", do: set_email_logo(conn.assigns.current_identity.id, upload)
+
           json(conn, %{url: url})
 
         {:error, reason} ->
@@ -670,6 +676,13 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
   def upload_logo(conn, _),
     do: conn |> put_status(:bad_request) |> json(%{error: "file_required"})
+
+  defp set_email_logo(identity_id, upload) do
+    case Hybridsocial.Media.EmailLogo.derive(identity_id, upload) do
+      {:ok, url} -> Hybridsocial.Config.set("email_logo_url", url)
+      _ -> :ok
+    end
+  end
 
   def upload_favicon(conn, %{"file" => %Plug.Upload{} = upload}) do
     with :ok <- require_permission(conn, "theme.manage") do
