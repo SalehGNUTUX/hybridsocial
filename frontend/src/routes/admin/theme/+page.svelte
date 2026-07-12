@@ -2,8 +2,20 @@
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast.js';
   import { getAdminTheme, saveAdminTheme, uploadLogo, uploadFavicon, uploadOgImage } from '$lib/api/admin.js';
-  import { applyTheme } from '$lib/stores/theme.js';
+  import { applyTheme, liftForDark } from '$lib/stores/theme.js';
   import type { AdminThemeConfig } from '$lib/api/types.js';
+
+  // Fixed dark ramp (mirrors :root[data-theme='dark'] in app.css). The live
+  // app derives dark = lifted brand colours (liftForDark) over this designed
+  // surface/text ramp, so the preview reproduces both to stay faithful.
+  const DARK_RAMP = {
+    bg: '#0e0f15',
+    surface: '#1c1d27', // surface-container-lowest: the lifted card
+    border: 'rgba(202, 200, 230, 0.14)',
+    text: '#f6f5fb',
+    text_secondary: '#aeb0c2',
+    primary_soft: '#2a2440'
+  };
 
   const defaults: AdminThemeConfig = {
     color_primary: '#6c3edd',
@@ -47,6 +59,9 @@
   let theme: AdminThemeConfig = $state({ ...defaults });
   let loading = $state(true);
   let saving = $state(false);
+  // Which variant the Live Preview renders. Lets the admin review the
+  // auto-generated dark theme without changing the instance mode.
+  let previewMode = $state<'light' | 'dark'>('light');
 
   interface ColorEntry {
     key: keyof AdminThemeConfig;
@@ -110,28 +125,57 @@
     'Poppins'
   ];
 
-  let previewVars = $derived(buildPreviewVars());
+  let previewVars = $derived(buildPreviewVars(previewMode));
 
-  function buildPreviewVars(): string {
+  function buildPreviewVars(mode: 'light' | 'dark'): string {
+    const radius =
+      theme.border_radius === 'sharp' ? '2px' : theme.border_radius === 'pill' ? '9999px' : '8px';
+
+    // Brand colours track one source: dark lifts them the same way the live
+    // app does (liftForDark), so what the admin sees here matches production.
+    const brand = (hex: string) => (mode === 'dark' ? liftForDark(hex) : hex);
+
+    // Surfaces/text come from the editable light palette in light mode, and
+    // from the fixed dark ramp in dark mode (the app doesn't derive dark
+    // surfaces from the light ones — it uses the designed dark scale).
+    const surface =
+      mode === 'dark'
+        ? {
+            bg: DARK_RAMP.bg,
+            surface: DARK_RAMP.surface,
+            border: DARK_RAMP.border,
+            text: DARK_RAMP.text,
+            text_secondary: DARK_RAMP.text_secondary,
+            primary_soft: DARK_RAMP.primary_soft
+          }
+        : {
+            bg: theme.color_bg,
+            surface: theme.color_surface,
+            border: theme.color_border,
+            text: theme.color_text,
+            text_secondary: theme.color_text_secondary,
+            primary_soft: theme.color_primary_soft
+          };
+
     return [
-      `--p-primary: ${theme.color_primary}`,
-      `--p-primary-hover: ${theme.color_primary_hover}`,
-      `--p-primary-soft: ${theme.color_primary_soft}`,
+      `--p-primary: ${brand(theme.color_primary)}`,
+      `--p-primary-hover: ${brand(theme.color_primary_hover)}`,
+      `--p-primary-soft: ${surface.primary_soft}`,
       `--p-primary-contrast: ${theme.color_primary_contrast}`,
-      `--p-secondary: ${theme.color_secondary}`,
-      `--p-accent: ${theme.color_accent}`,
+      `--p-secondary: ${brand(theme.color_secondary)}`,
+      `--p-accent: ${brand(theme.color_accent)}`,
       `--p-success: ${theme.color_success}`,
       `--p-warning: ${theme.color_warning}`,
       `--p-danger: ${theme.color_danger}`,
       `--p-info: ${theme.color_info}`,
-      `--p-bg: ${theme.color_bg}`,
-      `--p-surface: ${theme.color_surface}`,
-      `--p-border: ${theme.color_border}`,
-      `--p-text: ${theme.color_text}`,
-      `--p-text-secondary: ${theme.color_text_secondary}`,
-      `--p-text-link: ${theme.color_text_link}`,
-      `--p-gradient: linear-gradient(${theme.gradient_direction}, ${theme.gradient_start}, ${theme.gradient_end})`,
-      `--p-radius: ${theme.border_radius === 'sharp' ? '2px' : theme.border_radius === 'pill' ? '9999px' : '8px'}`,
+      `--p-bg: ${surface.bg}`,
+      `--p-surface: ${surface.surface}`,
+      `--p-border: ${surface.border}`,
+      `--p-text: ${surface.text}`,
+      `--p-text-secondary: ${surface.text_secondary}`,
+      `--p-text-link: ${brand(theme.color_text_link)}`,
+      `--p-gradient: linear-gradient(${theme.gradient_direction}, ${brand(theme.gradient_start)}, ${brand(theme.gradient_end)})`,
+      `--p-radius: ${radius}`,
       `--p-font: ${theme.font_family}`
     ].join('; ');
   }
@@ -554,8 +598,30 @@
     </div>
 
     <div class="theme-preview-panel">
-      <h2 class="preview-title">Live Preview</h2>
-      <div class="preview-frame" style={previewVars}>
+      <div class="preview-head">
+        <h2 class="preview-title">Live Preview</h2>
+        <div class="preview-mode-toggle" role="radiogroup" aria-label="Preview mode">
+          {#each ['light', 'dark'] as pm (pm)}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={previewMode === pm}
+              class="preview-mode-btn"
+              class:active={previewMode === pm}
+              onclick={() => (previewMode = pm as 'light' | 'dark')}
+            >
+              {pm === 'light' ? 'Light' : 'Dark'}
+            </button>
+          {/each}
+        </div>
+      </div>
+      {#if previewMode === 'dark'}
+        <p class="preview-note">
+          Dark is generated from your brand colours over the built-in dark surface
+          ramp. Surface and text values here aren't editable yet.
+        </p>
+      {/if}
+      <div class="preview-frame" style={previewVars} data-preview-mode={previewMode}>
         <!-- Header -->
         <div class="preview-header">
           <span class="preview-logo">{theme.instance_name || 'HybridSocial'}</span>
@@ -834,10 +900,49 @@
     top: var(--space-4);
   }
 
+  .preview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-block-end: var(--space-3);
+  }
+
   .preview-title {
     font-size: var(--text-base);
     font-weight: 600;
-    margin-block-end: var(--space-3);
+  }
+
+  .preview-mode-toggle {
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    background: var(--color-surface-container-low, rgba(0, 0, 0, 0.04));
+    border-radius: var(--radius-full);
+  }
+
+  .preview-mode-btn {
+    padding: 4px 12px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .preview-mode-btn.active {
+    background: var(--color-primary);
+    color: var(--color-on-primary, #fff);
+  }
+
+  .preview-note {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    line-height: 1.4;
+    margin-block-end: var(--space-2);
   }
 
   .preview-frame {
@@ -848,6 +953,10 @@
     color: var(--p-text);
     font-family: var(--p-font), system-ui, sans-serif;
     font-size: 13px;
+  }
+
+  .preview-frame[data-preview-mode='dark'] {
+    color-scheme: dark;
   }
 
   .preview-header {

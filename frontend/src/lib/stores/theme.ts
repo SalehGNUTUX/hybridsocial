@@ -131,7 +131,7 @@ function hslToHex(h: number, s: number, l: number): string {
 // Derive a brand colour's dark-mode variant by lifting its lightness (and
 // nudging saturation up a touch so it stays vivid on dark). Falls back to
 // the input if it isn't a hex colour.
-function liftForDark(hex: string, deltaL = DARK_BRAND_LIFT): string {
+export function liftForDark(hex: string, deltaL = DARK_BRAND_LIFT): string {
   const rgb = parseHex(hex);
   if (!rgb) return hex;
   const [h, s, l] = rgbToHsl(rgb.r, rgb.g, rgb.b);
