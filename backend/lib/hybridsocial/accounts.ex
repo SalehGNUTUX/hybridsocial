@@ -520,6 +520,44 @@ defmodule Hybridsocial.Accounts do
 
   # --- Email confirmation ---
 
+  @doc """
+  Regenerates a confirmation token for an unconfirmed local account and
+  re-sends the confirmation email. Non-committal: always returns `{:ok, :sent}`
+  (a confirmed user or unknown email is a no-op) so it can't be used to probe
+  which addresses have accounts. Abuse is bounded by the endpoint rate limit.
+  """
+  def resend_confirmation_email(email) when is_binary(email) and email != "" do
+    case get_user_by_email(email) do
+      %User{confirmed_at: nil} = user ->
+        token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+
+        user
+        |> Ecto.Changeset.change(%{
+          confirmation_token: User.hash_token(token),
+          confirmation_sent_at: DateTime.utc_now()
+        })
+        |> Repo.update()
+
+        # Plaintext token rides the email link; the DB holds only the hash.
+        email_user = %{user | confirmation_token: token}
+
+        try do
+          email_user
+          |> Hybridsocial.Emails.confirmation_email()
+          |> Hybridsocial.Mailer.deliver()
+        rescue
+          _ -> :ok
+        end
+
+        {:ok, :sent}
+
+      _ ->
+        {:ok, :sent}
+    end
+  end
+
+  def resend_confirmation_email(_), do: {:ok, :sent}
+
   def confirm_user(token) do
     hashed = User.hash_token(token)
 

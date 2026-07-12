@@ -58,6 +58,7 @@ defmodule HybridsocialWeb.Router do
     pipe_through :api
 
     post "/register", AuthController, :register
+    post "/resend_confirmation", AuthController, :resend_confirmation
     post "/login", AuthController, :login
     post "/refresh", AuthController, :refresh
     post "/confirm", AuthController, :confirm

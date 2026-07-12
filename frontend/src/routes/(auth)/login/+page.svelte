@@ -16,6 +16,13 @@
   let showPassword = $state(false);
   let otpCode = $state('');
   let error = $state('');
+
+  // Email-confirmation gate: shown when login returns auth.email_not_confirmed.
+  let emailUnconfirmed = $state(false);
+  let unconfirmedEmail = $state('');
+  let contactEmail = $state('');
+  let resending = $state(false);
+  let resendMsg = $state('');
   let loading = $state(false);
   let passkeyLoading = $state(false);
   let passkeyMode = $state(false);
@@ -59,13 +66,16 @@
 
   async function checkCaptcha() {
     try {
-      const info = await api.get<{ captcha_provider?: string; captcha_site_key?: string }>(
-        '/api/v1/instance/info'
-      );
+      const info = await api.get<{
+        captcha_provider?: string;
+        captcha_site_key?: string;
+        contact_email?: string;
+      }>('/api/v1/instance/info');
       if (info.captcha_provider && info.captcha_provider !== 'none' && info.captcha_site_key) {
         captchaProvider = info.captcha_provider;
         captchaSiteKey = info.captcha_site_key;
       }
+      contactEmail = info.contact_email || '';
     } catch {
       /* treat as disabled */
     }
@@ -155,7 +165,12 @@
         }
       }
     } catch (err) {
-      if (err instanceof ApiError) {
+      if (err instanceof ApiError && err.body.error === 'auth.email_not_confirmed') {
+        // Swap to the confirm-your-email gate instead of a bare error.
+        unconfirmedEmail = email;
+        resendMsg = '';
+        emailUnconfirmed = true;
+      } else if (err instanceof ApiError) {
         error = err.body.error_description || tError(err.body.error);
       } else {
         error = 'An unexpected error occurred. Please try again.';
@@ -168,6 +183,24 @@
       }
     } finally {
       loading = false;
+    }
+  }
+
+  async function resendConfirmation() {
+    if (resending || !unconfirmedEmail) return;
+    resending = true;
+    resendMsg = '';
+    try {
+      await api.post('/api/v1/auth/resend_confirmation', { email: unconfirmedEmail });
+      resendMsg = 'Sent. Check your inbox (and spam) for the activation link.';
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        resendMsg = "You've hit the resend limit (2 per hour). Please wait, or contact support below.";
+      } else {
+        resendMsg = 'Could not resend right now. Please try again shortly.';
+      }
+    } finally {
+      resending = false;
     }
   }
 
@@ -274,6 +307,46 @@
     <BrandMark size={40} />
   </div>
 
+  {#if emailUnconfirmed}
+    <h1 class="auth-title">Confirm your email</h1>
+    <p class="auth-subtitle">
+      You need to activate your email before you can use {$instanceName}.
+    </p>
+    <p class="auth-gate-text">
+      We sent a confirmation link to <strong>{unconfirmedEmail}</strong>. Open it to
+      activate your account, then sign in.
+    </p>
+
+    {#if resendMsg}
+      <div class="auth-gate-note" role="status">{resendMsg}</div>
+    {/if}
+
+    <button
+      type="button"
+      class="auth-submit"
+      disabled={resending}
+      onclick={resendConfirmation}
+    >
+      {resending ? 'Sending…' : 'Resend activation email'}
+    </button>
+
+    <p class="auth-gate-support">
+      Didn't get it, or can't activate your account?
+      {#if contactEmail}
+        Email <a href="mailto:{contactEmail}">{contactEmail}</a> and we'll help you out.
+      {:else}
+        Contact the instance administrator for help.
+      {/if}
+    </p>
+
+    <button
+      type="button"
+      class="auth-back-btn"
+      onclick={() => { emailUnconfirmed = false; resendMsg = ''; }}
+    >
+      Back to sign in
+    </button>
+  {:else}
   <h1 class="auth-title">Sign in to your server</h1>
   <p class="auth-subtitle">Enter your credentials to continue</p>
 
@@ -430,6 +503,7 @@
     </button>
 
     <a href="/register" class="auth-alt-btn">Create account</a>
+  {/if}
   {/if}
 </div>
 
@@ -963,6 +1037,42 @@
 
   .auth-subtitle {
     animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+  }
+
+  .auth-gate-text {
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--color-text-secondary);
+    text-align: center;
+    margin: 0 0 20px;
+  }
+
+  .auth-gate-note {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--color-text);
+    background: var(--color-surface-container-low, rgba(0, 0, 0, 0.04));
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+
+  .auth-gate-support {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--color-text-tertiary);
+    text-align: center;
+    margin: 18px 0 0;
+  }
+
+  .auth-gate-support a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+  .auth-gate-support a:hover {
+    text-decoration: underline;
   }
 
   .auth-field:nth-child(1) {

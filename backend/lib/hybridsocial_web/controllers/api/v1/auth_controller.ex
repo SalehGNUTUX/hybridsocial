@@ -249,6 +249,17 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
     end
   end
 
+  # Re-send the confirmation email for an unconfirmed account. Non-committal
+  # response (never reveals whether the address exists); abuse is bounded by
+  # the per-IP rate limit on this path.
+  def resend_confirmation(conn, %{"email" => email}) when is_binary(email) do
+    Accounts.resend_confirmation_email(email)
+    json(conn, %{message: "auth.confirmation_resent"})
+  end
+
+  def resend_confirmation(conn, _),
+    do: conn |> put_status(:bad_request) |> json(%{error: "auth.email_required"})
+
   def me(conn, _params) do
     identity = conn.assigns.current_identity
     identity = Hybridsocial.Repo.preload(identity, :user)

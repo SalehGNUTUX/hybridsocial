@@ -18,6 +18,9 @@ defmodule HybridsocialWeb.Api.V1.InstanceController do
       turnstile_enabled: provider == "turnstile",
       turnstile_site_key: if(provider == "turnstile", do: site_key, else: ""),
       registration_mode: reg_mode,
+      # Shown on the email-confirmation gate so a stuck user knows where to
+      # get help. Admin-set (Instance > General); empty when unconfigured.
+      contact_email: Hybridsocial.Config.get("contact_email", ""),
       version: Hybridsocial.Instance.version(),
       # Build identity so admins can confirm exactly which commit is running
       # (deploys are rsync + rebuild, so the semver alone isn't enough).
