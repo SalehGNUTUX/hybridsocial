@@ -425,6 +425,17 @@ body {
   background-attachment: fixed;
 }
 
+/* On touch devices a fixed-attachment background forces the whole viewport to
+   re-composite on every scroll frame, which produces flickering colored-noise
+   garbage behind the feed and stutters scrolling on mobile GPUs. Drop the wash
+   to a flat, cheap paint there — the desktop look is unchanged. */
+@media (pointer: coarse) {
+  body {
+    background: var(--color-background);
+    background-attachment: scroll;
+  }
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-headline);
   font-weight: 700;
