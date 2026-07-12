@@ -348,10 +348,7 @@
     editing = true;
   }
 
-  async function handleEditFileSelected(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const files = Array.from(input.files ?? []);
-    input.value = '';
+  async function uploadEditFiles(files: File[]) {
     if (files.length === 0) return;
 
     const remaining = editMediaMax - editMedia.length;
@@ -382,6 +379,25 @@
     } finally {
       editMediaUploading = false;
     }
+  }
+
+  async function handleEditFileSelected(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    await uploadEditFiles(files);
+  }
+
+  // Drag & drop parity with the composer — dropping media onto the edit
+  // dialog uploads it (the dialog previously ignored drops entirely).
+  function handleEditDragOver(e: DragEvent) {
+    e.preventDefault();
+  }
+
+  function handleEditDrop(e: DragEvent) {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length > 0) uploadEditFiles(files);
   }
 
   function removeEditMedia(id: string) {
@@ -1094,7 +1110,7 @@
 
 {#if editing}
   <div class="edit-overlay" onclick={cancelEdit} role="dialog" aria-modal="true" aria-label="Edit post">
-    <div class="edit-dialog" onclick={(e) => e.stopPropagation()}>
+    <div class="edit-dialog" onclick={(e) => e.stopPropagation()} ondragover={handleEditDragOver} ondrop={handleEditDrop}>
       <div class="edit-dialog-header">
         <h3 class="edit-dialog-title">Edit post</h3>
         <button type="button" class="edit-dialog-close" onclick={cancelEdit} aria-label="Close">
