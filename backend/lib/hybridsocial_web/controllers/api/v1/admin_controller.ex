@@ -3368,11 +3368,44 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     with :ok <- require_permission(conn, "users.view") do
       case Accounts.get_identity(id) do
         nil -> conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
-        identity -> conn |> put_status(:ok) |> json(serialize_account(identity))
+        identity -> conn |> put_status(:ok) |> json(account_detail(identity))
       end
     else
       {:error, perm} -> deny(conn, perm)
     end
+  end
+
+  # Single-account detail view. Adds the fields the shared `serialize_account`
+  # leaves out (it's mapped over the whole list, so per-row count queries would
+  # be an N+1): post/follower counts and the last-active timestamp from the
+  # user's most recent session. Also preloads `:user` so email / 2FA / verified
+  # are populated for local accounts.
+  defp account_detail(identity) do
+    import Ecto.Query
+    alias Hybridsocial.Repo
+    identity = Repo.preload(identity, :user)
+
+    post_count =
+      from(p in "posts", where: p.identity_id == ^identity.id and is_nil(p.deleted_at))
+      |> Repo.aggregate(:count)
+
+    followers_count =
+      from(f in "follows", where: f.target_id == ^identity.id)
+      |> Repo.aggregate(:count)
+
+    last_active_at =
+      from(t in "oauth_tokens",
+        where: t.identity_id == ^identity.id,
+        select: max(t.last_active_at)
+      )
+      |> Repo.one()
+
+    serialize_account(identity)
+    |> Map.merge(%{
+      post_count: post_count,
+      followers_count: followers_count,
+      last_active_at: last_active_at
+    })
   end
 
   def suspend_account(conn, %{"id" => _id} = p),

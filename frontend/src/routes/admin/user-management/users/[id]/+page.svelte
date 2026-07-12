@@ -272,8 +272,8 @@
         </div>
       </div>
       <div class="overview-stats">
-        <div><span class="stat-n">{user.post_count}</span><span class="stat-l">posts</span></div>
-        <div><span class="stat-n">{user.followers_count}</span><span class="stat-l">followers</span></div>
+        <div><span class="stat-n">{user.post_count ?? 0}</span><span class="stat-l">posts</span></div>
+        <div><span class="stat-n">{user.followers_count ?? 0}</span><span class="stat-l">followers</span></div>
         <div><span class="stat-n">TL {user.trust_level}</span><span class="stat-l">trust</span></div>
         <div><span class="stat-n">{fmtDate(user.created_at)}</span><span class="stat-l">joined</span></div>
         <div><span class="stat-n">{fmtDate(user.last_active_at)}</span><span class="stat-l">last active</span></div>
