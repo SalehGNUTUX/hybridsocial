@@ -54,7 +54,9 @@ the core backend gates in one shot.
 
 Two OTP trees under `backend/lib/`:
 - `hybridsocial/` — business logic as Phoenix **contexts**, each a `<name>.ex` facade over a
-  `<name>/` directory. Key ones: `accounts`, `auth`, `social` (posts, boosts, polls, follows,
+  `<name>/` directory. Key ones: `accounts`, `auth` (sessions, tokens, OAuth, plus
+  registration/login hardening — email-confirmation gate via the
+  `require_confirmed_email` plug, proof-of-work nonce, and captcha), `social` (posts, boosts, polls, follows,
   blocks/mutes, lists, bookmarks, hashtags, stories, reactions), `messaging` (DMs, federated
   as Statuses), `media` (uploads, transcoding, `antivirus`), `feeds`/`timelines`, `trending`,
   `search`, `notifications`, `streaming` (real-time), `nats`, `moderation`, `admin`, `groups`,
