@@ -323,7 +323,10 @@ defmodule Hybridsocial.Emails do
   end
 
   # Prefer a dedicated PNG email logo; otherwise reuse the site logo only if
-  # it's a raster format email clients can actually display (not SVG).
+  # it's a raster format email clients can actually display (not SVG). When the
+  # site logo is an SVG and no PNG exists yet, self-heal: derive one in the
+  # background so the next email carries the real logo. Fully automatic for any
+  # instance — no hardcoded asset, no manual step.
   defp email_logo_url do
     case Hybridsocial.Config.get("email_logo_url", "") do
       url when is_binary(url) and url != "" ->
@@ -332,11 +335,30 @@ defmodule Hybridsocial.Emails do
       _ ->
         logo = Hybridsocial.Config.get("theme_logo_url", "")
 
-        if is_binary(logo) and logo != "" and
-             not String.ends_with?(String.downcase(logo), ".svg"),
-           do: logo,
-           else: nil
+        cond do
+          not (is_binary(logo) and logo != "") -> nil
+          String.ends_with?(String.downcase(logo), ".svg") -> self_heal_email_logo(logo)
+          true -> logo
+        end
     end
+  end
+
+  # Derive email_logo_url from the configured logo, once, off the request path.
+  # Deduped via an atomic cache counter so a burst of emails spawns one job;
+  # the lock expires so a failed derivation is retried on a later email.
+  defp self_heal_email_logo(logo_url) do
+    if Hybridsocial.Cache.increment("email_logo_selfheal", 600) == 1 do
+      Task.Supervisor.start_child(Hybridsocial.TaskSupervisor, fn ->
+        case Hybridsocial.Media.EmailLogo.derive_from_url(logo_url) do
+          {:ok, url} -> Hybridsocial.Config.set("email_logo_url", url)
+          _ -> :ok
+        end
+      end)
+    end
+
+    nil
+  rescue
+    _ -> nil
   end
 
   defp escape_attr(str) when is_binary(str) do
