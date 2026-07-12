@@ -805,7 +805,14 @@
     const title = `Post by ${post.account.display_name || post.account.handle}`;
     const text = (post.content || '').slice(0, 200);
 
-    if (navigator.share) {
+    // Only invoke the native share sheet on touch devices, where it's the
+    // expected UX. On desktop navigator.share exists too (e.g. Brave) but opens
+    // the browser's own share menu, which isn't what people want from a post's
+    // Share — so there we copy the link straight to the clipboard instead.
+    const coarsePointer =
+      typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+
+    if (coarsePointer && navigator.share) {
       try {
         await navigator.share({ title, text, url });
         return;
@@ -814,9 +821,13 @@
       }
     }
 
-    // Fallback: copy link
-    await navigator.clipboard.writeText(url);
-    window.dispatchEvent(new CustomEvent('toast', { detail: { message: 'Link copied', type: 'success' } }));
+    // Desktop (or no native share): copy the link and confirm.
+    try {
+      await navigator.clipboard.writeText(url);
+      window.dispatchEvent(new CustomEvent('toast', { detail: { message: 'Link copied', type: 'success' } }));
+    } catch {
+      window.dispatchEvent(new CustomEvent('toast', { detail: { message: 'Could not copy link', type: 'error' } }));
+    }
   }
 
   async function handleBookmark(e: MouseEvent) {
