@@ -42,6 +42,11 @@
             <span class="toast-description">{toast.description}</span>
           {/if}
         </div>
+        {#if toast.action}
+          <a class="toast-action" href={toast.action.href} onclick={() => removeToast(toast.id)}>
+            {toast.action.label}
+          </a>
+        {/if}
         <button class="toast-close" onclick={() => removeToast(toast.id)} aria-label="Dismiss" type="button">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="4" y1="4" x2="16" y2="16" />
@@ -123,6 +128,24 @@
     font-size: 0.75rem;
     opacity: 0.75;
     line-height: 1.3;
+  }
+
+  .toast-action {
+    flex-shrink: 0;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    color: currentColor;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .toast-action:hover {
+    background: rgba(0, 0, 0, 0.08);
+    text-decoration: underline;
   }
 
   .toast-close {
