@@ -48,6 +48,14 @@
   );
 
   onMount(() => {
+    // Pre-fill the identifier when arriving from the account switcher's
+    // "switch to @handle" / "add account" links (?handle=...).
+    try {
+      const h = new URL(window.location.href).searchParams.get('handle');
+      if (h) email = h;
+    } catch {
+      /* ignore */
+    }
     fetchPow();
     checkCaptcha();
   });

@@ -117,6 +117,11 @@ function attachVisibilityListener(): void {
 
 export function setUser(user: Identity): void {
   authStore.update((s) => ({ ...s, user }));
+  // Remember freshly-authenticated accounts too (login calls setUser directly,
+  // not initAuth). Upsert is idempotent; fire-and-forget.
+  import('$lib/stores/known-accounts.js')
+    .then((m) => m.rememberAccount(user))
+    .catch(() => {});
 }
 
 export function clearAuth(): void {
@@ -182,6 +187,15 @@ export async function initAuth(): Promise<void> {
     }));
     scheduleRefresh(DEFAULT_ACCESS_TTL_SECONDS);
     attachVisibilityListener();
+
+    // Remember this account for the header's quick-switch menu. Frontend-only
+    // list, no tokens stored — switching still re-authenticates via /login.
+    try {
+      const { rememberAccount } = await import('$lib/stores/known-accounts.js');
+      rememberAccount(user);
+    } catch {
+      /* switcher is non-critical */
+    }
 
     // Sync server preferences to local stores
     if ((user as any).locale) {
