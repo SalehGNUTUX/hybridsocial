@@ -204,22 +204,22 @@
     }
   }
 
-  async function handleRoleChange(accountId: string, role: string) {
+  async function handleRoleChange(memberId: string, role: string) {
     try {
-      await updateMemberRole(groupId, accountId, role);
+      await updateMemberRole(groupId, memberId, role);
       members = members.map((m) =>
-        m.account.id === accountId ? { ...m, role: role as GroupMember['role'] } : m
+        m.id === memberId ? { ...m, role: role as GroupMember['role'] } : m
       );
     } catch {
       // Error
     }
   }
 
-  async function handleBan(accountId: string) {
+  async function handleBan(memberId: string) {
     if (!confirm('Are you sure you want to ban this member?')) return;
     try {
-      await banMember(groupId, accountId);
-      members = members.filter((m) => m.account.id !== accountId);
+      await banMember(groupId, memberId);
+      members = members.filter((m) => m.id !== memberId);
     } catch {
       // Error
     }
@@ -424,7 +424,7 @@
                       <select
                         class="input role-select"
                         value={member.role}
-                        onchange={(e) => handleRoleChange(member.account.id, (e.target as HTMLSelectElement).value)}
+                        onchange={(e) => handleRoleChange(member.id, (e.target as HTMLSelectElement).value)}
                       >
                         <option value="member">Member</option>
                         <option value="moderator">Moderator</option>
@@ -437,7 +437,7 @@
                            rank would let them silently elevate). -->
                       <span class="role-badge">{member.role}</span>
                     {/if}
-                    <button type="button" class="btn btn-danger btn-sm" onclick={() => handleBan(member.account.id)}>
+                    <button type="button" class="btn btn-danger btn-sm" onclick={() => handleBan(member.id)}>
                       Ban
                     </button>
                   </div>

@@ -8,7 +8,9 @@ export interface GroupDetail extends Group {
 }
 
 export interface GroupMember {
-  id?: string;
+  // Always present from the backend (serialize_member returns member.id); it's
+  // the membership id used for role/ban/remove endpoints (/members/:mid).
+  id: string;
   identity_id?: string;
   account: Identity;
   role: 'owner' | 'admin' | 'moderator' | 'member';
@@ -127,12 +129,14 @@ export function cancelGroupInvite(groupId: string, inviteId: string): Promise<vo
   return api.delete(`/api/v1/groups/${groupId}/invites/${inviteId}`);
 }
 
-export function updateMemberRole(groupId: string, accountId: string, role: string): Promise<void> {
-  return api.patch(`/api/v1/groups/${groupId}/members/${accountId}`, { role });
+// The `:mid` path param is the GroupMember membership id (member.id), NOT the
+// account id — get_member_by_id looks up by GroupMember.id on the backend.
+export function updateMemberRole(groupId: string, memberId: string, role: string): Promise<void> {
+  return api.patch(`/api/v1/groups/${groupId}/members/${memberId}`, { role });
 }
 
-export function banMember(groupId: string, accountId: string): Promise<void> {
-  return api.post(`/api/v1/groups/${groupId}/members/${accountId}/ban`);
+export function banMember(groupId: string, memberId: string): Promise<void> {
+  return api.post(`/api/v1/groups/${groupId}/members/${memberId}/ban`);
 }
 
 export function searchGroups(query: string, cursor?: string): Promise<PaginatedResponse<Group>> {
