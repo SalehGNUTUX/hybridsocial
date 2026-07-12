@@ -8,6 +8,7 @@
   import { api } from '$lib/api/client.js';
   import type { Identity } from '$lib/api/types.js';
   import { themeStore, resolvedMode } from '$lib/stores/theme.js';
+  import { preferencesStore, updatePreferences } from '$lib/stores/preferences.js';
   import { instanceName } from '$lib/stores/instance.js';
 
   let user: Identity | null = $state(null);
@@ -100,6 +101,18 @@
     clearAuth();
     goto('/login');
   }
+
+  // Theme quick-switch shown in the account menu. Mirrors the Appearance
+  // settings page: writing theme_mode via updatePreferences persists it to
+  // localStorage + the account, and theme.ts re-applies it immediately.
+  type ThemeMode = 'auto' | 'light' | 'dark';
+  const themeModes: { value: ThemeMode; label: string; icon: string }[] = [
+    { value: 'light', label: 'Light', icon: 'M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z' },
+    { value: 'dark', label: 'Dark', icon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' },
+    { value: 'auto', label: 'System', icon: 'M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9zm0 0v18' },
+  ];
+  let themeAdminDefault = $derived((($themeStore?.mode as ThemeMode) || 'auto') as ThemeMode);
+  let themeSelected = $derived(($preferencesStore.theme_mode ?? themeAdminDefault) as ThemeMode);
 </script>
 
 <header class="header">
@@ -199,6 +212,23 @@
               </span>
             </button>
           {/snippet}
+          <div class="theme-switch" role="radiogroup" aria-label="Theme">
+            {#each themeModes as m (m.value)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={themeSelected === m.value}
+                class="theme-switch-btn"
+                class:active={themeSelected === m.value}
+                title="{m.label} theme"
+                aria-label="{m.label} theme"
+                onclick={(e) => { e.stopPropagation(); updatePreferences({ theme_mode: m.value }); }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d={m.icon} /></svg>
+              </button>
+            {/each}
+          </div>
+          <div class="dropdown-divider"></div>
           <a href="/@{user.handle}">Profile</a>
           <a href="/settings">Settings</a>
           {#if user.is_admin}
@@ -453,5 +483,38 @@
       from { width: 40px; opacity: 0; }
       to { width: 180px; opacity: 1; }
     }
+  }
+
+  /* Compact theme quick-switch inside the account menu. The descendant
+     selector out-specifies Dropdown's global `.dropdown-menu button` rule
+     (which would otherwise stack these full-width), giving a segmented row. */
+  .theme-switch {
+    display: flex;
+    gap: 2px;
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .theme-switch .theme-switch-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    width: auto;
+    gap: 0;
+    padding: var(--space-2) 0;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    background: transparent;
+    transition: background 150ms ease, color 150ms ease;
+  }
+
+  .theme-switch .theme-switch-btn:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .theme-switch .theme-switch-btn.active {
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.12));
+    color: var(--color-primary);
   }
 </style>
