@@ -100,7 +100,7 @@
   // True once a long-press has opened the dial and the finger lifted
   // without picking: the dial stays open, waiting for a tap. Lets the
   // window-click dismiss handler ignore the very release that armed it.
-  let radialArmedForTap = false;
+  let radialArmedForTap = $state(false);
   // Wall-clock timestamp (ms epoch) up to which any pointerenter /
   // mouseenter on the wrapper is treated as a touch-synthesized event
   // and ignored. Without this, Android Chrome fires a phantom
@@ -684,6 +684,14 @@
     radialArmedForTap = false;
   }
 
+  // Backdrop tap dismiss: closing the tray flips the overlay back to
+  // pointer-events:none synchronously, so the click that this tap will
+  // synthesize would land on the element behind. Swallow that click.
+  function dismissTrayFromBackdrop() {
+    closeRadial();
+    swallowNextClick();
+  }
+
   // Same single-popover coordination for the reaction tray: close it the
   // moment any other menu or tray becomes the active popover, and release
   // the slot when the tray closes by any path. Ensures two posts can't
@@ -1106,19 +1114,30 @@
     showReactionPicker = false;
     showMoreMenu = false;
     showReactionDetail = false;
-    // An open, tap-armed dial closes on the next tap that isn't on an
-    // emoji (taps on emojis call handleRadialPick + stopPropagation, so
-    // they never reach here). The touchend that armed the dial has
-    // already passed, so this only fires on a subsequent tap.
-    if (radialArmedForTap) {
-      radialArmedForTap = false;
-      radialOpen = false;
-      radialHighlighted = null;
-    }
+  }
+
+  // Dismiss an open, tap-armed tray on the next pointerdown outside it.
+  // Using pointerdown (not click) lets us swallow the click that this
+  // same tap will synthesize, so dismissing the tray doesn't also
+  // activate whatever sits behind it (a post, link, or button). Taps on
+  // an emoji cell call handleRadialPick + stopPropagation, so they never
+  // reach here.
+  function handleWindowPointerDown(e: PointerEvent) {
+    if (!radialArmedForTap && !radialOpen) return;
+    const target = e.target as HTMLElement | null;
+    // A tap inside the tray itself is handled by the cell (or is dead
+    // space); don't treat it as an outside-dismiss.
+    if (target && target.closest && target.closest('.tray-overlay')) return;
+    radialArmedForTap = false;
+    radialOpen = false;
+    radialHighlighted = null;
+    // Eat the click this pointerdown will produce so it can't fall
+    // through onto the element behind the tray.
+    swallowNextClick();
   }
 </script>
 
-<svelte:window onclick={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} onpointerdown={handleWindowPointerDown} />
 
 {#snippet reactionGlyph(type: string, sizeClass: string)}
   {#if reactionEmojis[type]}
@@ -1208,6 +1227,8 @@
         reactions={radialReactions}
         bind:highlightedType={radialHighlighted}
         onpick={handleRadialPick}
+        armed={radialArmedForTap}
+        ondismiss={dismissTrayFromBackdrop}
       />
     {/if}
 

@@ -23,6 +23,8 @@
     reactions,
     highlightedType = $bindable<string | null>(null),
     onpick = undefined,
+    armed = false,
+    ondismiss = undefined,
   }: {
     originX: number;
     originY: number;
@@ -32,7 +34,37 @@
     highlightedType?: string | null;
     /** Called when an emoji is tapped/released on a cell. */
     onpick?: (type: string) => void;
+    /** True once the long-press lifted without picking: the tray waits
+        for a tap. In this state the overlay captures pointer events so a
+        tap outside the tray dismisses it WITHOUT falling through to the
+        post/link/button behind. During the initial drag (armed=false) the
+        overlay stays pointer-transparent so the button's touch handlers
+        still see the finger. */
+    armed?: boolean;
+    /** Called when the backdrop is tapped while armed — dismiss request. */
+    ondismiss?: () => void;
   } = $props();
+
+  // Device-verified fix: the tray positions itself in viewport
+  // coordinates (position:fixed + getBoundingClientRect), but
+  // `.post-card` carries a transform (its :hover lift, which sticks after
+  // a tap on touch), and a transformed ancestor becomes the containing
+  // block for fixed descendants — so the tray anchored to the post card
+  // instead of the viewport and rendered detached / off-screen. Real
+  // iPhone measurement: offsetParent was ARTICLE, position off by ~26px.
+  // Portaling the overlay to <body> removes .post-card from its ancestor
+  // chain, so `fixed` resolves against the viewport again (the same fix
+  // EmojiPicker and the composer already use). body/html carry
+  // overflow-x:clip but that does not reposition a fixed child — only the
+  // transform did.
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
 
   const EDGE_MARGIN = 8;
   const GAP = 6;
@@ -162,7 +194,23 @@
   });
 </script>
 
-<div class="tray-overlay" aria-hidden="true">
+<div
+  class="tray-overlay"
+  class:tray-overlay-armed={armed}
+  use:portal
+  aria-hidden="true"
+  onpointerdown={(e) => {
+    if (!armed) return;
+    const t = e.target as HTMLElement | null;
+    // Tap on a cell → let the cell handle it (onpointerup picks). Tap on
+    // the backdrop → dismiss, and stop the event so it can't reach or
+    // navigate the element behind the overlay.
+    if (t && t.closest && t.closest('.tray-cell')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ondismiss?.();
+  }}
+>
   <div
     class="react-tray"
     style="
@@ -214,7 +262,18 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+    /* Kill the iOS tap-highlight flash and any selection outline when the
+       armed backdrop is tapped (the tap lands on the overlay, not the
+       link behind it, but suppress highlight defensively). */
+    -webkit-tap-highlight-color: transparent;
     touch-action: none;
+  }
+
+  /* Once armed (waiting for a tap), the backdrop catches pointer events so
+     an outside tap dismisses the tray instead of passing through to the
+     post/link behind it. The cells re-enable their own pointer events. */
+  .tray-overlay-armed {
+    pointer-events: auto;
   }
 
   .react-tray {
