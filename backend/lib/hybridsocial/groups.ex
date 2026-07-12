@@ -299,8 +299,9 @@ defmodule Hybridsocial.Groups do
   end
 
   def update_member_role(group_id, admin_id, member_id, role) do
-    with {:ok, _role} <- require_role(group_id, admin_id, @manage_roles),
-         member when not is_nil(member) <- get_member_by_id(member_id, group_id) do
+    with {:ok, actor_role} <- require_role(group_id, admin_id, @manage_roles),
+         member when not is_nil(member) <- get_member_by_id(member_id, group_id),
+         :ok <- authorize_role_change(actor_role, member.role, role) do
       member
       |> GroupMember.changeset(%{role: role})
       |> Repo.update()
@@ -311,8 +312,9 @@ defmodule Hybridsocial.Groups do
   end
 
   def ban_member(group_id, admin_id, member_id) do
-    with {:ok, _role} <- require_role(group_id, admin_id, @moderate_roles),
-         member when not is_nil(member) <- get_member_by_id(member_id, group_id) do
+    with {:ok, actor_role} <- require_role(group_id, admin_id, @moderate_roles),
+         member when not is_nil(member) <- get_member_by_id(member_id, group_id),
+         :ok <- authorize_ban(actor_role, member.role) do
       member
       |> GroupMember.changeset(%{status: :banned})
       |> Repo.update()
@@ -321,6 +323,26 @@ defmodule Hybridsocial.Groups do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # Only an owner (or instance staff) may change an existing owner's role or
+  # hand out the `:owner` role. Without this, an admin could demote the owner
+  # or promote themselves/a puppet to owner and seize the group — the owner
+  # role must stay with its creator, transferable only by an owner.
+  defp authorize_role_change(actor_role, _target_role, _new_role)
+       when actor_role in [:owner, :staff],
+       do: :ok
+
+  defp authorize_role_change(_actor_role, :owner, _new_role), do: {:error, :forbidden}
+
+  defp authorize_role_change(_actor_role, _target_role, new_role) do
+    if to_string(new_role) == "owner", do: {:error, :forbidden}, else: :ok
+  end
+
+  # An owner can only be banned by another owner (or instance staff), so a
+  # moderator/admin can't evict the owner and take over the group.
+  defp authorize_ban(actor_role, _target_role) when actor_role in [:owner, :staff], do: :ok
+  defp authorize_ban(_actor_role, :owner), do: {:error, :forbidden}
+  defp authorize_ban(_actor_role, _target_role), do: :ok
 
   def member?(group_id, identity_id) do
     GroupMember

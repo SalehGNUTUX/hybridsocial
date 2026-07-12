@@ -259,11 +259,20 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
 
   # GET /api/v1/groups/:id/applications
   def applications(conn, %{"id" => id}) do
-    applications = Groups.get_applications(id)
+    identity = conn.assigns.current_identity
 
-    conn
-    |> put_status(:ok)
-    |> json(Enum.map(applications, &serialize_application/1))
+    # Pending applications expose applicant identities and their free-text
+    # screening answers, so only group moderators/admins/owners (the same tier
+    # that approves/rejects) may list them — not every authenticated user.
+    if Groups.can_moderate?(id, identity.id) do
+      applications = Groups.get_applications(id)
+
+      conn
+      |> put_status(:ok)
+      |> json(Enum.map(applications, &serialize_application/1))
+    else
+      conn |> put_status(:forbidden) |> json(%{error: "group.forbidden"})
+    end
   end
 
   # POST /api/v1/groups/:id/applications/:aid/approve
