@@ -220,14 +220,6 @@ function render(cfg: Record<string, unknown>, mode: ThemeMode): void {
 
   const dark = resolved === 'dark';
 
-  // Keep the mobile browser chrome / URL bar colour in step with the resolved
-  // mode. Seeded by the no-FOUC boot script in app.html; updated here whenever
-  // the mode changes (user picks a mode, OS flips while on 'auto', etc.).
-  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeColorMeta) {
-    themeColorMeta.setAttribute('content', dark ? '#0e0f15' : '#6c3edd');
-  }
-
   for (const [key, cssVars] of Object.entries(PROPERTY_MAP)) {
     const darkOverride = str(cfg[`dark_${key}`]);
     const lightVal = str(cfg[key]);
@@ -255,6 +247,29 @@ function render(cfg: Record<string, unknown>, mode: ThemeMode): void {
   const channels = activePrimary ? hexToRgbChannels(activePrimary) : null;
   if (channels) root.style.setProperty('--color-primary-rgb', channels);
   else root.style.removeProperty('--color-primary-rgb');
+
+  // Mobile browser chrome / URL bar. Follow the *configured* palette instead
+  // of a baked-in brand colour: dark mode matches the page background, light
+  // mode the brand primary — both read live from the just-applied CSS vars so
+  // an admin's custom palette flows through. Cache it per mode so the no-FOUC
+  // boot script in app.html can seed the same value before first paint.
+  const barColor = getComputedStyle(root)
+    .getPropertyValue(dark ? '--color-bg' : '--color-primary')
+    .trim();
+  if (barColor) {
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'theme-color');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', barColor);
+    try {
+      localStorage.setItem(dark ? 'hs-theme-color-dark' : 'hs-theme-color-light', barColor);
+    } catch {
+      // storage unavailable — boot just skips seeding, theme.ts re-applies here.
+    }
+  }
 
   for (const key of ATTR_KEYS) {
     const value = str(cfg[key as string]);

@@ -9,15 +9,22 @@
 			// against the OS. Default is 'auto' so dark-OS visitors get dark
 			// immediately. applyTheme() re-asserts this after instance info loads.
 			// Also seed the theme-color meta so the mobile browser chrome / URL
-			// bar matches the resolved mode from the very first paint; render()
-			// keeps it in sync afterwards (respecting a manual override on any
-			// device, so it isn't OS-only like a media-query meta would be).
+			// bar matches the resolved mode from the very first paint. The value
+			// is whatever render() last cached from the *configured* palette — no
+			// brand colour is baked in here. On a first-ever visit (nothing
+			// cached) we skip it; render() creates the meta once instance config
+			// loads, then caches it for subsequent boots.
 			(function () {
 				function setThemeColor(dark) {
-					var meta = document.createElement('meta');
-					meta.name = 'theme-color';
-					meta.content = dark ? '#0e0f15' : '#6c3edd';
-					document.head.appendChild(meta);
+					var cached = localStorage.getItem(dark ? 'hs-theme-color-dark' : 'hs-theme-color-light');
+					if (!cached) return;
+					var meta = document.querySelector('meta[name="theme-color"]');
+					if (!meta) {
+						meta = document.createElement('meta');
+						meta.name = 'theme-color';
+						document.head.appendChild(meta);
+					}
+					meta.content = cached;
 				}
 				try {
 					var mode = localStorage.getItem('hs-theme-mode') || 'auto';
@@ -27,7 +34,6 @@
 					setThemeColor(dark);
 				} catch (e) {
 					document.documentElement.setAttribute('data-theme', 'light');
-					setThemeColor(false);
 				}
 			})();
 		</script>
