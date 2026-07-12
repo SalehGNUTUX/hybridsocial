@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client.js';
   import type { Post, MediaAttachment } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
+  import PostActions from '$lib/components/post/PostActions.svelte';
   import { instanceName } from '$lib/stores/instance.js';
 
   let posts: Post[] = $state([]);
@@ -216,21 +217,11 @@
             </div>
           {/if}
           <div class="stream-actions">
-            <a href="/post/{post.id}" class="stream-action-link">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-              {post.reply_count > 0 ? `${post.reply_count} ` : ''}Comments
-            </a>
-            <span class="stream-stat">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-                <line x1="9" y1="9" x2="9.01" y2="9"/>
-                <line x1="15" y1="9" x2="15.01" y2="9"/>
-              </svg>
-              {post.reaction_count > 0 ? `${post.reaction_count} ` : ''}Reactions
-            </span>
+            <!-- Full, interactive action bar (react + who-reacted detail +
+                 reply/comment + boost/bookmark/share) instead of the old
+                 read-only counts, so viewers can engage without leaving the
+                 feed. -->
+            <PostActions {post} />
           </div>
         </div>
       {/each}
@@ -408,36 +399,6 @@
     gap: var(--space-4);
     padding: var(--space-2) var(--space-4) var(--space-3);
     border-block-start: 1px solid var(--color-border);
-  }
-
-  .stream-action-link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
-    text-decoration: none;
-  }
-
-  .stream-action-link:hover {
-    color: var(--color-primary);
-    text-decoration: none;
-  }
-
-  .stream-action-link:focus-visible {
-    color: var(--color-primary);
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
-    text-decoration: none;
-  }
-
-  .stream-stat {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
   }
 
   .btn-outline {
