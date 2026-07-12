@@ -79,6 +79,22 @@ Two OTP trees under `backend/lib/`:
 Event flow uses **NATS JetStream** for durable events (post.created, reaction.created, …) that
 workers consume; Phoenix PubSub is kept for ephemeral real-time (SSE feeds, WebSocket DMs).
 
+## Permissions, roles & tiers
+
+- **Authorization is server-side, in the context.** A mutation checks the actor against a role
+  ladder via a `require_role(scope_id, actor_id, allowed_roles)` helper returning `{:ok, role}`
+  (the actor's role, or `:staff` for an instance moderator via `Auth.RBAC`) or
+  `{:error, :forbidden}`. Groups is the reference model: roles `[:member, :moderator, :admin,
+  :owner]` with `@moderate_roles`/`@manage_roles`/`@destroy_roles` tiers. The authoritative owner
+  is the `owner` membership row (`created_by` is immutable but is *not* the permission) — guard
+  the owner role explicitly so an `admin` can't grant or seize it. Membership role lookups filter
+  on `status == :approved`.
+- **Per-tier limits** come from `TierLimits.limits_for(identity)` (`char_limit`, `media_per_post`,
+  `markdown` level, …). A post's `content_html` is rendered server-side from raw `content` with
+  the tier's markdown level (`sanitize_post_content(content, level)`); the client may only opt
+  *down* (`markdown: false`). Any path that re-renders a body — **create and edit both** — must
+  apply the tier level, or it silently strips the post's markdown.
+
 ## Frontend architecture
 
 SvelteKit 2 + **Svelte 5 (runes mode is enforced)**; `adapter-node` for production
@@ -101,6 +117,16 @@ Cross-cutting systems worth knowing before editing UI:
   post immediately, then `post-replace` once the server returns the real one. Toasts come from
   `stores/toast.ts` (`addToast`).
 - **PWA**: `static/sw.js` (service worker, push) + `static/manifest.json`.
+
+## Testing
+
+- Backend: `use Hybridsocial.DataCase, async: true`; a `create_user("handle", "email")` helper
+  builds identity fixtures and `errors_on(changeset)` inspects validation. Put an authorization
+  regression test next to the guard it covers (see `groups_test.exs`, `posts_test.exs`). Run a
+  single test with `mix test path:line`.
+- Frontend has no unit runner — `npm run check` (svelte-check, must be **0 errors**) and
+  `node scripts/check-i18n.mjs` are the only gates. Reuse existing components/APIs rather than
+  adding new ones, and confirm both gates pass before opening a PR.
 
 ## Conventions
 
