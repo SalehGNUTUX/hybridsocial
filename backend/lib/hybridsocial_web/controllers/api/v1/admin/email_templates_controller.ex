@@ -128,8 +128,13 @@ defmodule HybridsocialWeb.Api.V1.Admin.EmailTemplatesController do
         end
       end
 
-    rendered_html = substitute(base_html, entry.sample, :html)
-    rendered_subject = substitute(base_subject, entry.sample, :text)
+    # Real instance name + logo header override the placeholder sample so the
+    # preview matches what recipients actually receive; per-recipient fields
+    # (user.handle, confirm_url, …) stay as sample data.
+    assigns = Map.merge(entry.sample, Hybridsocial.Emails.global_assigns())
+
+    rendered_html = substitute(base_html, assigns, :html)
+    rendered_subject = substitute(base_subject, assigns, :text)
 
     rendered_text =
       rendered_html

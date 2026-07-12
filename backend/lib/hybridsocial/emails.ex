@@ -292,10 +292,14 @@ defmodule Hybridsocial.Emails do
     Hybridsocial.Config.get("instance_name", "HybridSocial")
   end
 
-  # Variables available to every template regardless of the emitter.
-  # `brand_header_html` ends in `_html`, so the renderer passes it through
-  # unescaped (it's server-built markup, not user input).
-  defp global_assigns do
+  @doc """
+  Variables injected into every email regardless of the emitter: the live
+  instance name and the brand header (real logo or name text). Public so the
+  admin preview can render templates with the instance's *actual* name and
+  logo instead of placeholder sample data. `brand_header_html` ends in
+  `_html`, so the renderer passes it through unescaped (server-built markup).
+  """
+  def global_assigns do
     %{
       "instance_name" => instance_name(),
       "brand_header_html" => brand_header_html()
