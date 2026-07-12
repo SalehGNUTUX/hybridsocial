@@ -373,6 +373,16 @@
     unicode-bidi: plaintext;
   }
 
+  /* iOS Safari auto-zooms the page when a focused input's font is < 16px and
+     never zooms back. Lift to 16px on touch pointers only, so the DM composer
+     doesn't jolt on focus. Pointer devices keep the compact --text-sm. This is
+     a functional fix for a browser zoom bug, not a design change. */
+  @media (pointer: coarse) {
+    .message-textarea {
+      font-size: 16px;
+    }
+  }
+
   .message-textarea::placeholder {
     color: var(--color-text-tertiary);
   }

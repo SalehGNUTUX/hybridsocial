@@ -322,6 +322,16 @@
     transition: background var(--transition-fast), box-shadow var(--transition-fast);
   }
 
+  /* iOS Safari auto-zooms the page when a focused input's font is < 16px and
+     never zooms back. Lift to 16px on touch pointers only, so tapping search
+     doesn't jolt the layout. Pointer devices keep the compact --text-sm. This
+     is a functional fix for a browser zoom bug, not a design change. */
+  @media (pointer: coarse) {
+    .search-input {
+      font-size: 16px;
+    }
+  }
+
   .search-input::placeholder {
     color: var(--color-text-tertiary);
   }
