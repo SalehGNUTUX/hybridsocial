@@ -7,6 +7,8 @@ export interface Toast {
   description?: string;
   type: 'success' | 'error' | 'info' | 'warning';
   duration: number;
+  /** Optional inline action rendered as a link (e.g. "View post"). */
+  action?: { label: string; href: string };
 }
 
 const { subscribe, update } = writable<Toast[]>([]);
@@ -17,10 +19,11 @@ export function addToast(
   message: string,
   type: 'success' | 'error' | 'info' | 'warning' = 'info',
   duration = 5000,
-  description?: string
+  description?: string,
+  action?: { label: string; href: string }
 ): void {
   const id = crypto.randomUUID();
-  update((all) => [...all, { id, message, description, type, duration }]);
+  update((all) => [...all, { id, message, description, type, duration, action }]);
 
   if (duration > 0) {
     setTimeout(() => {

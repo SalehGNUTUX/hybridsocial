@@ -8,6 +8,7 @@
   import { createDraft, updateDraft, getDraft, deleteDraft } from '$lib/api/drafts.js';
   import { currentUser, authStore } from '$lib/stores/auth.js';
   import { preferencesStore } from '$lib/stores/preferences.js';
+  import { addToast } from '$lib/stores/toast.js';
   import EmojiPicker from './EmojiPicker.svelte';
   import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
   import { markSeen } from '$lib/utils/seen-posts.js';
@@ -1377,6 +1378,20 @@
       // Send to server, then replace optimistic with real
       const newPost = await api.post('/api/v1/statuses', body);
       window.dispatchEvent(new CustomEvent('post-replace', { detail: { oldId: optimisticId, post: newPost } }));
+
+      // Confirm the publish. A scheduled post isn't live yet, so only offer a
+      // "View post" link for a real, immediately-visible one.
+      const newPostId = (newPost as { id?: string } | null)?.id;
+      if (body.scheduled_at) {
+        addToast('Post scheduled', 'success');
+      } else if (newPostId) {
+        addToast('Post published', 'success', 5000, undefined, {
+          label: 'View post',
+          href: `/post/${newPostId}`,
+        });
+      } else {
+        addToast('Post published', 'success');
+      }
     } catch {
       error = 'Failed to publish post. Please try again.';
     } finally {
