@@ -52,11 +52,21 @@ defmodule Hybridsocial.Auth.PoWTest do
       refute PoW.verify(nil, nil)
     end
 
-    test "rejects non-binary nonce against a valid prefix" do
+    test "rejects nil / non-string, non-integer nonce against a valid prefix" do
       challenge = PoW.generate_challenge(4)
 
       refute PoW.verify(challenge.prefix, nil)
-      refute PoW.verify(challenge.prefix, 12_345)
+      refute PoW.verify(challenge.prefix, [1, 2, 3])
+    end
+
+    test "accepts an integer nonce equivalently to its string form" do
+      # The browser sends pow_nonce as a JSON number, so verify/2 normalizes
+      # an integer to its decimal string. A valid solution must verify whether
+      # passed as "7" or 7.
+      challenge = PoW.generate_challenge(4)
+      nonce = find_nonce(challenge.prefix, 4)
+
+      assert PoW.verify(challenge.prefix, String.to_integer(nonce))
     end
   end
 
