@@ -92,6 +92,23 @@ defmodule HybridsocialWeb.Helpers.Account do
   """
   def serialize_summary(nil), do: nil
 
+  # A soft-deleted account (admin deletion) is scrubbed to a neutral
+  # placeholder. It still surfaces in DMs the other party kept, so the
+  # survivor sees "Deleted User" instead of the old handle/name/avatar.
+  def serialize_summary(%Hybridsocial.Accounts.Identity{deleted_at: deleted} = identity)
+      when not is_nil(deleted) do
+    %{
+      id: identity.id,
+      handle: "deleted",
+      acct: "deleted",
+      display_name: "Deleted User",
+      avatar_url: nil,
+      emojis: [],
+      domain: nil,
+      url: nil
+    }
+  end
+
   def serialize_summary(%Hybridsocial.Accounts.Identity{} = identity) do
     %{
       id: identity.id,

@@ -84,6 +84,20 @@ export function unsuspendUser(id: string): Promise<void> {
   return api.post(`/api/v1/admin/users/${id}/unsuspend`);
 }
 
+export interface DeleteUserSummary {
+  identities: number;
+  posts_deleted: number;
+  media_deleted: number;
+  conversations_dropped: number;
+}
+
+// Permanent: purges posts/replies/media (incl. storage blobs), drops DMs
+// where the other party is also deleted, and soft-deletes the account so
+// remaining DMs render as "Deleted User".
+export function deleteUser(id: string): Promise<{ status: string; data: DeleteUserSummary }> {
+  return api.delete(`/api/v1/admin/users/${id}`);
+}
+
 export function warnUser(id: string, message: string): Promise<void> {
   return api.post(`/api/v1/admin/users/${id}/warn`, { message });
 }

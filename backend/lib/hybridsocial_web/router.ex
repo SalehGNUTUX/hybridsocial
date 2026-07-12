@@ -698,6 +698,7 @@ defmodule HybridsocialWeb.Router do
     post "/users/:id/revoke_sessions", AdminController, :revoke_sessions
     post "/users/:id/trust_level", AdminController, :set_trust_level
     post "/accounts/:id/trust_level", AdminController, :set_trust_level
+    delete "/users/:id", AdminController, :delete_account
 
     # Moderation notes (read + write for the panel)
     get "/users/:id/notes", AdminController, :list_notes

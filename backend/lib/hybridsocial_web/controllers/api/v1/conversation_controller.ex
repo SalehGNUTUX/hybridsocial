@@ -359,7 +359,9 @@ defmodule HybridsocialWeb.Api.V1.ConversationController do
           id
 
         _ ->
-          Hybridsocial.Accounts.get_identity(participant.identity_id)
+          # Include soft-deleted so a deleted participant still renders as
+          # "Deleted User" rather than vanishing from the thread.
+          Hybridsocial.Accounts.get_identity_including_deleted(participant.identity_id)
       end
 
     summary = HybridsocialWeb.Helpers.Account.serialize_summary(identity) || %{}

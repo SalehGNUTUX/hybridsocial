@@ -108,6 +108,13 @@ defmodule Hybridsocial.Accounts do
     |> Repo.get!(id)
   end
 
+  @doc """
+  Fetches an identity including soft-deleted ones. Used where a deleted
+  account must still resolve to a struct (e.g. rendering "Deleted User"
+  for a former DM participant).
+  """
+  def get_identity_including_deleted(id), do: Repo.get(Identity, id)
+
   def get_identity_by_handle(handle) do
     Identity
     |> where([i], i.handle == ^handle and is_nil(i.deleted_at))

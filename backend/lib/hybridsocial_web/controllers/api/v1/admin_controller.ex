@@ -1213,6 +1213,50 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     end
   end
 
+  @doc """
+  Permanently deletes a local account and purges its content (posts,
+  replies, owned media incl. storage blobs). DMs are kept but dropped
+  when every other participant is also deleted. The identity is
+  soft-deleted so DM history renders as "Deleted User".
+  """
+  def delete_account(conn, %{"id" => id}) do
+    with :ok <- require_permission(conn, "users.delete") do
+      admin_id = conn.assigns.current_identity.id
+
+      if id == admin_id do
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "account.cannot_delete_self"})
+      else
+        case Accounts.get_identity(id) do
+          nil ->
+            conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
+          identity ->
+            case Hybridsocial.Accounts.AccountDeletion.delete_account(identity) do
+              {:ok, summary} ->
+                Moderation.log(admin_id, "account.deleted", "identity", identity.id, summary)
+
+                Moderation.fire_webhook("user.deleted", %{
+                  id: identity.id,
+                  handle: identity.handle,
+                  admin_id: admin_id
+                })
+
+                conn |> put_status(:ok) |> json(%{status: "ok", data: summary})
+
+              {:error, _} ->
+                conn
+                |> put_status(:unprocessable_entity)
+                |> json(%{error: "account.action_failed"})
+            end
+        end
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   defp handle_account_action(conn, identity, "suspend", admin_id, _params) do
     case Hybridsocial.Accounts.suspend_identity(identity) do
       {:ok, updated} ->

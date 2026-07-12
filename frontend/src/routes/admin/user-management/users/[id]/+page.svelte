@@ -1,10 +1,12 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import {
     getAdminUser,
+    deleteUser,
     suspendUser,
     unsuspendUser,
     warnUser,
@@ -53,6 +55,7 @@
 
   let notes = $state<ModerationNote[]>([]);
   let newNote = $state('');
+  let showDeleteConfirm = $state(false);
   let allRoles = $state<AdminRole[]>([]);
   let userRoles = $state<UserRoleAssignment[]>([]);
 
@@ -203,6 +206,24 @@
     }
   }
 
+  async function handleDelete() {
+    if (!user || busy) return;
+    busy = 'delete';
+    try {
+      const res = await deleteUser(user.id);
+      const s = res.data;
+      addToast(
+        `Account deleted — ${s.posts_deleted} posts, ${s.media_deleted} media removed, ${s.conversations_dropped} conversations dropped`,
+        'success',
+      );
+      showDeleteConfirm = false;
+      await goto('/admin/user-management/users');
+    } catch {
+      addToast('Failed to delete account', 'error');
+      busy = '';
+    }
+  }
+
   function roleAssignment(role: AdminRole): UserRoleAssignment | undefined {
     return userRoles.find((a) => a.role_id === role.id);
   }
@@ -326,6 +347,31 @@
       {/if}
     </section>
 
+    {#if user.is_local}
+      <!-- Danger zone -->
+      <section class="card sect danger-zone">
+        <h2 class="sect-title">Danger zone</h2>
+        <div class="danger-body">
+          <div class="danger-copy">
+            <strong>Delete this account</strong>
+            <p>
+              Permanently removes the account and purges its posts, replies, and media.
+              Direct messages are kept for the other person (this user shows as
+              <em>Deleted User</em>), and dropped only when the other participant is also
+              deleted. This cannot be undone.
+            </p>
+          </div>
+          <button
+            class="btn btn-danger"
+            disabled={busy === 'delete'}
+            onclick={() => (showDeleteConfirm = true)}
+          >
+            Delete user
+          </button>
+        </div>
+      </section>
+    {/if}
+
     {#if isLocal}
       <!-- Account & security -->
       <section class="card sect">
@@ -442,6 +488,32 @@
   {/if}
 </div>
 
+{#if showDeleteConfirm && user}
+  <div
+    class="modal-backdrop"
+    role="button"
+    tabindex="0"
+    onclick={() => (showDeleteConfirm = false)}
+    onkeydown={(e) => e.key === 'Escape' && (showDeleteConfirm = false)}
+  >
+    <div class="modal" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} tabindex="-1">
+      <h3 class="modal-title">Delete @{user.handle}?</h3>
+      <p class="modal-text">
+        This permanently deletes the account and purges all of its posts, replies, and media.
+        Direct messages stay with the other person and show this user as <em>Deleted User</em>;
+        a conversation is dropped only if the other participant is also deleted.
+      </p>
+      <p class="modal-warn">This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" disabled={busy === 'delete'} onclick={() => (showDeleteConfirm = false)}>Cancel</button>
+        <button class="btn btn-danger" disabled={busy === 'delete'} onclick={handleDelete}>
+          {busy === 'delete' ? 'Deleting…' : 'Delete permanently'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   .user-detail {
     max-width: 860px;
@@ -545,4 +617,30 @@
   .note-del .material-symbols-outlined { font-size: 18px; }
 
   .muted { color: var(--color-text-tertiary); font-size: var(--text-sm); }
+
+  /* Danger zone */
+  .danger-zone { border: 1px solid var(--color-danger); }
+  .danger-zone .sect-title { color: var(--color-danger); }
+  .danger-body {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .danger-copy { flex: 1; min-width: 220px; }
+  .danger-copy strong { display: block; margin-bottom: 4px; }
+  .danger-copy p { margin: 0; font-size: var(--text-sm); color: var(--color-text-secondary); }
+  .danger-body .btn-danger { flex-shrink: 0; }
+
+  /* Confirm modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal {
+    background: var(--color-surface, #fff); border-radius: 14px; padding: 22px;
+    max-width: 440px; width: 100%; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  }
+  .modal-title { margin: 0 0 10px; font-size: var(--text-lg); font-weight: 700; }
+  .modal-text { margin: 0 0 10px; font-size: var(--text-sm); color: var(--color-text-secondary); }
+  .modal-warn { margin: 0 0 18px; font-size: var(--text-sm); font-weight: 600; color: var(--color-danger); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 </style>
