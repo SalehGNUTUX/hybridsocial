@@ -14,6 +14,20 @@
   // click/tap), so a card stays a video-first card.
   let expanded = $state<Record<string, boolean>>({});
 
+  // Autoplay is opt-in and remembered across visits. When on, a stream plays
+  // (muted) once it's mostly in view and pauses when scrolled past.
+  const AUTOPLAY_KEY = 'hs-streams-autoplay';
+  let autoplay = $state(false);
+
+  function toggleAutoplay() {
+    autoplay = !autoplay;
+    try {
+      localStorage.setItem(AUTOPLAY_KEY, autoplay ? '1' : '0');
+    } catch {
+      /* storage unavailable — the toggle just won't persist */
+    }
+  }
+
   // Track which posts we've already reported a view for so we don't
   // double-count the initial `play` event.
   const viewsReported = new Set<string>();
@@ -97,28 +111,48 @@
   }
 
   onMount(() => {
+    try {
+      autoplay = localStorage.getItem(AUTOPLAY_KEY) === '1';
+    } catch {
+      /* ignore */
+    }
     loadStreams();
   });
 
-  // Videos start with preload="none" (poster only). This action loads
-  // metadata once a card nears the viewport and pauses playback when a
-  // card scrolls fully out of view, so we don't fetch every video up
-  // front or leave audio playing off-screen.
-  function lazyVideo(node: HTMLVideoElement) {
+  // Loads metadata as a card nears the viewport, pauses playback when it
+  // scrolls away, and — when autoplay is enabled — plays it (muted) once it's
+  // mostly in view. The autoplay flag is passed reactively via the action
+  // parameter, so toggling it takes effect on already-mounted videos.
+  function lazyVideo(node: HTMLVideoElement, enabled: boolean) {
+    let auto = enabled;
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) {
-            if (node.preload === 'none') node.preload = 'metadata';
-          } else if (!node.paused) {
-            node.pause();
+          const ratio = entry.intersectionRatio;
+          if (entry.isIntersecting && ratio >= 0.25 && node.preload === 'none') {
+            node.preload = 'metadata';
+          }
+          if (!entry.isIntersecting || ratio < 0.25) {
+            // Off-screen — pause so audio never plays out of view.
+            if (!node.paused) node.pause();
+          } else if (auto && ratio >= 0.6) {
+            // Mostly in view and autoplay is on — play muted (autoplay policy
+            // blocks sound; the viewer can unmute via the native controls).
+            node.muted = true;
+            node.play().catch(() => {});
           }
         }
       },
-      { threshold: 0.25 },
+      { threshold: [0, 0.25, 0.6] },
     );
     io.observe(node);
-    return { destroy: () => io.disconnect() };
+    return {
+      update(next: boolean) {
+        auto = next;
+        if (!auto && !node.paused) node.pause();
+      },
+      destroy: () => io.disconnect(),
+    };
   }
 </script>
 
@@ -129,6 +163,17 @@
 <div class="streams-page">
   <div class="page-header">
     <h1 class="page-title">Streams</h1>
+    <button
+      type="button"
+      class="autoplay-toggle"
+      class:on={autoplay}
+      role="switch"
+      aria-checked={autoplay}
+      onclick={toggleAutoplay}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+      Autoplay
+    </button>
   </div>
 
   {#if loading}
@@ -174,7 +219,7 @@
                 preload="none"
                 class="stream-video"
                 aria-label={videoAttachment.description || 'Video stream'}
-                use:lazyVideo
+                use:lazyVideo={autoplay}
                 onplay={(e) => handlePlay(post.id, e)}
                 onended={(e) => handleEnded(post.id, e)}
               >
@@ -245,7 +290,37 @@
   }
 
   .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
     margin-block-end: var(--space-4);
+  }
+
+  .autoplay-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+
+  .autoplay-toggle:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-tertiary);
+  }
+
+  .autoplay-toggle.on {
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.12));
+    color: var(--color-primary);
+    border-color: transparent;
   }
 
   .page-title {
