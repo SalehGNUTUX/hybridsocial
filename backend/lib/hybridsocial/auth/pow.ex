@@ -43,6 +43,12 @@ defmodule Hybridsocial.Auth.PoW do
     %{prefix: prefix, difficulty: diff, expires_at: expires_at}
   end
 
+  # Clients send the nonce as a JSON number (register/login/reset) or a
+  # string (recover). Normalize integers to their decimal string so the
+  # hash matches what the browser computed with `prefix + String(nonce)`.
+  def verify(prefix, nonce) when is_binary(prefix) and is_integer(nonce),
+    do: verify(prefix, Integer.to_string(nonce))
+
   def verify(prefix, nonce) when is_binary(prefix) and is_binary(nonce) do
     case Cache.get("pow:#{prefix}") do
       nil ->
