@@ -6,12 +6,17 @@ defmodule HybridsocialWeb.Api.V1.InstanceController do
   end
 
   def info(conn, _params) do
-    turnstile_key = Hybridsocial.Config.Store.get("turnstile_site_key", "")
+    provider = Hybridsocial.Auth.Captcha.provider()
+    site_key = Hybridsocial.Auth.Captcha.site_key()
     reg_mode = Hybridsocial.Config.get("registration_mode", "open")
 
     json(conn, %{
-      turnstile_enabled: turnstile_key != "",
-      turnstile_site_key: turnstile_key,
+      # Provider-agnostic captcha config the frontend widget reads.
+      captcha_provider: provider || "none",
+      captcha_site_key: site_key,
+      # Back-compat: older frontends only understood Turnstile.
+      turnstile_enabled: provider == "turnstile",
+      turnstile_site_key: if(provider == "turnstile", do: site_key, else: ""),
       registration_mode: reg_mode,
       version: Hybridsocial.Instance.version(),
       # Build identity so admins can confirm exactly which commit is running

@@ -723,7 +723,7 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   # email creds, etc.) have their own dedicated admin UIs; theme_* keys
   # belong to /admin/theme and would swamp this page with color pickers
   # if included here.
-  @hidden_settings ~w(vapid_public_key vapid_private_key instance_rules email_provider email_from_address email_smtp_host email_smtp_port email_smtp_username email_smtp_ssl email_resend_api_key)
+  @hidden_settings ~w(vapid_public_key vapid_private_key instance_rules email_provider email_from_address email_smtp_host email_smtp_port email_smtp_username email_smtp_ssl email_resend_api_key turnstile_secret_key hcaptcha_secret_key recaptcha_secret_key)
 
   defp hidden_setting?(%{key: key} = _setting) do
     key in @hidden_settings or String.starts_with?(key, "theme_")

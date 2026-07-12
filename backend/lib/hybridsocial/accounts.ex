@@ -126,7 +126,7 @@ defmodule Hybridsocial.Accounts do
   def register_user(attrs) do
     with :ok <- check_registration_open(),
          :ok <- check_pow(attrs),
-         :ok <- check_turnstile(attrs),
+         :ok <- check_captcha(attrs),
          :ok <- check_email_domain(attrs),
          :ok <- check_handle_available(attrs),
          :ok <- check_invite_code(attrs) do
@@ -262,9 +262,14 @@ defmodule Hybridsocial.Accounts do
     end
   end
 
-  defp check_turnstile(attrs) do
-    if Hybridsocial.Auth.Turnstile.enabled?() do
-      case Hybridsocial.Auth.Turnstile.verify(attrs["cf_turnstile_token"]) do
+  defp check_captcha(attrs) do
+    if Hybridsocial.Auth.Captcha.enabled?() do
+      # `captcha_token` is the provider-agnostic field; `cf_turnstile_token`
+      # is kept for back-compat with clients built before the provider
+      # selector existed.
+      token = attrs["captcha_token"] || attrs["cf_turnstile_token"]
+
+      case Hybridsocial.Auth.Captcha.verify(token) do
         {:ok, _} -> :ok
         {:error, reason} -> {:error, reason}
       end
@@ -1373,7 +1378,7 @@ defmodule Hybridsocial.Accounts do
 
     with false <- Enum.any?(required, &(not is_binary(&1))),
          :ok <- check_pow(params),
-         :ok <- check_turnstile(params),
+         :ok <- check_captcha(params),
          {:ok, identity} <- match_recovery_factors(handle, code, otp, current_email) do
       {:ok, identity}
     else
