@@ -5,6 +5,10 @@
 
   let name = $state('');
   let description = $state('');
+  let visibility = $state<'public' | 'private'>('public');
+  // Backend join_policy enum: :open | :approval | :invite_only (| :screening,
+  // configured later via the settings Screening tab).
+  let joinPolicy = $state<'open' | 'approval' | 'invite_only'>('open');
   let federationMode = $state<FederationMode>('local_only');
   let submitting = $state(false);
   let error = $state('');
@@ -19,6 +23,8 @@
       const group = await createGroup({
         name: name.trim(),
         description: description.trim() || undefined,
+        visibility,
+        join_policy: joinPolicy,
         federation_mode: federationMode,
       });
       goto(`/groups/${group.id}`);
@@ -81,6 +87,24 @@
         rows="3"
         placeholder="What is this group about?"
       ></textarea>
+    </div>
+
+    <div class="field">
+      <label for="group-visibility">Visibility</label>
+      <select id="group-visibility" bind:value={visibility}>
+        <option value="public">Public — anyone on this instance can find and view it</option>
+        <option value="private">Private — only members can view its posts</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="group-join">Who can join</label>
+      <select id="group-join" bind:value={joinPolicy}>
+        <option value="open">Open — anyone can join instantly</option>
+        <option value="approval">Request to join — an admin approves each member</option>
+        <option value="invite_only">Invite only — members join by invitation</option>
+      </select>
+      <p class="field-hint">You can add screening questions later from the group's settings.</p>
     </div>
 
     <fieldset class="mode-picker">
@@ -193,7 +217,8 @@
   }
 
   .field input,
-  .field textarea {
+  .field textarea,
+  .field select {
     padding: var(--space-3);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -204,6 +229,12 @@
 
   .field textarea {
     resize: vertical;
+  }
+
+  .field-hint {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
   }
 
   .mode-picker {
