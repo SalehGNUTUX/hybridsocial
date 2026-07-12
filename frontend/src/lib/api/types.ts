@@ -886,8 +886,27 @@ export interface AdminThemeConfig {
   favicon_url: string | null;
   og_image_url: string | null;
   // Dark-mode policy + optional dark logo (shown when the theme resolves
-  // to dark; falls back to logo_url). Dark colours are derived from the
-  // light theme, so dark_* colour overrides are optional and not required.
+  // to dark; falls back to logo_url).
   mode?: 'light' | 'dark' | 'auto';
   dark_logo_url?: string | null;
+  // Optional dark-palette overrides. When empty/absent, the value is derived
+  // (brand colours lifted from the light palette, surfaces/text from the
+  // built-in dark ramp). Set one to pin a specific dark-mode colour.
+  dark_color_primary?: string;
+  dark_color_primary_hover?: string;
+  dark_color_primary_soft?: string;
+  dark_color_primary_contrast?: string;
+  dark_color_secondary?: string;
+  dark_color_accent?: string;
+  dark_color_success?: string;
+  dark_color_warning?: string;
+  dark_color_danger?: string;
+  dark_color_info?: string;
+  dark_color_bg?: string;
+  dark_color_bg_wash?: string;
+  dark_color_surface?: string;
+  dark_color_border?: string;
+  dark_color_text?: string;
+  dark_color_text_secondary?: string;
+  dark_color_text_link?: string;
 }

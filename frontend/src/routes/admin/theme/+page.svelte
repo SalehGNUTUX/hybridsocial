@@ -5,17 +5,47 @@
   import { applyTheme, liftForDark } from '$lib/stores/theme.js';
   import type { AdminThemeConfig } from '$lib/api/types.js';
 
-  // Fixed dark ramp (mirrors :root[data-theme='dark'] in app.css). The live
-  // app derives dark = lifted brand colours (liftForDark) over this designed
-  // surface/text ramp, so the preview reproduces both to stay faithful.
-  const DARK_RAMP = {
-    bg: '#0e0f15',
-    surface: '#1c1d27', // surface-container-lowest: the lifted card
-    border: 'rgba(202, 200, 230, 0.14)',
-    text: '#f6f5fb',
-    text_secondary: '#aeb0c2',
-    primary_soft: '#2a2440'
+  // Auto dark values, keyed by theme key. Mirrors what applyTheme() renders
+  // for dark mode: everything here is the designed dark ramp from
+  // :root[data-theme='dark'] in app.css (solid hex so a <input type=color>
+  // can show it). Brand keys aren't listed — they lift from the light palette
+  // (see DARK_LIFT_FROM). These are the fallbacks shown/previewed until an
+  // admin pins a dark_* override.
+  const DARK_RAMP: Record<string, string> = {
+    color_primary_hover: '#a78bfa',
+    color_primary_soft: '#2a2440',
+    color_primary_contrast: '#ffffff',
+    color_bg: '#0e0f15',
+    color_bg_wash: '#1c1546',
+    color_surface: '#1c1d27',
+    color_border: '#2b2c39',
+    color_text: '#f6f5fb',
+    color_text_secondary: '#aeb0c2'
   };
+  // Keys whose auto dark value is lifted from a light key (brand tracking),
+  // matching liftForDark() in applyTheme().
+  const DARK_LIFT_FROM: Record<string, string> = {
+    color_primary: 'color_primary',
+    color_secondary: 'color_secondary',
+    color_accent: 'color_accent',
+    color_text_link: 'color_primary',
+    gradient_start: 'gradient_start',
+    gradient_end: 'gradient_end'
+  };
+
+  // The auto (un-overridden) dark value for a key: lifted brand or ramp,
+  // falling back to the light value (feedback colours stay saturated in dark).
+  function darkAuto(key: string): string {
+    const r = theme as unknown as Record<string, string>;
+    if (DARK_LIFT_FROM[key]) return liftForDark(r[DARK_LIFT_FROM[key]] || '#000000');
+    return DARK_RAMP[key] ?? r[key] ?? '#000000';
+  }
+
+  // Effective dark value for a key: the admin's override if set, else auto.
+  function darkValue(key: string): string {
+    const r = theme as unknown as Record<string, string>;
+    return r['dark_' + key] || darkAuto(key);
+  }
 
   const defaults: AdminThemeConfig = {
     color_primary: '#6c3edd',
@@ -47,7 +77,27 @@
     favicon_url: null,
     og_image_url: null,
     mode: 'auto',
-    dark_logo_url: null
+    dark_logo_url: null,
+    // Dark overrides default to empty = auto-derived. Kept in the object so a
+    // reset/clear is actually sent to the backend (it only writes keys it
+    // receives), and render() treats an empty value as "derive it".
+    dark_color_primary: '',
+    dark_color_primary_hover: '',
+    dark_color_primary_soft: '',
+    dark_color_primary_contrast: '',
+    dark_color_secondary: '',
+    dark_color_accent: '',
+    dark_color_success: '',
+    dark_color_warning: '',
+    dark_color_danger: '',
+    dark_color_info: '',
+    dark_color_bg: '',
+    dark_color_bg_wash: '',
+    dark_color_surface: '',
+    dark_color_border: '',
+    dark_color_text: '',
+    dark_color_text_secondary: '',
+    dark_color_text_link: ''
   };
 
   const modeOptions: { value: 'auto' | 'light' | 'dark'; label: string; hint: string }[] = [
@@ -131,50 +181,30 @@
     const radius =
       theme.border_radius === 'sharp' ? '2px' : theme.border_radius === 'pill' ? '9999px' : '8px';
 
-    // Brand colours track one source: dark lifts them the same way the live
-    // app does (liftForDark), so what the admin sees here matches production.
-    const brand = (hex: string) => (mode === 'dark' ? liftForDark(hex) : hex);
-
-    // Surfaces/text come from the editable light palette in light mode, and
-    // from the fixed dark ramp in dark mode (the app doesn't derive dark
-    // surfaces from the light ones — it uses the designed dark scale).
-    const surface =
-      mode === 'dark'
-        ? {
-            bg: DARK_RAMP.bg,
-            surface: DARK_RAMP.surface,
-            border: DARK_RAMP.border,
-            text: DARK_RAMP.text,
-            text_secondary: DARK_RAMP.text_secondary,
-            primary_soft: DARK_RAMP.primary_soft
-          }
-        : {
-            bg: theme.color_bg,
-            surface: theme.color_surface,
-            border: theme.color_border,
-            text: theme.color_text,
-            text_secondary: theme.color_text_secondary,
-            primary_soft: theme.color_primary_soft
-          };
+    // Each colour resolves to the dark value (override, else auto-derived) in
+    // dark mode, or the editable light value otherwise — so the preview always
+    // reflects exactly what the pickers are editing.
+    const r = theme as unknown as Record<string, string>;
+    const v = (key: string) => (mode === 'dark' ? darkValue(key) : r[key]);
 
     return [
-      `--p-primary: ${brand(theme.color_primary)}`,
-      `--p-primary-hover: ${brand(theme.color_primary_hover)}`,
-      `--p-primary-soft: ${surface.primary_soft}`,
-      `--p-primary-contrast: ${theme.color_primary_contrast}`,
-      `--p-secondary: ${brand(theme.color_secondary)}`,
-      `--p-accent: ${brand(theme.color_accent)}`,
-      `--p-success: ${theme.color_success}`,
-      `--p-warning: ${theme.color_warning}`,
-      `--p-danger: ${theme.color_danger}`,
-      `--p-info: ${theme.color_info}`,
-      `--p-bg: ${surface.bg}`,
-      `--p-surface: ${surface.surface}`,
-      `--p-border: ${surface.border}`,
-      `--p-text: ${surface.text}`,
-      `--p-text-secondary: ${surface.text_secondary}`,
-      `--p-text-link: ${brand(theme.color_text_link)}`,
-      `--p-gradient: linear-gradient(${theme.gradient_direction}, ${brand(theme.gradient_start)}, ${brand(theme.gradient_end)})`,
+      `--p-primary: ${v('color_primary')}`,
+      `--p-primary-hover: ${v('color_primary_hover')}`,
+      `--p-primary-soft: ${v('color_primary_soft')}`,
+      `--p-primary-contrast: ${v('color_primary_contrast')}`,
+      `--p-secondary: ${v('color_secondary')}`,
+      `--p-accent: ${v('color_accent')}`,
+      `--p-success: ${v('color_success')}`,
+      `--p-warning: ${v('color_warning')}`,
+      `--p-danger: ${v('color_danger')}`,
+      `--p-info: ${v('color_info')}`,
+      `--p-bg: ${v('color_bg')}`,
+      `--p-surface: ${v('color_surface')}`,
+      `--p-border: ${v('color_border')}`,
+      `--p-text: ${v('color_text')}`,
+      `--p-text-secondary: ${v('color_text_secondary')}`,
+      `--p-text-link: ${v('color_text_link')}`,
+      `--p-gradient: linear-gradient(${theme.gradient_direction}, ${v('gradient_start')}, ${v('gradient_end')})`,
       `--p-radius: ${radius}`,
       `--p-font: ${theme.font_family}`
     ].join('; ');
@@ -209,14 +239,32 @@
     return { label: 'Fail', pass: false };
   }
 
+  // In dark preview mode the pickers edit the dark_* overrides (showing the
+  // auto value until one is set); otherwise they edit the light palette.
   function getColorValue(key: keyof AdminThemeConfig): string {
+    if (previewMode === 'dark') return darkValue(key as string);
     return (theme[key] as string) || '#000000';
   }
 
   function setColorValue(key: keyof AdminThemeConfig, value: string) {
-    (theme as unknown as Record<string, unknown>)[key] = value;
+    const field = previewMode === 'dark' ? 'dark_' + (key as string) : (key as string);
+    (theme as unknown as Record<string, unknown>)[field] = value;
     theme = { ...theme };
   }
+
+  // Whether a key currently has a dark override pinned (vs. auto-derived).
+  function isDarkOverridden(key: keyof AdminThemeConfig): boolean {
+    return !!(theme as unknown as Record<string, string>)['dark_' + (key as string)];
+  }
+
+  // Drop a dark override so the key reverts to its auto value.
+  function clearDarkOverride(key: keyof AdminThemeConfig) {
+    (theme as unknown as Record<string, unknown>)['dark_' + (key as string)] = '';
+    theme = { ...theme };
+  }
+
+  // Background the WCAG badges contrast against — mode-aware.
+  let contrastBg = $derived(previewMode === 'dark' ? darkValue('color_bg') : theme.color_bg);
 
   onMount(async () => {
     try {
@@ -370,13 +418,24 @@
     <div class="theme-controls">
       <h1 class="page-title">Theme Editor</h1>
 
+      <div class="editing-banner" class:editing-dark={previewMode === 'dark'}>
+        {#if previewMode === 'dark'}
+          Editing the <strong>dark palette</strong>. Colours below set dark-mode
+          overrides; leave one on <em>Auto</em> to derive it from your light theme.
+          Switch the preview to Light to edit the light palette.
+        {:else}
+          Editing the <strong>light palette</strong>. Switch the preview
+          (top-right) to <em>Dark</em> to customise dark-mode colours.
+        {/if}
+      </div>
+
       {#each colorSections as section (section.title)}
         <div class="color-section card">
           <h3 class="section-title">{section.title}</h3>
           <div class="color-grid">
             {#each section.colors as color (color.key)}
               {@const value = getColorValue(color.key)}
-              {@const contrast = getContrastRatio(value, theme.color_bg)}
+              {@const contrast = getContrastRatio(value, contrastBg)}
               {@const wcag = wcagLevel(contrast)}
               <div class="color-picker-group">
                 <label class="color-label" for="color-{color.key}">{color.label}</label>
@@ -404,6 +463,18 @@
                     class:wcag-fail={!wcag.pass}
                     title="Contrast ratio: {contrast.toFixed(1)}:1"
                   >{wcag.label}</span>
+                  {#if previewMode === 'dark'}
+                    <button
+                      type="button"
+                      class="auto-chip"
+                      class:auto-chip-on={isDarkOverridden(color.key)}
+                      title={isDarkOverridden(color.key)
+                        ? 'Pinned dark override — click to revert to the auto value'
+                        : 'Auto (derived) — edit to pin a dark override'}
+                      disabled={!isDarkOverridden(color.key)}
+                      onclick={() => clearDarkOverride(color.key)}
+                    >{isDarkOverridden(color.key) ? 'Auto ✕' : 'Auto'}</button>
+                  {/if}
                 </div>
               </div>
             {/each}
@@ -514,8 +585,9 @@
       <div class="darkmode-section card">
         <h3 class="section-title">Dark mode</h3>
         <p class="branding-hint">
-          Dark is generated automatically from your colours above. Pick how the
-          instance renders; you can also upload a dark logo under Branding.
+          Dark is derived from your colours above by default. To customise it,
+          flip the preview to Dark and edit the palette there. Pick how the
+          instance renders below; you can also upload a dark logo under Branding.
         </p>
         <div class="mode-options" style="display:flex; gap:8px; flex-wrap:wrap;">
           {#each modeOptions as opt}
@@ -617,8 +689,8 @@
       </div>
       {#if previewMode === 'dark'}
         <p class="preview-note">
-          Dark is generated from your brand colours over the built-in dark surface
-          ramp. Surface and text values here aren't editable yet.
+          Previewing dark. The colour pickers on the left now edit the dark
+          palette — surfaces and text included.
         </p>
       {/if}
       <div class="preview-frame" style={previewVars} data-preview-mode={previewMode}>
@@ -776,6 +848,41 @@
   .wcag-fail {
     background: var(--color-danger-soft);
     color: var(--color-on-danger-soft);
+  }
+
+  .auto-chip {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-tertiary);
+    cursor: default;
+    white-space: nowrap;
+  }
+
+  .auto-chip-on {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+    cursor: pointer;
+  }
+
+  .editing-banner {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-container-low, rgba(0, 0, 0, 0.03));
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+  }
+
+  .editing-banner.editing-dark {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-text);
   }
 
   .shape-control {
