@@ -138,12 +138,7 @@ defmodule Hybridsocial.Federation.Publisher do
       # p50/p95 latency per destination. Wall-clock includes DNS,
       # connect, TLS handshake, request, and read — same thing a real
       # client would experience.
-      if not CircuitBreaker.allow?(inbox_url) do
-        # Instance is in the open (persistently-unreachable) state — skip the
-        # network call entirely until its next probe window. Cheap, so the
-        # retry loop can keep flowing without hammering a dead host.
-        {:error, "Skipped: instance circuit open (persistently unreachable)"}
-      else
+      if CircuitBreaker.allow?(inbox_url) do
         started_at_ns = System.monotonic_time(:nanosecond)
 
         {result, category} =
@@ -169,6 +164,11 @@ defmodule Hybridsocial.Federation.Publisher do
         duration_ms = div(System.monotonic_time(:nanosecond) - started_at_ns, 1_000_000)
         Process.put(:hs_last_delivery_ms, duration_ms)
         result
+      else
+        # Instance is in the open (persistently-unreachable) state — skip the
+        # network call entirely until its next probe window. Cheap, so the
+        # retry loop can keep flowing without hammering a dead host.
+        {:error, "Skipped: instance circuit open (persistently unreachable)"}
       end
     end
   end
@@ -210,9 +210,7 @@ defmodule Hybridsocial.Federation.Publisher do
         | Enum.map(sig_headers, fn {k, v} -> {k, v} end)
       ]
 
-      if not CircuitBreaker.allow?(inbox_url) do
-        {:error, "Skipped: instance circuit open (persistently unreachable)"}
-      else
+      if CircuitBreaker.allow?(inbox_url) do
         {result, category} =
           case Hybridsocial.HTTP.post(inbox_url, body, headers,
                  recv_timeout: 15_000,
@@ -230,6 +228,8 @@ defmodule Hybridsocial.Federation.Publisher do
 
         CircuitBreaker.record_result(inbox_url, category)
         result
+      else
+        {:error, "Skipped: instance circuit open (persistently unreachable)"}
       end
     else
       Logger.error(

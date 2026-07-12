@@ -34,7 +34,10 @@ defmodule Hybridsocial.Accounts.AccountDeletionTest do
       other = create_user("bystander_del")
 
       {:ok, post} = Hybridsocial.Social.Posts.create_post(target.id, %{"content" => "mine"})
-      {:ok, _reply} = Hybridsocial.Social.Posts.create_post(target.id, %{"content" => "also mine"})
+
+      {:ok, _reply} =
+        Hybridsocial.Social.Posts.create_post(target.id, %{"content" => "also mine"})
+
       {:ok, kept} = Hybridsocial.Social.Posts.create_post(other.id, %{"content" => "not mine"})
 
       assert {:ok, summary} = AccountDeletion.delete_account(target)
