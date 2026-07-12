@@ -247,6 +247,19 @@ defmodule Hybridsocial.Accounts do
     |> Ecto.Changeset.put_change(:confirmation_token, nil)
   end
 
+  @doc """
+  Runs the PoW + captcha gates against a request's params, in that order.
+  Shared by the public auth entry points (login, registration, recovery,
+  password reset) so bot protection is enforced consistently. Returns `:ok`
+  when both pass (or are disabled), else `{:error, :pow_required}` or a
+  captcha error (`:captcha_failed` / `:missing_token` / …).
+  """
+  def check_bot_gates(attrs) do
+    with :ok <- check_pow(attrs) do
+      check_captcha(attrs)
+    end
+  end
+
   defp check_pow(attrs) do
     if Hybridsocial.Auth.PoW.enabled?() do
       prefix = attrs["pow_prefix"]
@@ -847,7 +860,22 @@ defmodule Hybridsocial.Accounts do
 
   # --- Password Reset ---
 
-  def request_password_reset(email) do
+  # Map form (from the public endpoint): gate on PoW + captcha before doing
+  # anything, so reset-email requests are as abuse-resistant as signup /
+  # recovery. Returns {:error, :pow_required} / {:error, :captcha_failed}
+  # when the gates aren't satisfied.
+  def request_password_reset(attrs) when is_map(attrs) do
+    with :ok <- check_pow(attrs),
+         :ok <- check_captcha(attrs) do
+      do_request_password_reset(attrs["email"])
+    end
+  end
+
+  def request_password_reset(email) when is_binary(email) do
+    do_request_password_reset(email)
+  end
+
+  defp do_request_password_reset(email) when is_binary(email) do
     case get_user_by_email(email) do
       nil ->
         # Don't leak whether email exists
@@ -878,6 +906,9 @@ defmodule Hybridsocial.Accounts do
         {:ok, :sent}
     end
   end
+
+  # Missing/blank email — same non-committal response, no enumeration signal.
+  defp do_request_password_reset(_), do: {:ok, :sent}
 
   def reset_password(token, password, password_confirmation) do
     hashed = User.hash_token(token)

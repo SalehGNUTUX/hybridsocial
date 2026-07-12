@@ -1,12 +1,15 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/api/client.js';
   import { setUser } from '$lib/stores/auth.js';
   import { getCurrentUser } from '$lib/api/auth.js';
   import { subscribeToPush } from '$lib/utils/push.js';
   import { tError } from '$lib/utils/i18n.js';
+  import { solvePow, type PowChallenge, type PowSolution } from '$lib/utils/pow.js';
   import { instanceName } from '$lib/stores/instance.js';
   import BrandMark from '$lib/components/ui/BrandMark.svelte';
+  import Captcha from '$lib/components/auth/Captcha.svelte';
 
   let email = $state('');
   let password = $state('');
@@ -23,6 +26,50 @@
   let otpIdentityId = $state('');
   let otpCountdown = $state(60);
   let otpExpired = $state(false);
+
+  // Anti-abuse gates on the credential step (blunts credential stuffing /
+  // brute force). Not applied to the 2FA step — that first login already
+  // passed them.
+  let powSolution = $state<PowSolution | null>(null);
+  let powSolving = $state(false);
+  let captchaProvider = $state('none');
+  let captchaSiteKey = $state('');
+  let captchaToken = $state('');
+  let captcha: { getToken: () => Promise<string>; reset: () => void } | undefined = $state();
+  let captchaWidget = $derived(
+    captchaProvider === 'turnstile' || captchaProvider === 'hcaptcha'
+  );
+
+  onMount(() => {
+    fetchPow();
+    checkCaptcha();
+  });
+
+  async function fetchPow() {
+    try {
+      powSolving = true;
+      const challenge = await api.get<PowChallenge>('/api/v1/auth/pow-challenge');
+      powSolution = await solvePow(challenge);
+    } catch {
+      powSolution = null;
+    } finally {
+      powSolving = false;
+    }
+  }
+
+  async function checkCaptcha() {
+    try {
+      const info = await api.get<{ captcha_provider?: string; captcha_site_key?: string }>(
+        '/api/v1/instance/info'
+      );
+      if (info.captcha_provider && info.captcha_provider !== 'none' && info.captcha_site_key) {
+        captchaProvider = info.captcha_provider;
+        captchaSiteKey = info.captcha_site_key;
+      }
+    } catch {
+      /* treat as disabled */
+    }
+  }
   let countdownInterval: ReturnType<typeof setInterval> | null = null;
 
   function startCountdown() {
@@ -72,13 +119,22 @@
           await goto('/home');
         }
       } else {
+        const body: Record<string, unknown> = { email, password };
+        if (powSolution) {
+          body.pow_prefix = powSolution.challenge;
+          body.pow_nonce = powSolution.nonce;
+        }
+        if (captchaProvider !== 'none' && captcha) {
+          body.captcha_token = await captcha.getToken();
+        }
+
         const result = await api.post<{
           access_token?: string;
           refresh_token?: string;
           otp_required?: boolean;
           identity_id?: string;
           expires_in?: number;
-        }>('/api/v1/auth/login', { email, password });
+        }>('/api/v1/auth/login', body);
 
         if (result.otp_required) {
           otpRequired = true;
@@ -103,6 +159,12 @@
         error = err.body.error_description || tError(err.body.error);
       } else {
         error = 'An unexpected error occurred. Please try again.';
+      }
+      // PoW + captcha tokens are single-use; refresh them so a retry
+      // (e.g. after a wrong password) isn't rejected as a stale challenge.
+      if (!otpRequired) {
+        fetchPow();
+        captcha?.reset();
       }
     } finally {
       loading = false;
@@ -279,6 +341,18 @@
           <a href="/recover" class="auth-link">Lost email access?</a>
         </div>
       </div>
+
+      {#if captchaProvider !== 'none' && captchaSiteKey}
+        <div class="auth-field">
+          <Captcha
+            bind:this={captcha}
+            provider={captchaProvider}
+            siteKey={captchaSiteKey}
+            bind:token={captchaToken}
+            action="login"
+          />
+        </div>
+      {/if}
     {:else}
       {#if otpExpired}
         <div class="auth-otp-expired">
@@ -316,7 +390,13 @@
         Try Again
       </button>
     {:else}
-      <button type="submit" class="auth-submit" disabled={loading || (otpRequired && otpExpired)}>
+      <button
+        type="submit"
+        class="auth-submit"
+        disabled={loading ||
+          (otpRequired && otpExpired) ||
+          (!otpRequired && ((captchaWidget && !captchaToken) || powSolving))}
+      >
         {#if loading}
           <span class="auth-spinner" aria-hidden="true"></span>
           Signing in...

@@ -21,6 +21,7 @@
   } = $props();
 
   let container: HTMLDivElement | undefined = $state();
+  let widgetId: string | number | undefined;
   let isWidget = $derived(provider === 'turnstile' || provider === 'hcaptcha');
 
   function scriptSrc(): string | null {
@@ -83,7 +84,7 @@
         if (cancelled || !isWidget) return;
         const api = await waitForGlobal(provider);
         if (cancelled || !container) return;
-        api.render(container, {
+        widgetId = api.render(container, {
           sitekey: siteKey,
           callback: (t: string) => (token = t),
           'expired-callback': () => (token = ''),
@@ -122,6 +123,24 @@
   /** True when the provider draws a challenge the user must complete first. */
   export function needsInteraction(): boolean {
     return isWidget;
+  }
+
+  /**
+   * Clear the current token and reset the widget so a fresh challenge is
+   * issued — call after a failed submit, since captcha tokens are single-use.
+   * reCAPTCHA v3 needs nothing here (getToken executes a fresh token each call).
+   */
+  export function reset(): void {
+    token = '';
+    if (!isWidget) return;
+    const api = (window as unknown as Record<string, { reset?: (id?: string | number) => void } | undefined>)[
+      provider
+    ];
+    try {
+      api?.reset?.(widgetId);
+    } catch {
+      // Widget not ready / already reset — safe to ignore.
+    }
   }
 </script>
 

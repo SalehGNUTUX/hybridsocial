@@ -90,7 +90,23 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
     end
   end
 
-  def login(conn, %{"email" => email, "password" => password}) do
+  def login(conn, %{"email" => email, "password" => password} = params) do
+    # Gate on PoW + captcha (when enabled) before touching credentials, so
+    # login is as bot-resistant as signup/recovery — blunts credential
+    # stuffing and password brute-force before it reaches the auth path.
+    case Accounts.check_bot_gates(params) do
+      :ok ->
+        do_login(conn, email, password)
+
+      {:error, :pow_required} ->
+        conn |> put_status(:forbidden) |> json(%{error: "auth.pow_required"})
+
+      {:error, _captcha} ->
+        conn |> put_status(:forbidden) |> json(%{error: "auth.captcha_failed"})
+    end
+  end
+
+  defp do_login(conn, email, password) do
     session_info = get_session_info(conn)
 
     case Auth.login_with_session(email, password, session_info) do
@@ -417,18 +433,35 @@ defmodule HybridsocialWeb.Api.V1.AuthController do
 
   # --- Password Reset ---
 
-  def password_reset(conn, %{"email" => email}) do
-    Moderation.log(
-      nil,
-      "auth.password_reset_requested",
-      nil,
-      nil,
-      %{email: email},
-      get_client_ip(conn)
-    )
+  def password_reset(conn, %{"email" => email} = params) do
+    # PoW + captcha are enforced inside request_password_reset (same gates as
+    # signup/recovery). Surface gate failures; otherwise always return the
+    # non-committal "sent" message so a caller can't enumerate accounts.
+    case Accounts.request_password_reset(params) do
+      {:error, :pow_required} ->
+        conn |> put_status(:forbidden) |> json(%{error: "auth.pow_required"})
 
-    Accounts.request_password_reset(email)
-    json(conn, %{message: "auth.reset_email_sent"})
+      {:error, reason}
+      when reason in [
+             :captcha_failed,
+             :captcha_service_unavailable,
+             :captcha_parse_error,
+             :missing_token
+           ] ->
+        conn |> put_status(:forbidden) |> json(%{error: "auth.captcha_failed"})
+
+      _ ->
+        Moderation.log(
+          nil,
+          "auth.password_reset_requested",
+          nil,
+          nil,
+          %{email: email},
+          get_client_ip(conn)
+        )
+
+        json(conn, %{message: "auth.reset_email_sent"})
+    end
   end
 
   def password_change(conn, %{

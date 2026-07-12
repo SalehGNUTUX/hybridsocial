@@ -1,8 +1,11 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { onMount } from 'svelte';
   import BrandMark from '$lib/components/ui/BrandMark.svelte';
+  import Captcha from '$lib/components/auth/Captcha.svelte';
   import { api } from '$lib/api/client.js';
   import { ApiError } from '$lib/api/client.js';
+  import { solvePow, type PowChallenge, type PowSolution } from '$lib/utils/pow.js';
   import { instanceName } from '$lib/stores/instance.js';
 
   // Check if we arrived with a token (from email link)
@@ -18,6 +21,49 @@
   // Step: 'request' = enter email, 'reset' = enter token + password, 'done' = success
   let step = $state<'request' | 'reset' | 'done'>('request');
   let emailSent = $state(false);
+
+  // Anti-abuse gates on the "send reset email" step — same PoW + captcha as
+  // signup/recovery, so this endpoint can't be used to spam reset emails.
+  let powSolution = $state<PowSolution | null>(null);
+  let powSolving = $state(false);
+  let captchaProvider = $state('none');
+  let captchaSiteKey = $state('');
+  let captchaToken = $state('');
+  let captcha: { getToken: () => Promise<string> } | undefined = $state();
+  let captchaWidget = $derived(
+    captchaProvider === 'turnstile' || captchaProvider === 'hcaptcha'
+  );
+
+  onMount(() => {
+    fetchPow();
+    checkCaptcha();
+  });
+
+  async function fetchPow() {
+    try {
+      powSolving = true;
+      const challenge = await api.get<PowChallenge>('/api/v1/auth/pow-challenge');
+      powSolution = await solvePow(challenge);
+    } catch {
+      powSolution = null;
+    } finally {
+      powSolving = false;
+    }
+  }
+
+  async function checkCaptcha() {
+    try {
+      const info = await api.get<{ captcha_provider?: string; captcha_site_key?: string }>(
+        '/api/v1/instance/info'
+      );
+      if (info.captcha_provider && info.captcha_provider !== 'none' && info.captcha_site_key) {
+        captchaProvider = info.captcha_provider;
+        captchaSiteKey = info.captcha_site_key;
+      }
+    } catch {
+      /* treat as disabled */
+    }
+  }
 
   // If token in URL, jump to reset step
   $effect(() => {
@@ -37,7 +83,15 @@
     loading = true;
 
     try {
-      await api.post('/api/v1/auth/password/reset', { email });
+      const body: Record<string, unknown> = { email };
+      if (powSolution) {
+        body.pow_prefix = powSolution.challenge;
+        body.pow_nonce = powSolution.nonce;
+      }
+      if (captchaProvider !== 'none' && captcha) {
+        body.captcha_token = await captcha.getToken();
+      }
+      await api.post('/api/v1/auth/password/reset', body);
       emailSent = true;
     } catch (err) {
       if (err instanceof ApiError) {
@@ -45,6 +99,8 @@
       } else {
         error = 'An unexpected error occurred. Please try again.';
       }
+      // PoW is single-use; refresh it so the user can retry.
+      fetchPow();
     } finally {
       loading = false;
     }
@@ -145,7 +201,23 @@
         />
       </div>
 
-      <button type="submit" class="auth-submit" disabled={loading || !email}>
+      {#if captchaProvider !== 'none' && captchaSiteKey}
+        <div class="auth-field">
+          <Captcha
+            bind:this={captcha}
+            provider={captchaProvider}
+            siteKey={captchaSiteKey}
+            bind:token={captchaToken}
+            action="password_reset"
+          />
+        </div>
+      {/if}
+
+      <button
+        type="submit"
+        class="auth-submit"
+        disabled={loading || !email || powSolving || (captchaWidget && !captchaToken)}
+      >
         {#if loading}
           <span class="auth-spinner" aria-hidden="true"></span>
           Sending...
