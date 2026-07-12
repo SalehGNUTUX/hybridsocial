@@ -1,0 +1,548 @@
+<script lang="ts">
+  import { page } from '$app/state';
+  import { onMount } from 'svelte';
+  import { addToast } from '$lib/stores/toast.js';
+  import Avatar from '$lib/components/ui/Avatar.svelte';
+  import {
+    getAdminUser,
+    suspendUser,
+    unsuspendUser,
+    warnUser,
+    silenceUser,
+    unsilenceUser,
+    shadowBanUser,
+    unshadowBanUser,
+    forceSensitiveUser,
+    unforceSensitiveUser,
+    revokeAllSessions,
+    setTrustLevel,
+    getModerationNotes,
+    createModerationNote,
+    deleteModerationNote,
+    resetUserPassword,
+    sendUserPasswordResetEmail,
+    disableUserTwoFactor,
+    changeUserEmail,
+    confirmUserEmail,
+    changeUserTier,
+    editUserProfile,
+    getRoles,
+    getUserRoles,
+    assignUserRole,
+    revokeUserRole,
+    type UserRoleAssignment,
+  } from '$lib/api/admin.js';
+  import type { AdminUser, ModerationNote, AdminRole } from '$lib/api/types.js';
+
+  let userId = $derived(page.params.id ?? '');
+
+  let user = $state<AdminUser | null>(null);
+  let loading = $state(true);
+  let error = $state('');
+  let busy = $state(''); // key of the in-flight action, to disable its control
+
+  // Editable fields (seeded from the loaded user)
+  let warnMessage = $state('');
+  let silenceReason = $state('');
+  let emailInput = $state('');
+  let displayNameInput = $state('');
+  let bioInput = $state('');
+  let trustInput = $state(0);
+  let tierInput = $state('free');
+  let generatedPassword = $state('');
+
+  let notes = $state<ModerationNote[]>([]);
+  let newNote = $state('');
+  let allRoles = $state<AdminRole[]>([]);
+  let userRoles = $state<UserRoleAssignment[]>([]);
+
+  const tierOptions = [
+    { value: 'free', label: 'Free (L0)', description: 'Default, unverified account' },
+    { value: 'verified_starter', label: 'Starter (L1)', description: 'Small creators & casual users' },
+    { value: 'verified_creator', label: 'Creator (L2)', description: 'Active creators & community builders' },
+    { value: 'verified_pro', label: 'Pro (L3)', description: 'Professional accounts, highest limits' },
+  ];
+
+  let isLocal = $derived(!!user?.is_local);
+
+  onMount(load);
+
+  async function load() {
+    loading = true;
+    error = '';
+    try {
+      const u = await getAdminUser(userId);
+      user = u;
+      emailInput = u.email || '';
+      displayNameInput = u.display_name || '';
+      bioInput = u.bio || '';
+      trustInput = u.trust_level ?? 0;
+      tierInput = u.verification_tier || 'free';
+
+      notes = await getModerationNotes(u.id).catch(() => []);
+      if (u.is_local) {
+        const [roles, assignments] = await Promise.all([
+          getRoles().catch(() => []),
+          getUserRoles(u.id).catch(() => []),
+        ]);
+        allRoles = roles;
+        userRoles = assignments;
+      }
+    } catch {
+      error = 'Failed to load this user.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function refresh() {
+    try {
+      user = await getAdminUser(userId);
+    } catch {
+      /* keep last-known state */
+    }
+  }
+
+  // Wrapper for simple actions: run, toast, re-sync the user.
+  async function run(key: string, fn: () => Promise<unknown>, ok: string) {
+    if (busy) return;
+    busy = key;
+    try {
+      await fn();
+      addToast(ok, 'success');
+      await refresh();
+    } catch {
+      addToast('Action failed', 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function handleWarn() {
+    if (!user || !warnMessage.trim()) return;
+    await run('warn', () => warnUser(user!.id, warnMessage.trim()), 'Warning sent');
+    warnMessage = '';
+  }
+
+  async function handleSilence() {
+    if (!user) return;
+    await run(
+      'silence',
+      () => silenceUser(user!.id, { reason: silenceReason.trim() || undefined }),
+      'User silenced',
+    );
+    silenceReason = '';
+  }
+
+  async function handleChangeEmail() {
+    if (!user || !emailInput.trim()) return;
+    await run('email', () => changeUserEmail(user!.id, emailInput.trim()), 'Email updated');
+  }
+
+  async function handleResetPassword() {
+    if (!user) return;
+    busy = 'resetpw';
+    try {
+      const res = await resetUserPassword(user.id);
+      generatedPassword = res.password;
+      addToast('New password generated (shown once below)', 'success');
+    } catch {
+      addToast('Failed to reset password', 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function handleEditProfile() {
+    if (!user) return;
+    await run(
+      'profile',
+      () =>
+        editUserProfile(user!.id, {
+          display_name: displayNameInput.trim() || null,
+          bio: bioInput.trim() || null,
+        }),
+      'Profile updated',
+    );
+  }
+
+  async function handleTrust() {
+    if (!user) return;
+    await run('trust', () => setTrustLevel(user!.id, Number(trustInput)), `Trust level set to ${trustInput}`);
+  }
+
+  async function handleTier() {
+    if (!user) return;
+    await run('tier', () => changeUserTier(user!.id, tierInput), 'Verification tier updated');
+  }
+
+  async function handleAddNote() {
+    if (!user || !newNote.trim()) return;
+    busy = 'note';
+    try {
+      const note = await createModerationNote(user.id, newNote.trim());
+      notes = [note, ...notes];
+      newNote = '';
+      addToast('Note added', 'success');
+    } catch {
+      addToast('Failed to add note', 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function handleDeleteNote(id: string) {
+    busy = 'note:' + id;
+    try {
+      await deleteModerationNote(id);
+      notes = notes.filter((n) => n.id !== id);
+    } catch {
+      addToast('Failed to delete note', 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  function roleAssignment(role: AdminRole): UserRoleAssignment | undefined {
+    return userRoles.find((a) => a.role_id === role.id);
+  }
+
+  async function toggleRole(role: AdminRole) {
+    if (!user) return;
+    busy = 'role:' + role.id;
+    try {
+      const existing = roleAssignment(role);
+      if (existing) {
+        await revokeUserRole(user.id, existing.id);
+        addToast(`Removed role ${role.name}`, 'success');
+      } else {
+        await assignUserRole(user.id, role.id);
+        addToast(`Granted role ${role.name}`, 'success');
+      }
+      userRoles = await getUserRoles(user.id).catch(() => userRoles);
+    } catch {
+      addToast('Failed to update roles', 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  function fmtDate(s: string | null | undefined): string {
+    if (!s) return '—';
+    try {
+      return new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return '—';
+    }
+  }
+</script>
+
+<svelte:head>
+  <title>{user ? '@' + user.handle : 'User'} - Admin</title>
+</svelte:head>
+
+<div class="user-detail">
+  <a href="/admin/user-management/users" class="back-link">
+    <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Back to users
+  </a>
+
+  {#if loading}
+    <div class="skeleton" style="height: 120px; border-radius: 16px;"></div>
+  {:else if error || !user}
+    <div class="detail-error">{error || 'User not found.'}</div>
+  {:else}
+    <!-- Overview -->
+    <section class="overview card">
+      <Avatar src={user.avatar_url} name={user.display_name || user.handle} size="lg" />
+      <div class="overview-main">
+        <h1 class="overview-name">{user.display_name || user.handle}</h1>
+        <p class="overview-handle">@{user.handle}{#if user.domain}<span class="ov-domain">@{user.domain}</span>{/if}</p>
+        <div class="pills">
+          {#if user.is_local}<span class="pill pill-neutral">Local</span>{:else}<span class="pill pill-neutral">Remote</span>{/if}
+          {#if user.is_admin}<span class="pill pill-info">Admin</span>{/if}
+          {#if user.is_bot}<span class="pill pill-neutral">Bot</span>{/if}
+          {#if user.is_suspended}<span class="pill pill-danger">Suspended</span>{/if}
+          {#if user.is_silenced}<span class="pill pill-warn">Silenced</span>{/if}
+          {#if user.is_shadow_banned}<span class="pill pill-warn">Shadow-banned</span>{/if}
+          {#if user.force_sensitive}<span class="pill pill-warn">Force-sensitive</span>{/if}
+          {#if user.is_local}
+            {#if user.email_confirmed || user.confirmed_at}<span class="pill pill-ok">Email verified</span>
+            {:else}<span class="pill pill-warn">Email unverified</span>{/if}
+          {/if}
+        </div>
+      </div>
+      <div class="overview-stats">
+        <div><span class="stat-n">{user.post_count}</span><span class="stat-l">posts</span></div>
+        <div><span class="stat-n">{user.followers_count}</span><span class="stat-l">followers</span></div>
+        <div><span class="stat-n">TL {user.trust_level}</span><span class="stat-l">trust</span></div>
+        <div><span class="stat-n">{fmtDate(user.created_at)}</span><span class="stat-l">joined</span></div>
+        <div><span class="stat-n">{fmtDate(user.last_active_at)}</span><span class="stat-l">last active</span></div>
+      </div>
+    </section>
+
+    <!-- Moderation -->
+    <section class="card sect">
+      <h2 class="sect-title">Moderation</h2>
+      <div class="btn-row">
+        {#if user.is_suspended}
+          <button class="btn btn-secondary" disabled={busy === 'suspend'} onclick={() => run('suspend', () => unsuspendUser(user!.id), 'Unsuspended')}>Unsuspend</button>
+        {:else}
+          <button class="btn btn-danger" disabled={busy === 'suspend'} onclick={() => run('suspend', () => suspendUser(user!.id), 'Suspended')}>Suspend</button>
+        {/if}
+        {#if user.is_silenced}
+          <button class="btn btn-secondary" disabled={busy === 'silence'} onclick={() => run('silence', () => unsilenceUser(user!.id), 'Unsilenced')}>Unsilence</button>
+        {/if}
+        {#if user.is_shadow_banned}
+          <button class="btn btn-secondary" disabled={busy === 'shadow'} onclick={() => run('shadow', () => unshadowBanUser(user!.id), 'Unshadow-banned')}>Un-shadow-ban</button>
+        {:else}
+          <button class="btn btn-secondary" disabled={busy === 'shadow'} onclick={() => run('shadow', () => shadowBanUser(user!.id), 'Shadow-banned')}>Shadow-ban</button>
+        {/if}
+        {#if user.force_sensitive}
+          <button class="btn btn-secondary" disabled={busy === 'sensitive'} onclick={() => run('sensitive', () => unforceSensitiveUser(user!.id), 'Cleared force-sensitive')}>Clear force-sensitive</button>
+        {:else}
+          <button class="btn btn-secondary" disabled={busy === 'sensitive'} onclick={() => run('sensitive', () => forceSensitiveUser(user!.id), 'Force-sensitive set')}>Force-sensitive</button>
+        {/if}
+        {#if user.is_local}
+          <button class="btn btn-secondary" disabled={busy === 'sessions'} onclick={() => run('sessions', () => revokeAllSessions(user!.id), 'Sessions revoked')}>Revoke sessions</button>
+        {/if}
+      </div>
+
+      <div class="inline-form">
+        <label class="field-label" for="warn">Warn user</label>
+        <div class="inline-row">
+          <input id="warn" class="input" placeholder="Message shown to the user" bind:value={warnMessage} />
+          <button class="btn btn-primary" disabled={!warnMessage.trim() || busy === 'warn'} onclick={handleWarn}>Send</button>
+        </div>
+      </div>
+
+      {#if !user.is_silenced}
+        <div class="inline-form">
+          <label class="field-label" for="silence-reason">Silence (optional reason)</label>
+          <div class="inline-row">
+            <input id="silence-reason" class="input" placeholder="Reason (internal)" bind:value={silenceReason} />
+            <button class="btn btn-secondary" disabled={busy === 'silence'} onclick={handleSilence}>Silence</button>
+          </div>
+        </div>
+      {/if}
+    </section>
+
+    {#if isLocal}
+      <!-- Account & security -->
+      <section class="card sect">
+        <h2 class="sect-title">Account &amp; security</h2>
+        <div class="inline-form">
+          <label class="field-label" for="email">Email address</label>
+          <div class="inline-row">
+            <input id="email" type="email" class="input" bind:value={emailInput} />
+            <button class="btn btn-secondary" disabled={!emailInput.trim() || busy === 'email'} onclick={handleChangeEmail}>Change</button>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          {#if !(user.email_confirmed || user.confirmed_at)}
+            <button class="btn btn-secondary" disabled={busy === 'confirm'} onclick={() => run('confirm', () => confirmUserEmail(user!.id), 'Email marked verified')}>Mark email verified</button>
+          {/if}
+          <button class="btn btn-secondary" disabled={busy === 'sendreset'} onclick={() => run('sendreset', () => sendUserPasswordResetEmail(user!.id), 'Password-reset email sent')}>Send password-reset email</button>
+          <button class="btn btn-secondary" disabled={busy === 'resetpw'} onclick={handleResetPassword}>Generate new password</button>
+          {#if user.two_factor_enabled}
+            <button class="btn btn-danger" disabled={busy === '2fa'} onclick={() => run('2fa', () => disableUserTwoFactor(user!.id), '2FA disabled')}>Disable 2FA</button>
+          {/if}
+        </div>
+
+        {#if generatedPassword}
+          <div class="pw-box">
+            <span class="field-label">New password (copy it now, shown once)</span>
+            <code class="pw-code">{generatedPassword}</code>
+            <button class="btn btn-secondary btn-sm" onclick={() => { navigator.clipboard?.writeText(generatedPassword); addToast('Copied', 'success'); }}>Copy</button>
+          </div>
+        {/if}
+
+        <div class="inline-form">
+          <label class="field-label" for="dn">Display name</label>
+          <input id="dn" class="input" bind:value={displayNameInput} />
+          <label class="field-label" for="bio" style="margin-top:10px;">Bio</label>
+          <textarea id="bio" class="textarea" rows="3" bind:value={bioInput}></textarea>
+          <div style="margin-top:10px;">
+            <button class="btn btn-primary" disabled={busy === 'profile'} onclick={handleEditProfile}>Save profile</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Access -->
+      <section class="card sect">
+        <h2 class="sect-title">Access</h2>
+        <div class="access-grid">
+          <div class="inline-form">
+            <label class="field-label" for="trust">Trust level</label>
+            <div class="inline-row">
+              <select id="trust" class="input access-select" bind:value={trustInput}>
+                {#each [0, 1, 2, 3, 4] as l (l)}<option value={l}>{l}</option>{/each}
+              </select>
+              <button class="btn btn-secondary" disabled={busy === 'trust'} onclick={handleTrust}>Set</button>
+            </div>
+          </div>
+          <div class="inline-form">
+            <label class="field-label" for="tier">Verification tier</label>
+            <div class="inline-row">
+              <select id="tier" class="input access-select" bind:value={tierInput}>
+                {#each tierOptions as t (t.value)}<option value={t.value}>{t.label}</option>{/each}
+              </select>
+              <button class="btn btn-secondary" disabled={busy === 'tier'} onclick={handleTier}>Set</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="roles">
+          <span class="field-label">Roles</span>
+          <div class="roles-list">
+            {#each allRoles as role (role.id)}
+              {@const assigned = !!roleAssignment(role)}
+              <label class="role-chip" class:role-chip-on={assigned}>
+                <input
+                  type="checkbox"
+                  checked={assigned}
+                  disabled={busy === 'role:' + role.id}
+                  onchange={() => toggleRole(role)}
+                />
+                <span>{role.name}{#if role.is_system}<span class="role-sys">system</span>{/if}</span>
+              </label>
+            {/each}
+            {#if allRoles.length === 0}<span class="muted">No roles defined.</span>{/if}
+          </div>
+        </div>
+      </section>
+    {:else}
+      <section class="card sect">
+        <p class="muted">This is a remote account. Only the moderation actions above apply; account, security, and access settings are managed by its home instance.</p>
+      </section>
+    {/if}
+
+    <!-- Notes -->
+    <section class="card sect">
+      <h2 class="sect-title">Moderation notes</h2>
+      <div class="inline-row">
+        <input class="input" placeholder="Add an internal note" bind:value={newNote} />
+        <button class="btn btn-primary" disabled={!newNote.trim() || busy === 'note'} onclick={handleAddNote}>Add</button>
+      </div>
+      <ul class="notes-list">
+        {#each notes as note (note.id)}
+          <li class="note">
+            <div class="note-body">
+              <span class="note-content">{note.content}</span>
+              <span class="note-meta">{note.author?.handle ? '@' + note.author.handle : 'staff'} · {fmtDate(note.created_at)}</span>
+            </div>
+            <button class="note-del" title="Delete note" disabled={busy === 'note:' + note.id} onclick={() => handleDeleteNote(note.id)}>
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </li>
+        {/each}
+        {#if notes.length === 0}<li class="muted">No notes yet.</li>{/if}
+      </ul>
+    </section>
+  {/if}
+</div>
+
+<style>
+  .user-detail {
+    max-width: 860px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    width: fit-content;
+  }
+  .back-link:hover { color: var(--color-text); }
+  .back-link .material-symbols-outlined { font-size: 18px; }
+
+  .detail-error {
+    color: var(--color-danger);
+    background: var(--color-danger-soft);
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .overview {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    padding: var(--space-5);
+    flex-wrap: wrap;
+  }
+  .overview-main { flex: 1; min-width: 200px; }
+  .overview-name { margin: 0; font-size: var(--text-xl); font-weight: 700; }
+  .overview-handle { margin: 2px 0 10px; color: var(--color-text-secondary); font-size: var(--text-sm); }
+  .ov-domain { color: var(--color-text-tertiary); }
+
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .pill-neutral { background: var(--color-surface-container-high, rgba(0,0,0,0.06)); color: var(--color-text-secondary); }
+  .pill-info { background: var(--color-primary-soft); color: var(--color-primary); }
+  .pill-ok { background: var(--color-success-soft); color: var(--color-success); }
+  .pill-warn { background: var(--color-warning-soft); color: var(--color-on-warning-soft, var(--color-warning)); }
+  .pill-danger { background: var(--color-danger-soft); color: var(--color-danger); }
+
+  .overview-stats {
+    display: flex; flex-wrap: wrap; gap: var(--space-4);
+    align-content: flex-start;
+  }
+  .overview-stats > div { display: flex; flex-direction: column; }
+  .stat-n { font-weight: 700; font-variant-numeric: tabular-nums; font-size: var(--text-sm); }
+  .stat-l { font-size: var(--text-xs); color: var(--color-text-tertiary); }
+
+  .sect { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+  .sect-title { margin: 0; font-size: var(--text-base); font-weight: 700; }
+
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .inline-form { display: flex; flex-direction: column; gap: 6px; }
+  .inline-row { display: flex; gap: 8px; align-items: center; }
+  .inline-row .input { flex: 1; }
+  .field-label { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+
+  .btn-sm { padding: 4px 10px; font-size: var(--text-xs); }
+
+  .pw-box {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--color-surface-container-low, rgba(0,0,0,0.03));
+    border: 1px dashed var(--color-border); border-radius: 10px; padding: 12px;
+  }
+  .pw-code { font-family: ui-monospace, Menlo, monospace; font-size: var(--text-sm); word-break: break-all; }
+
+  .access-grid { display: flex; flex-wrap: wrap; gap: var(--space-5); }
+  .access-select { min-width: 160px; }
+
+  .roles { display: flex; flex-direction: column; gap: 8px; }
+  .roles-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .role-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border: 1px solid var(--color-border); border-radius: 9999px;
+    font-size: var(--text-sm); cursor: pointer;
+  }
+  .role-chip-on { background: var(--color-primary-soft); border-color: var(--color-primary); color: var(--color-primary); }
+  .role-sys { margin-left: 6px; font-size: 0.65rem; color: var(--color-text-tertiary); text-transform: uppercase; }
+
+  .notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .note {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 10px 12px; background: var(--color-surface-container-low, rgba(0,0,0,0.03)); border-radius: 10px;
+  }
+  .note-body { display: flex; flex-direction: column; gap: 2px; }
+  .note-content { font-size: var(--text-sm); }
+  .note-meta { font-size: var(--text-xs); color: var(--color-text-tertiary); }
+  .note-del { background: transparent; border: none; color: var(--color-text-tertiary); cursor: pointer; }
+  .note-del:hover { color: var(--color-danger); }
+  .note-del .material-symbols-outlined { font-size: 18px; }
+
+  .muted { color: var(--color-text-tertiary); font-size: var(--text-sm); }
+</style>
