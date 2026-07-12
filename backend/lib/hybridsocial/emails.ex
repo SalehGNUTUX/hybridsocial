@@ -56,7 +56,8 @@ defmodule Hybridsocial.Emails do
       "queue_url" => "#{base_url()}/admin/moderation-queue"
     }
 
-    {subject, html, text} = Renderer.render("moderation_queue", assigns)
+    {subject, html, text} =
+      Renderer.render("moderation_queue", Map.merge(global_assigns(), assigns))
 
     new()
     |> to(to_email)
@@ -223,7 +224,7 @@ defmodule Hybridsocial.Emails do
   # from the `user` struct, sender from instance settings, subject +
   # html + text from the Renderer.
   defp render(key, user, assigns) do
-    {subject, html, text} = Renderer.render(key, assigns)
+    {subject, html, text} = Renderer.render(key, Map.merge(global_assigns(), assigns))
 
     new()
     |> to({user_display_name(user), user_email(user)})
@@ -238,7 +239,7 @@ defmodule Hybridsocial.Emails do
   # is chosen by `Notifications.StaffEmail.dispatch/3`, not by a
   # user-facing action.
   defp admin_render(key, to_email, assigns) do
-    {subject, html, text} = Renderer.render(key, assigns)
+    {subject, html, text} = Renderer.render(key, Map.merge(global_assigns(), assigns))
 
     new()
     |> to(to_email)
@@ -290,6 +291,59 @@ defmodule Hybridsocial.Emails do
   defp instance_name do
     Hybridsocial.Config.get("instance_name", "HybridSocial")
   end
+
+  # Variables available to every template regardless of the emitter.
+  # `brand_header_html` ends in `_html`, so the renderer passes it through
+  # unescaped (it's server-built markup, not user input).
+  defp global_assigns do
+    %{
+      "instance_name" => instance_name(),
+      "brand_header_html" => brand_header_html()
+    }
+  end
+
+  # Email header: the instance logo when an email-safe (raster) logo is
+  # configured, else the instance name as text. Gmail/Outlook don't render
+  # SVG, so an SVG site logo is skipped in favor of a PNG set via
+  # `email_logo_url`.
+  defp brand_header_html do
+    name = instance_name()
+
+    case email_logo_url() do
+      url when is_binary(url) and url != "" ->
+        ~s(<img src="#{url}" alt="#{escape_attr(name)}" height="48" style="height:48px;max-height:48px;width:auto;display:block;border:0;">)
+
+      _ ->
+        ~s(<div style="font-size:16px;font-weight:700;color:#6366f1;letter-spacing:0.02em;">#{escape_attr(name)}</div>)
+    end
+  end
+
+  # Prefer a dedicated PNG email logo; otherwise reuse the site logo only if
+  # it's a raster format email clients can actually display (not SVG).
+  defp email_logo_url do
+    case Hybridsocial.Config.get("email_logo_url", "") do
+      url when is_binary(url) and url != "" ->
+        url
+
+      _ ->
+        logo = Hybridsocial.Config.get("theme_logo_url", "")
+
+        if is_binary(logo) and logo != "" and
+             not String.ends_with?(String.downcase(logo), ".svg"),
+           do: logo,
+           else: nil
+    end
+  end
+
+  defp escape_attr(str) when is_binary(str) do
+    str
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+  end
+
+  defp escape_attr(_), do: ""
 
   defp base_url do
     endpoint_config = Application.get_env(:hybridsocial, HybridsocialWeb.Endpoint, [])

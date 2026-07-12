@@ -30,4 +30,27 @@ defmodule Hybridsocial.Emails.ConfirmationHandleTest do
     assert email.html_body =~ "@mlaarebi"
     refute email.html_body =~ "@!"
   end
+
+  test "subject uses the 'name: subject' format with no em dash" do
+    identity = create_user("mlaarebi")
+    user = Repo.get_by!(User, identity_id: identity.id)
+
+    email = Emails.confirmation_email(user)
+
+    assert email.subject =~ ": confirm your email address"
+    refute email.subject =~ "—"
+    refute email.html_body =~ "—"
+  end
+
+  test "renders the brand header (text fallback when no email logo is set)" do
+    Hybridsocial.Config.set("instance_name", "Test Instance")
+    identity = create_user("mlaarebi")
+    user = Repo.get_by!(User, identity_id: identity.id)
+
+    email = Emails.confirmation_email(user)
+
+    # No logo configured in test -> the header falls back to the name text.
+    assert email.subject =~ "Test Instance: confirm"
+    assert email.html_body =~ "Test Instance"
+  end
 end

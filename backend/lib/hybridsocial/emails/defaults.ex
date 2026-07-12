@@ -5,8 +5,8 @@ defmodule Hybridsocial.Emails.Defaults do
   emails before any admin customises them, and so that resetting an
   override always has something to fall back to.
 
-  Styles are **inlined** on purpose — Gmail drops `<style>` tags in
-  the `<head>`, and we don't run a CSS inliner. Keep it that way when
+  Styles are **inlined** on purpose (Gmail drops `<style>` tags in
+  the `<head>`, and we don't run a CSS inliner). Keep it that way when
   editing; the admin UI can use a CSS inliner client-side if desired
   but the defaults should not depend on one.
 
@@ -40,33 +40,34 @@ defmodule Hybridsocial.Emails.Defaults do
 
   # ── Subjects ──────────────────────────────────────────────────────
 
-  defp confirmation_subject, do: "{{instance_name}} — confirm your email address"
-  defp password_reset_subject, do: "{{instance_name}} — reset your password"
+  defp confirmation_subject, do: "{{instance_name}}: confirm your email address"
+  defp password_reset_subject, do: "{{instance_name}}: reset your password"
 
   defp moderation_queue_subject,
-    do: "{{instance_name}} — moderation queue: new {{item.severity}}-severity {{item.item_type}}"
+    do:
+      "{{instance_name}}: new {{item.severity}}-severity {{item.item_type}} in the moderation queue"
 
-  defp login_notification_subject, do: "{{instance_name}} — new login to your account"
+  defp login_notification_subject, do: "{{instance_name}}: new login to your account"
 
   defp notification_digest_subject,
-    do: "{{instance_name}} — you have {{count}} new {{noun}}"
+    do: "{{instance_name}}: you have {{count}} new {{noun}}"
 
-  defp account_approved_subject, do: "{{instance_name}} — your account is approved"
-  defp account_rejected_subject, do: "{{instance_name}} — your account application"
-  defp appeal_approved_subject, do: "{{instance_name}} — your appeal was approved"
-  defp appeal_rejected_subject, do: "{{instance_name}} — your appeal"
+  defp account_approved_subject, do: "{{instance_name}}: your account is approved"
+  defp account_rejected_subject, do: "{{instance_name}}: your account application"
+  defp appeal_approved_subject, do: "{{instance_name}}: your appeal was approved"
+  defp appeal_rejected_subject, do: "{{instance_name}}: your appeal"
 
   defp admin_pending_account_subject,
-    do: "[{{instance_name}}] New pending account: @{{applicant.handle}}"
+    do: "{{instance_name}}: new pending account @{{applicant.handle}}"
 
   defp admin_new_report_subject,
-    do: "[{{instance_name}}] New {{report.category}} report from @{{report.reporter_handle}}"
+    do: "{{instance_name}}: new {{report.category}} report from @{{report.reporter_handle}}"
 
   defp admin_new_appeal_subject,
-    do: "[{{instance_name}}] New appeal from @{{appeal.identity_handle}}"
+    do: "{{instance_name}}: new appeal from @{{appeal.identity_handle}}"
 
   defp admin_backup_failed_subject,
-    do: "[{{instance_name}}] Backup failed ({{backup.type}})"
+    do: "{{instance_name}}: backup failed ({{backup.type}})"
 
   defp generic_notification_subject, do: "{{title}}"
 
@@ -86,7 +87,7 @@ defmodule Hybridsocial.Emails.Defaults do
             <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
               <tr>
                 <td style="padding:28px 32px 0 32px;">
-                  <div style="font-size:14px;font-weight:700;color:#6366f1;letter-spacing:0.02em;">{{instance_name}}</div>
+                  {{brand_header_html}}
                 </td>
               </tr>
               <tr>
@@ -149,7 +150,7 @@ defmodule Hybridsocial.Emails.Defaults do
     """
 
     footer =
-      "If you didn't request this, someone may have typed your email by mistake — it's safe to ignore this message."
+      "If you didn't request this, someone may have typed your email by mistake, and it's safe to ignore this message."
 
     layout(content, footer)
   end
@@ -234,7 +235,7 @@ defmodule Hybridsocial.Emails.Defaults do
 
   defp appeal_approved_html do
     content = """
-    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;">Good news — your appeal was approved</h1>
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;">Good news, your appeal was approved</h1>
     <p style="margin:0 0 12px 0;">Hi @{{user.handle}}, we reviewed your appeal against the <strong>{{appeal.action_type}}</strong> action and decided to reverse it.</p>
     <p style="margin:0 0 12px 0;"><strong>Moderator's note:</strong> {{response}}</p>
     #{button("Back to {{instance_name}}", "{{app_url}}")}
