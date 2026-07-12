@@ -3383,21 +3383,25 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   defp account_detail(identity) do
     import Ecto.Query
     alias Hybridsocial.Repo
+    alias Hybridsocial.Social.{Follow, Post}
+    alias Hybridsocial.Auth.OAuthToken
+
     identity = Repo.preload(identity, :user)
 
     post_count =
-      from(p in "posts", where: p.identity_id == ^identity.id and is_nil(p.deleted_at))
+      Post
+      |> where([p], p.identity_id == ^identity.id and is_nil(p.deleted_at))
       |> Repo.aggregate(:count)
 
     followers_count =
-      from(f in "follows", where: f.target_id == ^identity.id)
+      Follow
+      |> where([f], f.followee_id == ^identity.id and f.status == :accepted)
       |> Repo.aggregate(:count)
 
     last_active_at =
-      from(t in "oauth_tokens",
-        where: t.identity_id == ^identity.id,
-        select: max(t.last_active_at)
-      )
+      OAuthToken
+      |> where([t], t.identity_id == ^identity.id)
+      |> select([t], max(t.last_active_at))
       |> Repo.one()
 
     serialize_account(identity)
