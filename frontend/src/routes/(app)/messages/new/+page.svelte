@@ -5,6 +5,9 @@
   import type { Identity } from '$lib/api/types.js';
   import { search } from '$lib/api/search.js';
   import { createConversation } from '$lib/api/conversations.js';
+  import { getFollowing, getFollowers } from '$lib/api/accounts.js';
+  import { currentUser } from '$lib/stores/auth.js';
+  import { get } from 'svelte/store';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import { instanceName } from '$lib/stores/instance.js';
@@ -14,6 +17,49 @@
   let searching = $state(false);
   let creating = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | undefined;
+  let searchInputEl = $state<HTMLInputElement | undefined>();
+
+  // Default suggestions shown before the user types: people they follow and
+  // people who follow them (mutuals first). Gives a one-tap way to start a
+  // chat with someone you actually know.
+  let suggestions = $state<Identity[]>([]);
+  let loadingSuggestions = $state(false);
+
+  function asList(res: unknown): Identity[] {
+    if (Array.isArray(res)) return res as Identity[];
+    const data = (res as { data?: Identity[] })?.data;
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function loadSuggestions() {
+    const me = get(currentUser);
+    if (!me?.id) return;
+    loadingSuggestions = true;
+    try {
+      const [followingRes, followersRes] = await Promise.all([
+        getFollowing(me.id).catch(() => []),
+        getFollowers(me.id).catch(() => []),
+      ]);
+      const following = asList(followingRes);
+      const followers = asList(followersRes);
+      const followerIds = new Set(followers.map((a) => a.id));
+      const followingIds = new Set(following.map((a) => a.id));
+      // Mutuals first, then the rest of following, then remaining followers.
+      const ordered = [
+        ...following.filter((a) => followerIds.has(a.id)),
+        ...following.filter((a) => !followerIds.has(a.id)),
+        ...followers.filter((a) => !followingIds.has(a.id)),
+      ];
+      const seen = new Set<string>();
+      suggestions = ordered
+        .filter((a) => a.id !== me.id && !seen.has(a.id) && (seen.add(a.id), true))
+        .slice(0, 30);
+    } catch {
+      suggestions = [];
+    } finally {
+      loadingSuggestions = false;
+    }
+  }
 
   // Accept `?to=<handle>` (from "Chat with @user" on post cards or
   // the "Message" button on profiles). Search for the handle; if
@@ -23,10 +69,16 @@
   onMount(() => {
     if (!browser) return;
     const to = new URL(window.location.href).searchParams.get('to');
-    if (!to) return;
-    query = to.replace(/^@/, '');
-    handleInput();
-    resolveToHandle(query);
+    if (to) {
+      query = to.replace(/^@/, '');
+      handleInput();
+      resolveToHandle(query);
+      return;
+    }
+    // No prefilled recipient — put the cursor in the search field and show
+    // people the user follows / who follow them as quick starting points.
+    searchInputEl?.focus();
+    loadSuggestions();
   });
 
   async function resolveToHandle(handle: string) {
@@ -172,11 +224,29 @@
       type="text"
       class="input search-input"
       placeholder="Search for a user..."
+      bind:this={searchInputEl}
       bind:value={query}
       oninput={handleInput}
       autocomplete="off"
     />
   </div>
+
+  {#snippet personButton(account: Identity)}
+    <li>
+      <button
+        type="button"
+        class="result-item"
+        onclick={() => startConversation(account.id)}
+        disabled={creating}
+      >
+        <Avatar src={account.avatar_url} name={account.display_name || account.handle} size="md" />
+        <div class="result-info">
+          <span class="result-name">{account.display_name || account.handle}</span>
+          <span class="result-handle">@{account.handle}</span>
+        </div>
+      </button>
+    </li>
+  {/snippet}
 
   <div class="results-section">
     {#if searching}
@@ -185,30 +255,24 @@
       </div>
     {:else if results.length > 0}
       <ul class="results-list" role="listbox" aria-label="Search results">
-        {#each results as account (account.id)}
-          <li>
-            <button
-              type="button"
-              class="result-item"
-              onclick={() => startConversation(account.id)}
-              disabled={creating}
-            >
-              <Avatar src={account.avatar_url} name={account.display_name || account.handle} size="md" />
-              <div class="result-info">
-                <span class="result-name">{account.display_name || account.handle}</span>
-                <span class="result-handle">@{account.handle}</span>
-              </div>
-            </button>
-          </li>
-        {/each}
+        {#each results as account (account.id)}{@render personButton(account)}{/each}
       </ul>
     {:else if query.trim().length >= 2}
       <div class="results-empty">
         <p class="empty-text">No users found</p>
       </div>
+    {:else if loadingSuggestions}
+      <div class="results-loading">
+        <Spinner size={20} />
+      </div>
+    {:else if suggestions.length > 0}
+      <p class="suggestions-label">Suggested</p>
+      <ul class="results-list" role="listbox" aria-label="Suggested people">
+        {#each suggestions as account (account.id)}{@render personButton(account)}{/each}
+      </ul>
     {:else}
       <div class="results-empty">
-        <p class="empty-text">Type at least 2 characters to search</p>
+        <p class="empty-text">Search for someone to message</p>
       </div>
     {/if}
   </div>
@@ -294,6 +358,16 @@
   .results-list {
     display: flex;
     flex-direction: column;
+  }
+
+  .suggestions-label {
+    margin: 0 0 var(--space-1);
+    padding-inline: var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
   }
 
   .result-item {
