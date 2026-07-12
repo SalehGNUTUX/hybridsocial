@@ -109,6 +109,11 @@
     }, 350);
   });
 
+  // When the preset category is "Other", the user types a free-text category
+  // here and it is sent instead of the literal "Other". The backend stores
+  // category as free text, so custom values still filter and display fine.
+  let customCategory = $state('');
+
   const categories = [
     'Business',
     'Technology',
@@ -138,6 +143,7 @@
 
   function openCreateModal() {
     createData = { handle: '', display_name: '', description: '', website: '', category: '' };
+    customCategory = '';
     createError = '';
     showCreateModal = true;
   }
@@ -149,8 +155,16 @@
     }
     creating = true;
     createError = '';
+    // "Other" is a placeholder — send the user's free-text category instead.
+    const payload = {
+      ...createData,
+      category:
+        createData.category === 'Other' && customCategory.trim()
+          ? customCategory.trim()
+          : createData.category,
+    };
     try {
-      const newPage = await createPage(createData);
+      const newPage = await createPage(payload);
       pages = [newPage, ...pages];
       showCreateModal = false;
     } catch (e: any) {
@@ -322,6 +336,15 @@
           <option value={cat}>{cat}</option>
         {/each}
       </select>
+      {#if createData.category === 'Other'}
+        <input
+          type="text"
+          class="form-input custom-category-input"
+          bind:value={customCategory}
+          placeholder="Type your category"
+          aria-label="Custom category"
+        />
+      {/if}
     </div>
 
     {#if createError}
@@ -402,6 +425,10 @@
     align-items: center;
     flex: 1;
     min-width: 0;
+  }
+
+  .custom-category-input {
+    margin-block-start: var(--space-2);
   }
 
   .category-filter {
