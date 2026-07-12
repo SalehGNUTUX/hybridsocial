@@ -55,7 +55,14 @@
           href="/post/{t.postId}"
           aria-label="Open post"
         >
-          {#if t.attachment.preview_url || t.attachment.url}
+          {#if t.attachment.type === 'video' && !t.attachment.preview_url}
+            <!-- No server-generated poster for this video, so an <img> would
+                 get the video URL and render a black tile. Use the <video>
+                 element with a #t=0.1 fragment so the browser seeks a hair
+                 past 0 and paints a real first frame as the thumbnail. -->
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video src="{t.attachment.url}#t=0.1" preload="metadata" muted playsinline tabindex="-1"></video>
+          {:else if t.attachment.preview_url || t.attachment.url}
             <img
               src={t.attachment.preview_url || t.attachment.url}
               alt={t.attachment.description || ''}
@@ -113,7 +120,8 @@
     transform: scale(1.02);
   }
 
-  .media-tile img {
+  .media-tile img,
+  .media-tile video {
     width: 100%;
     height: 100%;
     object-fit: cover;
