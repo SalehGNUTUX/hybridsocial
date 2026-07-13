@@ -10,6 +10,7 @@
   import { themeStore, resolvedMode } from '$lib/stores/theme.js';
   import { preferencesStore, updatePreferences } from '$lib/stores/preferences.js';
   import { instanceName } from '$lib/stores/instance.js';
+  import { knownAccounts, forgetAccount } from '$lib/stores/known-accounts.js';
 
   let user: Identity | null = $state(null);
   let authenticated = $state(false);
@@ -24,6 +25,11 @@
   isLoggedIn.subscribe((v) => (authenticated = v));
   unreadCount.subscribe((v) => (notifCount = v));
   dmUnreadTotal.subscribe((v) => (dmCount = v));
+
+  // Other accounts this browser has signed in as (current one excluded) — for
+  // the switcher. Switching routes through /login pre-filled, since sessions
+  // are httpOnly cookies and can't be held for more than one account at once.
+  let otherAccounts = $derived($knownAccounts.filter((a) => a.handle !== user?.handle));
 
   function handleSearch(e: Event) {
     e.preventDefault();
@@ -234,6 +240,31 @@
           {#if user.is_admin}
             <a href="/admin">Admin</a>
           {/if}
+          <div class="dropdown-divider"></div>
+          {#each otherAccounts as acct (acct.handle)}
+            <div class="acct-row">
+              <a class="acct-switch" href="/login?handle={encodeURIComponent(acct.handle)}">
+                <Avatar src={acct.avatar_url} name={acct.display_name} size="sm" />
+                <span class="acct-text">
+                  <span class="acct-name">{acct.display_name}</span>
+                  <span class="acct-handle">@{acct.handle}</span>
+                </span>
+              </a>
+              <button
+                type="button"
+                class="acct-forget"
+                title="Remove from this list"
+                aria-label="Remove @{acct.handle} from this list"
+                onclick={(e) => { e.stopPropagation(); forgetAccount(acct.handle); }}
+              >
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/></svg>
+              </button>
+            </div>
+          {/each}
+          <a class="acct-add" href="/login">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add another account
+          </a>
           <div class="dropdown-divider"></div>
           <button class="dropdown-item-danger" onclick={handleLogout} type="button">Log out</button>
         </Dropdown>
@@ -516,5 +547,57 @@
   .theme-switch .theme-switch-btn.active {
     background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.12));
     color: var(--color-primary);
+  }
+
+  /* Account switcher rows. The descendant selectors out-specify Dropdown's
+     global `.dropdown-menu a/button` rule so the switch link and its remove
+     button sit on one row instead of stacking full-width. */
+  .acct-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .acct-row .acct-switch {
+    flex: 1;
+    min-width: 0;
+    gap: var(--space-2);
+  }
+
+  .acct-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+  }
+
+  .acct-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .acct-handle {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .acct-row .acct-forget {
+    flex: 0 0 auto;
+    width: auto;
+    padding: var(--space-2);
+    color: var(--color-text-tertiary);
+  }
+
+  .acct-row .acct-forget:hover {
+    color: var(--color-danger);
+    background: transparent;
+  }
+
+  .acct-add {
+    color: var(--color-text-secondary);
   }
 </style>
