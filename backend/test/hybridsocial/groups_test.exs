@@ -260,6 +260,28 @@ defmodule Hybridsocial.GroupsTest do
 
       assert {:error, :forbidden} = Groups.update_member_role(group.id, bob.id, member.id, :admin)
     end
+
+    test "an admin cannot promote a member to owner", %{alice: alice, bob: bob, carol: carol} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Group"})
+      {:ok, bob_m} = Groups.join_group(group.id, bob.id)
+      {:ok, carol_m} = Groups.join_group(group.id, carol.id)
+      {:ok, _} = Groups.update_member_role(group.id, alice.id, bob_m.id, :admin)
+
+      assert {:error, :forbidden} =
+               Groups.update_member_role(group.id, bob.id, carol_m.id, :owner)
+    end
+
+    test "an admin cannot demote the owner", %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Group"})
+      {:ok, bob_m} = Groups.join_group(group.id, bob.id)
+      {:ok, _} = Groups.update_member_role(group.id, alice.id, bob_m.id, :admin)
+      owner = Enum.find(Groups.get_members(group.id), &(&1.identity_id == alice.id))
+
+      assert {:error, :forbidden} =
+               Groups.update_member_role(group.id, bob.id, owner.id, :member)
+
+      assert Groups.member_role(group.id, alice.id) == :owner
+    end
   end
 
   describe "ban_member/3" do
@@ -269,6 +291,16 @@ defmodule Hybridsocial.GroupsTest do
 
       assert {:ok, banned} = Groups.ban_member(group.id, alice.id, member.id)
       assert banned.status == :banned
+    end
+
+    test "a moderator cannot ban the owner", %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Group"})
+      {:ok, bob_m} = Groups.join_group(group.id, bob.id)
+      {:ok, _} = Groups.update_member_role(group.id, alice.id, bob_m.id, :moderator)
+      owner = Enum.find(Groups.get_members(group.id), &(&1.identity_id == alice.id))
+
+      assert {:error, :forbidden} = Groups.ban_member(group.id, bob.id, owner.id)
+      assert Groups.member_role(group.id, alice.id) == :owner
     end
   end
 
