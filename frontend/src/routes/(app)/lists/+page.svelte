@@ -141,7 +141,7 @@
         <path d="M4 6h16M4 10h16M4 14h16M4 18h16" />
       </svg>
       <p class="empty-title">No lists yet</p>
-      <p class="empty-hint">Lists group accounts you follow into their own focused, chronological timeline — like Friends or News. Create one, add people to it, then open it to read only their posts, away from your Home feed.</p>
+      <p class="empty-hint">Lists group accounts you follow into their own focused, chronological timeline, like Friends or News. Create one, add people to it, then open it to read only their posts, away from your Home feed.</p>
       <button type="button" class="btn btn-primary" onclick={openCreate}>
         Create your first list
       </button>
@@ -153,7 +153,7 @@
       </svg>
       <p>
         Lists group accounts you follow into their own focused, chronological
-        timeline — like <strong>Friends</strong> or <strong>News</strong>. Open a
+        timeline, like <strong>Friends</strong> or <strong>News</strong>. Open a
         list to read only its members' posts, away from your Home feed. Use
         <strong>New List</strong> to create one, and each list's <strong>⋯</strong>
         menu to rename it, manage members, or delete it.
