@@ -159,6 +159,18 @@ defmodule Hybridsocial.Social.PostsTest do
 
       assert errors_on(changeset)[:edit_expires_at] != nil
     end
+
+    test "re-renders content_html with the tier markdown level, like create" do
+      identity = create_user("mdedit", "mdedit@test.com")
+      md = "**bold** text"
+      {:ok, created} = Posts.create_post(identity.id, %{"content" => md})
+
+      {:ok, edited} = Posts.edit_post(created.id, identity.id, %{"content" => md})
+
+      # Editing must render content_html the same way create does. Before the
+      # fix, edit fell back to a plaintext sanitize and stripped the markdown.
+      assert edited.content_html == created.content_html
+    end
   end
 
   describe "delete_post/2" do

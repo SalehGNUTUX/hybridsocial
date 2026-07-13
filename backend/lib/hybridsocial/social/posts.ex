@@ -606,6 +606,21 @@ defmodule Hybridsocial.Social.Posts do
           TierLimits.limits_for_tier("verified_pro")
         end
 
+      # Re-render content_html with the author's tier markdown level, exactly
+      # like create_post does. Without this, edit_changeset/generate_content_html
+      # falls back to a plaintext sanitize and silently strips the post's
+      # markdown formatting on every edit. Pre-setting content_html here means
+      # generate_content_html keeps it as-is.
+      attrs =
+        case attrs["content"] do
+          content when is_binary(content) ->
+            level = resolve_markdown_level(attrs, limits)
+            Map.put(attrs, "content_html", maybe_render_content_html(content, level))
+
+          _ ->
+            attrs
+        end
+
       revision_number = get_next_revision_number(post_id)
 
       # A media-bearing post (captioned image is stored as post_type
