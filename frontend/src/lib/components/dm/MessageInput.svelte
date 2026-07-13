@@ -2,6 +2,7 @@
   import { uploadMedia } from '$lib/api/media.js';
   import type { MediaAttachment } from '$lib/api/types.js';
   import { addToast } from '$lib/stores/toast.js';
+  import EmojiPicker from '$lib/components/post/EmojiPicker.svelte';
 
   let {
     onsend,
@@ -60,6 +61,30 @@
   let fileInputEl: HTMLInputElement | undefined = $state();
   let uploaded = $state<MediaAttachment[]>([]);
   let uploadingCount = $state(0);
+  let showEmoji = $state(false);
+  let emojiBtnEl = $state<HTMLButtonElement | undefined>();
+
+  // Insert an emoji at the caret (mirrors the composer). Closes the picker,
+  // restores the caret and re-grows the textarea.
+  function insertEmoji(text: string) {
+    if (!textareaEl) {
+      content += text;
+      showEmoji = false;
+      return;
+    }
+    const start = textareaEl.selectionStart;
+    const end = textareaEl.selectionEnd;
+    content = content.substring(0, start) + text + content.substring(end);
+    showEmoji = false;
+    setTimeout(() => {
+      if (!textareaEl) return;
+      const pos = start + text.length;
+      textareaEl.selectionStart = pos;
+      textareaEl.selectionEnd = pos;
+      textareaEl.focus();
+      autoResize();
+    }, 0);
+  }
 
   function triggerFileInput() {
     if (disabled) return;
@@ -285,6 +310,29 @@
       {disabled}
     ></textarea>
 
+    <div class="emoji-picker-wrapper">
+      <button
+        type="button"
+        class="emoji-btn"
+        class:active={showEmoji}
+        bind:this={emojiBtnEl}
+        onclick={() => (showEmoji = !showEmoji)}
+        aria-label="Insert emoji"
+        aria-expanded={showEmoji}
+        {disabled}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+          <line x1="9" y1="9" x2="9.01" y2="9" />
+          <line x1="15" y1="9" x2="15.01" y2="9" />
+        </svg>
+      </button>
+      {#if showEmoji}
+        <EmojiPicker onselect={insertEmoji} anchor={emojiBtnEl} onclose={() => (showEmoji = false)} />
+      {/if}
+    </div>
+
     <button
       type="button"
       class="send-btn"
@@ -349,6 +397,38 @@
   }
 
   .attach-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .emoji-picker-wrapper {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  .emoji-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: none;
+    border-radius: var(--radius-full);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .emoji-btn:hover:not(:disabled),
+  .emoji-btn.active {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .emoji-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
