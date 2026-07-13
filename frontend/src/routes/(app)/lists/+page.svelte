@@ -141,12 +141,24 @@
         <path d="M4 6h16M4 10h16M4 14h16M4 18h16" />
       </svg>
       <p class="empty-title">No lists yet</p>
-      <p class="empty-hint">Lists help you organize the accounts you follow into curated timelines.</p>
+      <p class="empty-hint">Lists group accounts you follow into their own focused, chronological timeline, like Friends or News. Create one, add people to it, then open it to read only their posts, away from your Home feed.</p>
       <button type="button" class="btn btn-primary" onclick={openCreate}>
         Create your first list
       </button>
     </div>
   {:else}
+    <div class="lists-intro">
+      <svg class="lists-intro-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </svg>
+      <p>
+        Lists group accounts you follow into their own focused, chronological
+        timeline, like <strong>Friends</strong> or <strong>News</strong>. Open a
+        list to read only its members' posts, away from your Home feed. Use
+        <strong>New List</strong> to create one, and each list's <strong>⋯</strong>
+        menu to rename it, manage members, or delete it.
+      </p>
+    </div>
     <ul class="list-items">
       {#each lists as list (list.id)}
         <li class="list-item">
@@ -262,6 +274,35 @@
     color: var(--color-text-tertiary);
     max-width: 320px;
     line-height: 1.5;
+  }
+
+  .lists-intro {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    margin-block-end: var(--space-3);
+    background: var(--color-surface-container);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+
+  .lists-intro p {
+    margin: 0;
+  }
+
+  .lists-intro-icon {
+    flex-shrink: 0;
+    margin-block-start: 2px;
+    color: var(--color-primary);
+  }
+
+  .lists-intro strong {
+    color: var(--color-text);
+    font-weight: 600;
   }
 
   .list-items {
