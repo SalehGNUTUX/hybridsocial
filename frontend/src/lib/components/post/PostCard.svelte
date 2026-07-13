@@ -2013,6 +2013,21 @@
     transition: opacity 0.4s ease;
   }
 
+  /* Touch devices: cut per-card GPU cost. content-visibility skips painting
+     off-screen cards (a big scroll-smoothness win on long feeds), and the NSFW
+     frost blur — which re-blurs every scroll frame on mobile GPUs — is dropped
+     since the content beneath it is hidden anyway. Desktop is unchanged. */
+  @media (pointer: coarse) {
+    .post-card {
+      content-visibility: auto;
+      contain-intrinsic-size: 0 320px;
+    }
+
+    .nsfw-frost-glass {
+      backdrop-filter: none;
+    }
+  }
+
   /* Frost glass layer */
   .nsfw-frost-glass {
     position: absolute;
