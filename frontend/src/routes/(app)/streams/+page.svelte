@@ -350,7 +350,9 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-xl);
-    overflow: hidden;
+    /* No `overflow: hidden` here — it would clip the reaction picker that
+       pops out of the action bar past the card edge. The rounded top corners
+       are instead clipped on the video wrapper below. */
   }
 
   .stream-video-wrapper {
@@ -362,6 +364,11 @@
        meta (fallback 16/9); max-height keeps tall portrait clips sane. */
     aspect-ratio: 16 / 9;
     max-height: 70vh;
+    /* Round only the top corners to match the card, and clip the video to
+       them (the card no longer clips for us). */
+    overflow: hidden;
+    border-start-start-radius: var(--radius-xl);
+    border-start-end-radius: var(--radius-xl);
   }
 
   .stream-video {
