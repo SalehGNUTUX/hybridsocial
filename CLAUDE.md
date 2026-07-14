@@ -94,6 +94,16 @@ workers consume; Phoenix PubSub is kept for ephemeral real-time (SSE feeds, WebS
   the tier's markdown level (`sanitize_post_content(content, level)`); the client may only opt
   *down* (`markdown: false`). Any path that re-renders a body — **create and edit both** — must
   apply the tier level, or it silently strips the post's markdown.
+- **Enum fields are strict `Ecto.Enum`s — the client must send the exact atom strings.** A group's
+  `visibility` is `[:public, :private, :local_only]` and `join_policy` is
+  `[:open, :screening, :approval, :invite_only]` (`groups/group.ex`); an out-of-set value fails
+  the changeset with a 422, so every frontend `<option value>`/type union must match byte-for-byte
+  (a drifted `secret`/`invite` silently breaks saving).
+- **Pages are their own `organization` identities**, not a side table: a post's `page_id` *is* that
+  identity's id, and a page authors posts under it. Edit authority runs its own ladder in
+  `pages.ex` — `can_edit?` (parent/org owner, admin, editor) ⊇ what `can_moderate?` adds
+  (moderator), while `can_manage?` (owner/admin only) gates role grants and settings. Gate any
+  "act as / edit the page" path on the matching predicate; instance staff don't implicitly get it.
 
 ## Frontend architecture
 
