@@ -12,7 +12,10 @@ defmodule HybridsocialWeb.Plugs.SecurityHeaders do
     |> put_resp_header("x-content-type-options", "nosniff")
     |> put_resp_header("x-xss-protection", "0")
     |> put_resp_header("referrer-policy", "strict-origin-when-cross-origin")
-    |> put_resp_header("permissions-policy", "camera=(), microphone=(), geolocation=()")
+    # microphone=(self) lets same-origin voice-message recording call
+    # getUserMedia; without it the browser blocks the mic with a
+    # "Permissions policy violation" and voice DMs fail on every device.
+    |> put_resp_header("permissions-policy", "camera=(), microphone=(self), geolocation=()")
     |> put_resp_header("content-security-policy", build_csp())
     |> put_resp_header("strict-transport-security", "max-age=31536000; includeSubDomains")
     |> put_resp_header("vary", "Origin")
