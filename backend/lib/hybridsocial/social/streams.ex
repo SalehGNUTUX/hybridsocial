@@ -90,6 +90,7 @@ defmodule Hybridsocial.Social.Streams do
   def streams_feed(_viewer_id, opts \\ []) do
     limit = parse_limit(opts)
     min_duration = Keyword.get(opts, :min_duration_seconds, 15.0)
+    search = normalize_search(Keyword.get(opts, :q))
 
     # Streams surfaces public video to everyone, including signed-out
     # viewers. Membership is defined by "a LOCAL author posted a public
@@ -125,8 +126,9 @@ defmodule Hybridsocial.Social.Streams do
           ^min_duration
         )
       )
+      |> apply_search(search)
       |> apply_cursor_filters(opts)
-      |> order_by([p], desc: p.reaction_count, desc: p.inserted_at)
+      |> apply_sort(Keyword.get(opts, :sort))
       |> limit(^limit)
       |> preload(:identity)
 
@@ -148,6 +150,48 @@ defmodule Hybridsocial.Social.Streams do
     |> maybe_min_id(Keyword.get(opts, :min_id))
   end
 
+  # Timeline ordering the viewer picks: trending (engagement-weighted, the
+  # default), newest, or oldest.
+  defp apply_sort(query, "newest"), do: order_by(query, [p], desc: p.inserted_at)
+  defp apply_sort(query, "oldest"), do: order_by(query, [p], asc: p.inserted_at)
+
+  defp apply_sort(query, _trending),
+    do: order_by(query, [p], desc: p.reaction_count, desc: p.inserted_at)
+
+  # Free-text filter over the post body. Hashtags live literally in the
+  # content (e.g. "#gaza"), so a single case-insensitive match covers both
+  # plain phrases and tag searches; user wildcards are escaped so `%`/`_`
+  # are treated literally.
+  defp normalize_search(q) when is_binary(q) do
+    case String.trim(q) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_search(_), do: nil
+
+  defp apply_search(query, nil), do: query
+
+  defp apply_search(query, q) do
+    pattern = "%" <> escape_like(q) <> "%"
+    where(query, [p], ilike(p.content, ^pattern))
+  end
+
+  defp escape_like(str) do
+    str
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
+
+  # KNOWN LIMITATION: this id-based cursor (`p.id < max_id`) only orders
+  # correctly when the sort correlates with the UUIDv4 primary key, which it
+  # does NOT for `newest`/`oldest` (inserted_at) or `trending` (reaction_count).
+  # It is latent today because the Streams UI loads a single page and never
+  # passes max_id/min_id. Before wiring infinite scroll to any of these sorts,
+  # replace this with a boundary-lookup + row-tuple compare on the sort key
+  # (see the UUID cursor-pagination pattern used elsewhere).
   defp maybe_max_id(query, nil), do: query
   defp maybe_max_id(query, max_id), do: where(query, [p], p.id < ^max_id)
 

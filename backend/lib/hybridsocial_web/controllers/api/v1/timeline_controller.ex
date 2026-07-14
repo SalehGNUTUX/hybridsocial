@@ -269,7 +269,12 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
   def streams(conn, params) do
     identity = conn.assigns[:current_identity]
     viewer_id = if identity, do: identity.id, else: nil
-    opts = parse_pagination_params(params)
+
+    opts =
+      params
+      |> parse_pagination_params()
+      |> maybe_put_streams_sort(params["sort"])
+      |> maybe_put_streams_query(params["q"])
 
     posts = Hybridsocial.Social.Streams.streams_feed(viewer_id, opts)
     serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
@@ -310,6 +315,19 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
       val -> Keyword.put(opts, :since_id, val)
     end
   end
+
+  # Only accept the known ordering keywords; anything else falls through to
+  # the feed's default (trending) rather than being trusted as a raw value.
+  @streams_sorts ~w(trending newest oldest)
+  defp maybe_put_streams_sort(opts, sort) when sort in @streams_sorts,
+    do: Keyword.put(opts, :sort, sort)
+
+  defp maybe_put_streams_sort(opts, _), do: opts
+
+  defp maybe_put_streams_query(opts, q) when is_binary(q) and q != "",
+    do: Keyword.put(opts, :q, q)
+
+  defp maybe_put_streams_query(opts, _), do: opts
 
   # Cache the serialized first page of a feed for @feed_cache_ttl seconds.
   # `compute_fun` produces the JSON-ready payload on a miss; anything but

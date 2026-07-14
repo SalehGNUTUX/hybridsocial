@@ -146,11 +146,27 @@
     expanded = { ...expanded, [id]: !expanded[id] };
   }
 
+  // Timeline ordering + free-text/hashtag filter. `trending` is the default
+  // (matches the server) so it's omitted from the query on the happy path.
+  let sort = $state<'trending' | 'newest' | 'oldest'>('trending');
+  let search = $state('');
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const SORTS: { value: 'trending' | 'newest' | 'oldest'; label: string }[] = [
+    { value: 'trending', label: 'Trending' },
+    { value: 'newest', label: 'Newest' },
+    { value: 'oldest', label: 'Oldest' },
+  ];
+
   async function loadStreams() {
     loading = true;
     error = '';
     try {
-      const result = await api.get<any>('/api/v1/timelines/streams');
+      const params: Record<string, string> = {};
+      if (sort !== 'trending') params.sort = sort;
+      const q = search.trim();
+      if (q) params.q = q;
+      const result = await api.get<any>('/api/v1/timelines/streams', params);
       const data = Array.isArray(result) ? result : (result as any)?.data || [];
       posts = data;
     } catch {
@@ -158,6 +174,18 @@
     } finally {
       loading = false;
     }
+  }
+
+  function changeSort(next: 'trending' | 'newest' | 'oldest') {
+    if (sort === next) return;
+    sort = next;
+    loadStreams();
+  }
+
+  // Debounce typing so we don't fire a request per keystroke.
+  function onSearchInput() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadStreams(), 300);
   }
 
   async function reportView(
@@ -290,6 +318,35 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
         Autoplay
       </button>
+    </div>
+  </div>
+
+  <div class="streams-controls">
+    <div class="streams-search">
+      <svg class="streams-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="search"
+        class="streams-search-input"
+        placeholder="Search clips or #tags…"
+        aria-label="Search streams"
+        bind:value={search}
+        oninput={onSearchInput}
+      />
+    </div>
+    <div class="streams-sort" role="group" aria-label="Sort clips by">
+      {#each SORTS as s (s.value)}
+        <button
+          type="button"
+          class="sort-chip"
+          class:on={sort === s.value}
+          aria-pressed={sort === s.value}
+          onclick={() => changeSort(s.value)}
+        >
+          {s.label}
+        </button>
+      {/each}
     </div>
   </div>
 
@@ -430,6 +487,75 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
+  }
+
+  .streams-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-block-end: var(--space-4);
+  }
+
+  .streams-search {
+    position: relative;
+    flex: 1 1 220px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .streams-search-icon {
+    position: absolute;
+    inset-inline-start: var(--space-3);
+    color: var(--color-text-tertiary);
+    pointer-events: none;
+  }
+
+  .streams-search-input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    padding-inline-start: calc(var(--space-3) + 16px + var(--space-2));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    text-align: start;
+  }
+
+  .streams-search-input:focus-visible {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .streams-sort {
+    display: inline-flex;
+    gap: var(--space-1);
+    flex-shrink: 0;
+  }
+
+  .sort-chip {
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+
+  .sort-chip:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-tertiary);
+  }
+
+  .sort-chip.on {
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.12));
+    color: var(--color-primary);
+    border-color: transparent;
   }
 
   .autoplay-toggle {
