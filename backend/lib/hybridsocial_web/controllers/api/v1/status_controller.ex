@@ -11,8 +11,9 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
     limits = TierLimits.limits_for(identity)
 
     with :ok <- validate_tier_limits(params, limits),
-         :ok <- check_bot_rate_limit(identity) do
-      case Posts.create_post(identity.id, params, identity) do
+         :ok <- check_bot_rate_limit(identity),
+         {:ok, author_id} <- resolve_post_author(params, identity) do
+      case Posts.create_post(author_id, params, identity) do
         {:ok, post} ->
           post = Hybridsocial.Repo.preload(post, [:identity, :quote])
 
@@ -54,12 +55,33 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
           |> json(%{error: "validation.failed", details: format_errors(changeset)})
       end
     else
+      {:error, :page_forbidden} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "page.forbidden"})
+
       {:error, error_key, max} ->
         conn
         |> put_status(:unprocessable_entity)
         |> json(%{error: error_key, max: max})
     end
   end
+
+  # A status carrying a `page_id` is authored AS the page, not the logged-in
+  # user — but only when that user actually has edit rights on the page
+  # (parent owner / org owner / admin / editor). Without this guard any
+  # authenticated user could post in any page's name. An unknown or
+  # non-editable page_id is refused with :page_forbidden.
+  defp resolve_post_author(%{"page_id" => page_id}, identity)
+       when is_binary(page_id) and page_id != "" do
+    if Hybridsocial.Pages.can_edit?(page_id, identity.id) do
+      {:ok, page_id}
+    else
+      {:error, :page_forbidden}
+    end
+  end
+
+  defp resolve_post_author(_params, identity), do: {:ok, identity.id}
 
   @doc """
   POST /api/v1/statuses/by_ids

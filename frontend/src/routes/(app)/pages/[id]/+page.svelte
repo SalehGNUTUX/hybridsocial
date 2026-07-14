@@ -64,6 +64,18 @@
         ['admin', 'editor', 'moderator'].includes(pageData.viewer_role)),
   );
 
+  // Posting AS the page is narrower than managing it: only roles the
+  // backend's Pages.can_edit? accepts (owner / admin / editor) may author
+  // in the page's name. Moderators and instance staff can moderate but not
+  // post as the page, and ordinary visitors get no composer at all. This
+  // mirrors the server guard in StatusController.create — the backend is
+  // still authoritative; this just hides an affordance that would 403.
+  let canPostAsPage = $derived(
+    isOwner ||
+      (typeof pageData?.viewer_role === 'string' &&
+        ['owner', 'admin', 'editor'].includes(pageData.viewer_role)),
+  );
+
   const tabs = [
     { id: 'posts', label: 'Posts' },
     { id: 'media', label: 'Media' },
@@ -187,11 +199,13 @@
     <div class="page-feed-section">
       <Tabs {tabs} bind:active={activeTab}>
         {#if activeTab === 'posts'}
-          <ComposerTrigger
-            pageId={pageData.id}
-            contextLabel={`Posting to ${pageData.title || pageData.name || pageData.display_name || 'page'}`}
-            placeholder={`Share something with ${pageData.display_name || pageData.name || pageData.handle || 'this page'}…`}
-          />
+          {#if canPostAsPage}
+            <ComposerTrigger
+              pageId={pageData.id}
+              contextLabel={`Posting to ${pageData.title || pageData.name || pageData.display_name || 'page'}`}
+              placeholder={`Share something with ${pageData.display_name || pageData.name || pageData.handle || 'this page'}…`}
+            />
+          {/if}
           <FeedList
             posts={feed.posts}
             loading={feed.loading}
