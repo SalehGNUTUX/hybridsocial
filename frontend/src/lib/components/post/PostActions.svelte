@@ -13,10 +13,16 @@
   let {
     post,
     onedit,
+    oncomment,
     viewerContext = null,
   }: {
     post: Post;
     onedit?: () => void;
+    // When provided, the reply/comment button calls this instead of opening
+    // the global composer. Streams uses it to open an in-place comments sheet
+    // (view + reply) rather than only launching a reply composer. Other call
+    // sites omit it and keep the default composer behaviour.
+    oncomment?: () => void;
     // Matches PostCard.viewerContext. Used so the pin menu entry
     // disappears when the post's pin lives in a scope different from
     // the feed the user is looking at — i.e. don't offer "Unpin" from
@@ -247,6 +253,10 @@
 
   async function handleReply(e: MouseEvent) {
     e.stopPropagation();
+    if (oncomment) {
+      oncomment();
+      return;
+    }
     window.dispatchEvent(new CustomEvent('open-composer', { detail: { replyTo: post } }));
   }
 
