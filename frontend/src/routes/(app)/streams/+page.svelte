@@ -29,6 +29,34 @@
     }
   }
 
+  // Mute is a single GLOBAL state shared by every clip, not per-video: unmute
+  // one and every clip (including the next one you scroll to) plays with sound;
+  // mute one and they all fall silent. Starts muted (browsers block sound-on
+  // autoplay until a gesture) and is remembered across visits.
+  const MUTED_KEY = 'hs-streams-muted';
+  let muted = $state(true);
+
+  function setMuted(next: boolean) {
+    if (muted === next) return;
+    muted = next;
+    try {
+      localStorage.setItem(MUTED_KEY, muted ? '1' : '0');
+    } catch {
+      /* storage unavailable — the choice just won't persist */
+    }
+  }
+
+  function toggleMuted() {
+    setMuted(!muted);
+  }
+
+  // The native <video controls> mute button is per-element; mirror any change
+  // the viewer makes there back into the shared state so it propagates to
+  // every other clip.
+  function syncMutedFromVideo(e: Event) {
+    setMuted((e.currentTarget as HTMLVideoElement).muted);
+  }
+
   // Track which posts we've already reported a view for so we don't
   // double-count the initial `play` event.
   const viewsReported = new Set<string>();
@@ -114,6 +142,8 @@
   onMount(() => {
     try {
       autoplay = localStorage.getItem(AUTOPLAY_KEY) === '1';
+      // Default to muted unless the viewer previously chose sound-on.
+      muted = localStorage.getItem(MUTED_KEY) !== '0';
     } catch {
       /* ignore */
     }
@@ -124,8 +154,10 @@
   // scrolls away, and — when autoplay is enabled — plays it (muted) once it's
   // mostly in view. The autoplay flag is passed reactively via the action
   // parameter, so toggling it takes effect on already-mounted videos.
-  function lazyVideo(node: HTMLVideoElement, enabled: boolean) {
-    let auto = enabled;
+  function lazyVideo(node: HTMLVideoElement, params: { autoplay: boolean; muted: boolean }) {
+    let auto = params.autoplay;
+    let isMuted = params.muted;
+    node.muted = isMuted;
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -137,9 +169,9 @@
             // Off-screen — pause so audio never plays out of view.
             if (!node.paused) node.pause();
           } else if (auto && ratio >= 0.6) {
-            // Mostly in view and autoplay is on — play muted (autoplay policy
-            // blocks sound; the viewer can unmute via the native controls).
-            node.muted = true;
+            // Mostly in view and autoplay is on — honor the shared mute state
+            // so the clip you scroll to plays with sound once you've unmuted.
+            node.muted = isMuted;
             node.play().catch(() => {});
           }
         }
@@ -148,8 +180,14 @@
     );
     io.observe(node);
     return {
-      update(next: boolean) {
-        auto = next;
+      update(next: { autoplay: boolean; muted: boolean }) {
+        auto = next.autoplay;
+        // Re-apply the shared mute state to this already-mounted clip so a
+        // global toggle reaches every video, not just the one interacted with.
+        if (isMuted !== next.muted) {
+          isMuted = next.muted;
+          node.muted = isMuted;
+        }
         if (!auto && !node.paused) node.pause();
       },
       destroy: () => io.disconnect(),
@@ -164,17 +202,35 @@
 <div class="streams-page">
   <div class="page-header">
     <h1 class="page-title">Streams</h1>
-    <button
-      type="button"
-      class="autoplay-toggle"
-      class:on={autoplay}
-      role="switch"
-      aria-checked={autoplay}
-      onclick={toggleAutoplay}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-      Autoplay
-    </button>
+    <div class="header-controls">
+      <button
+        type="button"
+        class="autoplay-toggle"
+        class:on={!muted}
+        role="switch"
+        aria-checked={!muted}
+        aria-label={muted ? 'Unmute all streams' : 'Mute all streams'}
+        onclick={toggleMuted}
+      >
+        {#if muted}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.63 3.63a.996.996 0 0 0 0 1.41L7.29 8.7 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71v-4.17l4.18 4.18c-.49.37-1.02.68-1.6.91v2.06a8.9 8.9 0 0 0 3.02-1.32l1.65 1.65a.996.996 0 1 0 1.41-1.41L5.05 3.63a.996.996 0 0 0-1.42 0zM12 4.9l-1.13 1.13L12 7.16V4.9zM19 12c0 .82-.15 1.61-.41 2.34l1.53 1.53A8.9 8.9 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71z" /></svg>
+        {:else}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71V6.41c0-.89-1.08-1.34-1.71-.71L7 9H4a1 1 0 0 0-1 1zm13.5 2A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+        {/if}
+        {muted ? 'Sound off' : 'Sound on'}
+      </button>
+      <button
+        type="button"
+        class="autoplay-toggle"
+        class:on={autoplay}
+        role="switch"
+        aria-checked={autoplay}
+        onclick={toggleAutoplay}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        Autoplay
+      </button>
+    </div>
   </div>
 
   {#if loading}
@@ -220,9 +276,10 @@
                 preload="none"
                 class="stream-video"
                 aria-label={videoAttachment.description || 'Video stream'}
-                use:lazyVideo={autoplay}
+                use:lazyVideo={{ autoplay, muted }}
                 onplay={(e) => handlePlay(post.id, e)}
                 onended={(e) => handleEnded(post.id, e)}
+                onvolumechange={syncMutedFromVideo}
               >
                 <track kind="captions" />
               </video>
@@ -286,6 +343,12 @@
     justify-content: space-between;
     gap: var(--space-3);
     margin-block-end: var(--space-4);
+  }
+
+  .header-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .autoplay-toggle {
