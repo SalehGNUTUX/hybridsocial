@@ -32,8 +32,8 @@
   // General settings
   let name = $state('');
   let description = $state('');
-  let visibility = $state<'public' | 'private' | 'secret'>('public');
-  let joinPolicy = $state<'open' | 'approval' | 'invite'>('open');
+  let visibility = $state<'public' | 'private' | 'local_only'>('public');
+  let joinPolicy = $state<'open' | 'screening' | 'approval' | 'invite_only'>('open');
 
   // Screening
   let screeningQuestions = $state<string[]>([]);
@@ -331,7 +331,7 @@
             <select id="group-visibility" class="input" bind:value={visibility}>
               <option value="public">Public</option>
               <option value="private">Private</option>
-              <option value="secret">Secret</option>
+              <option value="local_only">Local only</option>
             </select>
           </div>
 
@@ -339,8 +339,9 @@
             <label for="group-policy" class="form-label">Join Policy</label>
             <select id="group-policy" class="input" bind:value={joinPolicy}>
               <option value="open">Open</option>
+              <option value="screening">Screening (approval + questions)</option>
               <option value="approval">Requires Approval</option>
-              <option value="invite">Invite Only</option>
+              <option value="invite_only">Invite Only</option>
             </select>
           </div>
 

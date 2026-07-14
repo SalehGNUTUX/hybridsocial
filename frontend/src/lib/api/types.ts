@@ -359,7 +359,7 @@ export interface Group {
   description: string | null;
   avatar_url: string | null;
   header_url: string | null;
-  visibility: 'public' | 'private' | 'secret';
+  visibility: 'public' | 'private' | 'local_only';
   // federation_mode is locked at creation — see backend Group schema.
   federation_mode: 'local_only' | 'public_federated';
   member_count: number;

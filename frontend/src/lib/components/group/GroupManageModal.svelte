@@ -53,8 +53,8 @@
   // doesn't leak edits back to the parent's `group` prop.
   let name = $state('');
   let description = $state('');
-  let visibility = $state<'public' | 'private' | 'secret'>('public');
-  let joinPolicy = $state<'open' | 'approval' | 'invite'>('open');
+  let visibility = $state<'public' | 'private' | 'local_only'>('public');
+  let joinPolicy = $state<'open' | 'screening' | 'approval' | 'invite_only'>('open');
   let avatarUrl = $state('');
   let headerUrl = $state('');
   let saving = $state(false);
@@ -88,7 +88,9 @@
   // Members across the conversation get tagged as "needs reviewing"
   // when applications exist; show the Applications section only if
   // the policy can actually generate them.
-  let hasApplications = $derived(group?.join_policy === 'approval');
+  let hasApplications = $derived(
+    group?.join_policy === 'approval' || group?.join_policy === 'screening',
+  );
 
   // Repopulate form state every time the parent passes in a fresh
   // group object (initial open, or after a save round-trip).
@@ -462,15 +464,16 @@
             <select id="group-mgr-visibility" class="input" bind:value={visibility}>
               <option value="public">Public</option>
               <option value="private">Private</option>
-              <option value="secret">Secret</option>
+              <option value="local_only">Local only</option>
             </select>
           </div>
           <div class="form-group">
             <label for="group-mgr-policy" class="form-label">Join policy</label>
             <select id="group-mgr-policy" class="input" bind:value={joinPolicy}>
               <option value="open">Open</option>
+              <option value="screening">Screening (approval + questions)</option>
               <option value="approval">Requires approval</option>
-              <option value="invite">Invite only</option>
+              <option value="invite_only">Invite only</option>
             </select>
           </div>
         </div>

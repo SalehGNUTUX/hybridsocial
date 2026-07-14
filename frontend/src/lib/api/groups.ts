@@ -3,7 +3,7 @@ import type { Group, Identity, Post, PaginatedResponse } from './types.js';
 
 export interface GroupDetail extends Group {
   rules: string[];
-  join_policy: 'open' | 'approval' | 'invite';
+  join_policy: 'open' | 'screening' | 'approval' | 'invite_only';
   pending_request: boolean;
 }
 
@@ -27,8 +27,8 @@ export interface GroupApplication {
 export interface GroupSettings {
   name?: string;
   description?: string;
-  visibility?: 'public' | 'private' | 'secret';
-  join_policy?: 'open' | 'approval' | 'invite';
+  visibility?: 'public' | 'private' | 'local_only';
+  join_policy?: 'open' | 'screening' | 'approval' | 'invite_only';
   avatar_url?: string | null;
   header_url?: string | null;
   rules?: string[];
