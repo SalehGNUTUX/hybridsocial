@@ -299,6 +299,21 @@ defmodule Hybridsocial.Notifications do
     })
   end
 
+  # A new join request fans out to every group moderator/admin/owner. The
+  # applicant is the actor; create_notification skips a recipient that equals
+  # the actor, so a moderator applying to their own group won't self-notify.
+  def notify_group_application(application, recipient_ids) do
+    Enum.each(recipient_ids, fn recipient_id ->
+      create_notification(%{
+        recipient_id: recipient_id,
+        actor_id: application.identity_id,
+        type: "group_application",
+        target_type: "group",
+        target_id: application.group_id
+      })
+    end)
+  end
+
   def notify_page_invite(invite) do
     create_notification(%{
       recipient_id: invite.invited_id,

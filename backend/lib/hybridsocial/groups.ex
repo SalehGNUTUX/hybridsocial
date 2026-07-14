@@ -213,7 +213,8 @@ defmodule Hybridsocial.Groups do
 
   def join_group(group_id, identity_id) do
     with {:ok, group} <- get_existing_group(group_id),
-         nil <- get_member(group_id, identity_id) do
+         nil <- get_member(group_id, identity_id),
+         nil <- get_pending_application(group_id, identity_id) do
       case group.join_policy do
         :open ->
           insert_member(group_id, identity_id, :member, :approved)
@@ -224,11 +225,11 @@ defmodule Hybridsocial.Groups do
               insert_member(group_id, identity_id, :member, :approved)
 
             :pending ->
-              insert_member(group_id, identity_id, :member, :pending)
+              apply_to_group(group_id, identity_id, %{})
           end
 
         :approval ->
-          insert_member(group_id, identity_id, :member, :pending)
+          apply_to_group(group_id, identity_id, %{})
 
         :invite_only ->
           case get_pending_invite(group_id, identity_id) do
@@ -245,6 +246,7 @@ defmodule Hybridsocial.Groups do
       end
     else
       %GroupMember{} -> {:error, :already_member}
+      %GroupApplication{} -> {:error, :already_applied}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -446,14 +448,24 @@ defmodule Hybridsocial.Groups do
   # ---------------------------------------------------------------------------
 
   def apply_to_group(group_id, identity_id, answers) do
-    with {:ok, _group} <- get_existing_group(group_id) do
-      %GroupApplication{}
-      |> GroupApplication.changeset(%{
-        group_id: group_id,
-        identity_id: identity_id,
-        answers: answers
-      })
-      |> Repo.insert()
+    with {:ok, _group} <- get_existing_group(group_id),
+         {:ok, application} <-
+           %GroupApplication{}
+           |> GroupApplication.changeset(%{
+             group_id: group_id,
+             identity_id: identity_id,
+             answers: answers
+           })
+           |> Repo.insert() do
+      # Notify every moderator/admin/owner so a pending request can't sit
+      # unseen — the applicant themselves is skipped by create_notification's
+      # self-notification guard.
+      Hybridsocial.Notifications.notify_group_application(
+        application,
+        moderator_ids(group_id)
+      )
+
+      {:ok, application}
     end
   end
 
@@ -714,6 +726,28 @@ defmodule Hybridsocial.Groups do
       nil -> {:error, :not_found}
       application -> {:ok, application}
     end
+  end
+
+  defp get_pending_application(group_id, identity_id) do
+    GroupApplication
+    |> where(
+      [a],
+      a.group_id == ^group_id and a.identity_id == ^identity_id and a.status == :pending
+    )
+    |> Repo.one()
+  end
+
+  # Identity ids of everyone who can review applications for a group
+  # (the @moderate_roles tier, approved members only) — the recipients
+  # of a new-application notification.
+  defp moderator_ids(group_id) do
+    GroupMember
+    |> where(
+      [m],
+      m.group_id == ^group_id and m.status == :approved and m.role in ^@moderate_roles
+    )
+    |> select([m], m.identity_id)
+    |> Repo.all()
   end
 
   defp get_invite(invite_id) do

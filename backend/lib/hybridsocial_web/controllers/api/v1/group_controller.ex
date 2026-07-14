@@ -119,10 +119,28 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
     identity = conn.assigns.current_identity
 
     case Groups.join_group(id, identity.id) do
-      {:ok, member} ->
+      # An approval/screening group returns a pending application (or, for
+      # legacy rows, a pending membership); either way the client shows
+      # "Requested". An open/invite join returns an approved membership.
+      {:ok, %Groups.GroupApplication{}} ->
+        conn
+        |> put_status(:accepted)
+        |> json(%{status: "pending"})
+
+      {:ok, %Groups.GroupMember{status: :pending}} ->
+        conn
+        |> put_status(:accepted)
+        |> json(%{status: "pending"})
+
+      {:ok, _member} ->
         conn
         |> put_status(:ok)
-        |> json(serialize_member(member))
+        |> json(%{status: "joined"})
+
+      {:error, :already_applied} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{status: "pending", error: "group.already_applied"})
 
       {:error, :not_found} ->
         conn
@@ -523,6 +541,12 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
   end
 
   defp serialize_application(application) do
+    identity =
+      case application.identity do
+        %Ecto.Association.NotLoaded{} -> nil
+        loaded -> loaded
+      end
+
     %{
       id: application.id,
       group_id: application.group_id,
@@ -531,7 +555,17 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
       status: application.status,
       reviewed_by: application.reviewed_by,
       created_at: application.created_at,
-      reviewed_at: application.reviewed_at
+      reviewed_at: application.reviewed_at,
+      account:
+        if(identity,
+          do: %{
+            id: identity.id,
+            handle: identity.handle,
+            acct: HybridsocialWeb.Helpers.Account.build_acct(identity),
+            display_name: identity.display_name,
+            avatar_url: identity.avatar_url
+          }
+        )
     }
   end
 

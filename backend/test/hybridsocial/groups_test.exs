@@ -182,13 +182,32 @@ defmodule Hybridsocial.GroupsTest do
       assert Groups.member?(group.id, bob.id)
     end
 
-    test "approval group: pending status", %{alice: alice, bob: bob} do
+    test "approval group: creates a pending application visible to admins",
+         %{alice: alice, bob: bob} do
       {:ok, group} =
         Groups.create_group(alice.id, %{"name" => "Approval", "join_policy" => "approval"})
 
-      assert {:ok, member} = Groups.join_group(group.id, bob.id)
-      assert member.status == :pending
+      # A request to join an approval group produces an application (not a
+      # pending membership), so it surfaces on the admin applications list —
+      # the exact wiring that was previously broken.
+      assert {:ok, %Hybridsocial.Groups.GroupApplication{} = application} =
+               Groups.join_group(group.id, bob.id)
+
+      assert application.status == :pending
       refute Groups.member?(group.id, bob.id)
+
+      assert [listed] = Groups.get_applications(group.id)
+      assert listed.identity_id == bob.id
+    end
+
+    test "approval group: re-requesting returns :already_applied",
+         %{alice: alice, bob: bob} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{"name" => "Approval", "join_policy" => "approval"})
+
+      assert {:ok, _application} = Groups.join_group(group.id, bob.id)
+      assert {:error, :already_applied} = Groups.join_group(group.id, bob.id)
+      assert length(Groups.get_applications(group.id)) == 1
     end
 
     test "invite_only group: requires invite", %{alice: alice, bob: bob} do
