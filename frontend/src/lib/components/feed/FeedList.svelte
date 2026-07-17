@@ -47,6 +47,93 @@
   let deletingIds = $state(new Set<string>());
   let hiddenIds = $state(new Set<string>());
 
+  // --- Windowing: bound the mounted-card count on long feeds ----------------
+  //
+  // The feed appends on infinite scroll and never unmounts, so the live DOM
+  // grew without limit — worst on low-memory mobile GPUs (the growth that #108
+  // was masking with `content-visibility`). We keep the keyed {#each} over
+  // every entry (so ids, dedupe, animations and keyboard order are untouched)
+  // but swap a card that has scrolled FAR ABOVE the viewport for a placeholder
+  // of its measured height. Only above-viewport cards are detached: they've
+  // been seen, so their media is loaded and the measured height is exact, so
+  // the swap never shifts scroll. Cards near or below the viewport always
+  // render in full (no unmeasured/lazy card is ever collapsed). Windowing only
+  // engages for coarse pointers; desktop keeps every card mounted (no memory
+  // pressure, and the j/k cursor walks a fully rendered list) — behaviour there
+  // is byte-for-byte unchanged.
+  const KEEPALIVE_ABOVE = 1200; // px above the viewport kept fully rendered
+
+  let detached = $state(new Set<string>());
+  const measuredHeights = new Map<string, number>(); // id -> last measured px
+  const slotEls = new Map<string, HTMLElement>(); // id -> live post-slot node
+  let windowObserver: IntersectionObserver | undefined;
+  let windowingChecked = false;
+  let windowingEnabled = false;
+
+  function ensureWindowObserver() {
+    if (windowingChecked) return;
+    windowingChecked = true;
+    if (typeof IntersectionObserver === 'undefined' || typeof matchMedia === 'undefined') return;
+    windowingEnabled = matchMedia('(pointer: coarse)').matches;
+    if (!windowingEnabled) return;
+    windowObserver = new IntersectionObserver(onWindowIntersect, {
+      rootMargin: `${KEEPALIVE_ABOVE}px 0px 0px 0px`,
+    });
+  }
+
+  function onWindowIntersect(entries: IntersectionObserverEntry[]) {
+    let changed = false;
+    const next = new Set(detached);
+    for (const e of entries) {
+      const id = (e.target as HTMLElement).dataset.postId;
+      if (!id) continue;
+      if (e.isIntersecting) {
+        // Back inside the keep-alive window: render the card again.
+        if (next.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      } else if (e.rootBounds && e.boundingClientRect.bottom <= e.rootBounds.top) {
+        // Left the window off the TOP (scrolled past). Capture the live
+        // card's height, then collapse it to a placeholder. Never detach
+        // with a zero height — a collapsed card would jump scroll and
+        // bounce straight back into view.
+        const el = slotEls.get(id);
+        const h = el ? el.offsetHeight : (measuredHeights.get(id) ?? 0);
+        if (h > 0 && !next.has(id)) {
+          measuredHeights.set(id, h);
+          next.add(id);
+          changed = true;
+        }
+      }
+      // Off the bottom: leave fully rendered (bounded by pagination).
+    }
+    if (changed) detached = next;
+  }
+
+  function observeItem(node: HTMLElement) {
+    ensureWindowObserver();
+    windowObserver?.observe(node);
+    return {
+      destroy() {
+        windowObserver?.unobserve(node);
+      },
+    };
+  }
+
+  function registerSlot(node: HTMLElement, id: string) {
+    slotEls.set(id, node);
+    return {
+      destroy() {
+        slotEls.delete(id);
+      },
+    };
+  }
+
+  function placeholderHeight(id: string): number {
+    return measuredHeights.get(id) ?? 0;
+  }
+
   let visiblePosts: FeedEntry[] = $derived(
     (() => {
       // Dedupe by id at the render layer. Multiple call sites push
@@ -172,6 +259,7 @@
 
   onDestroy(() => {
     clearFeedPosts();
+    windowObserver?.disconnect();
   });
 </script>
 
@@ -205,6 +293,8 @@
     {#if post && post.content !== undefined}
       <div
         class="feed-item"
+        data-post-id={entry.id}
+        use:observeItem
         style={showStagger ? `animation-delay: ${i * 60}ms` : ''}
         class:stagger={showStagger}
         class:feed-item-new={newIds.has(entry.id)}
@@ -216,7 +306,16 @@
             <span><DisplayName name={boost.account?.display_name || boost.account?.handle || 'Someone'} emojis={boost.account?.emojis} /> boosted</span>
           </div>
         {/if}
-        <PostCard {post} {compact} {filterContext} {viewerContext} />
+        {#if detached.has(entry.id)}
+          <!-- Windowed out: card scrolled far above the viewport. Reserve its
+               measured height so scroll position and total height are exact;
+               it re-mounts (below) as it scrolls back into the keep-alive band. -->
+          <div class="post-placeholder" style="height: {placeholderHeight(entry.id)}px" aria-hidden="true"></div>
+        {:else}
+          <div class="post-slot" use:registerSlot={entry.id}>
+            <PostCard {post} {compact} {filterContext} {viewerContext} />
+          </div>
+        {/if}
       </div>
     {/if}
   {/each}
@@ -250,6 +349,13 @@
     max-width: var(--feed-max-width);
     width: 100%;
     margin: 0 auto;
+  }
+
+  /* Reserves the exact height of a windowed-out card (see observeItem) so
+     detaching a far-above card leaves scroll position and total height
+     untouched. Never painted content, just space. */
+  .post-placeholder {
+    width: 100%;
   }
 
   .boost-label {
