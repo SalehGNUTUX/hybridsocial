@@ -2029,16 +2029,17 @@
     transition: opacity 0.4s ease;
   }
 
-  /* Touch devices: cut per-card GPU cost. content-visibility skips painting
-     off-screen cards (a big scroll-smoothness win on long feeds), and the NSFW
-     frost blur — which re-blurs every scroll frame on mobile GPUs — is dropped
-     since the content beneath it is hidden anyway. Desktop is unchanged. */
-  @media (pointer: coarse) {
-    .post-card {
-      content-visibility: auto;
-      contain-intrinsic-size: 0 320px;
-    }
+  /* Touch devices: drop the NSFW frost blur, which re-blurs every scroll frame
+     on mobile GPUs. The content beneath it is hidden anyway. Desktop unchanged.
 
+     Do NOT add `content-visibility: auto` to .post-card here. It was tried
+     (#71) and reverted: deferring paint until a card nears the viewport races
+     the compositor, and on drivers that hand back recycled tile memory without
+     zeroing it, a tile composited before its paint lands shows that stale
+     memory — colored noise and smeared text over the feed. It only reproduced
+     on some devices, which is why it shipped. The unbounded feed DOM it was
+     papering over needs windowing in FeedList, not a paint hint. */
+  @media (pointer: coarse) {
     .nsfw-frost-glass {
       backdrop-filter: none;
     }
