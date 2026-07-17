@@ -675,6 +675,26 @@
     }
   }
 
+  /* On phones the textarea is squeezed between the action buttons and ends up
+     only a few characters wide. Give it its own full-width line and let the
+     buttons wrap below it (attachment / mic / emoji on the start, send pinned
+     to the end) — more room to type with every action still one tap away.
+     Scoped to touch + narrow so tablets/desktop keep the compact single row. */
+  @media (pointer: coarse) and (max-width: 768px) {
+    .message-input-row {
+      flex-wrap: wrap;
+    }
+
+    .message-textarea {
+      order: -1;
+      flex-basis: 100%;
+    }
+
+    .send-btn {
+      margin-inline-start: auto;
+    }
+  }
+
   .message-textarea::placeholder {
     color: var(--color-text-tertiary);
   }
