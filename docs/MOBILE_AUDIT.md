@@ -1,7 +1,10 @@
 # Responsive & Mobile Audit
 
-Date: 2026-07-11
+Date: 2026-07-11 (reconciled against `main` 2026-07-17)
 Scope: `frontend/` (SvelteKit + Svelte 5)
+
+> **Note:** findings #1, #13, and the `theme-color` half of #10 already landed in
+> `main` via #65 and are marked **RESOLVED** below (no action needed on those).
 
 Goal: make the platform behave correctly and feel native across **all devices and
 screen sizes** — phones, tablets, and desktops — not phone-only. Every fix below
@@ -20,7 +23,7 @@ The issues below are concentrated and mostly small.
 
 | # | Issue | Location | Severity | Confidence | Fix |
 |---|-------|----------|----------|------------|-----|
-| 1 | `viewport-fit=cover` missing, so every `env(safe-area-inset-*)` resolves to 0 on iOS — the fixed bottom nav sits under the home indicator and reserved padding is short | `src/app.html` (viewport meta) | High | High | Add `viewport-fit=cover` to the viewport meta |
+| 1 | ~~`viewport-fit=cover` missing~~ **RESOLVED (already in main via #65):** `viewport-fit=cover` is present in `src/app.html:5`, so `env(safe-area-inset-*)` resolves correctly | `src/app.html:5` | n/a | n/a | No action |
 | 2 | Feed avatar hard-pinned to physical `left` on narrow screens, breaking the core RTL (Arabic) layout | `src/lib/components/post/PostCard.svelte:1386` | High | High | `inset-inline-start: 0` + `padding-inline-start` |
 | 3 | Inputs `< 16px` trigger iOS auto-zoom on focus (search + DM compose) | `src/lib/components/layout/Header.svelte:319`, `src/lib/components/dm/MessageInput.svelte:359` | High | High | `font-size: 16px` on these inputs at `<= 768px` |
 | 4 | `ProfileHoverCard` opens on hover/focus only; its Follow/Mute/Block actions are unreachable by touch | `src/lib/components/ui/ProfileHoverCard.svelte:136` | High | High | Open on tap when `matchMedia('(hover: none)')` |
@@ -29,10 +32,10 @@ The issues below are concentrated and mostly small.
 | 7 | Manifest fails Android installability — only an SVG icon, no 192/512 PNG, no maskable, empty `screenshots` | `static/manifest.json`, `static/icons/` | High | High | Generate PNG icons (192, 512, maskable) + screenshots |
 | 8 | Primary feed action buttons (~28px) are under the 44px touch-target guidance | `src/lib/components/post/PostActions.svelte:1640` | Med-high | High | `min-height/min-width: 44px` hit-area |
 | 9 | No body-scroll-lock behind modals / sheets — the page scrolls underneath on touch | `src/lib/components/ui/Modal.svelte`, `src/lib/components/layout/BottomTabs.svelte:146` | Med | High | Shared `overflow: hidden` + `overscroll-behavior: contain` while open |
-| 10 | `theme_color` stuck on the light brand purple in dark mode; iOS `apple-touch-icon` is an SVG (renders blank) | `src/app.html`, `static/manifest.json:8` | Med | High | Sync `theme-color` to resolved mode; add a 180px PNG apple-touch-icon |
+| 10 | iOS `apple-touch-icon` is an SVG (renders blank on iOS); needs a 180px PNG. (The dark-mode `theme_color` sync is **already RESOLVED in main via #65**: `src/app.html:11-24` seeds/syncs `theme-color` to the resolved mode.) | `src/app.html:44`, `static/manifest.json` | Med | High | Add a 180px PNG apple-touch-icon |
 | 11 | Fullscreen/modal heights use `vh` not `dvh`, overshooting the visible viewport when browser chrome shows | `src/lib/components/ui/Modal.svelte:124`, `ImageLightbox.svelte:508`, `StoryViewer.svelte:409` | Med | Med | Use `dvh` with a `vh` fallback |
 | 12 | Back / chevron icons don't mirror in RTL | `src/routes/(app)/post/[id]/+page.svelte:128` and others | Med | High | `[dir="rtl"] .back-icon { transform: scaleX(-1) }` |
-| 13 | `<html lang>` never updates to the active locale (hardcoded `en`) | `src/app.html`, `src/routes/+layout.svelte` | Med | High | Set `documentElement.lang` alongside `dir` |
+| 13 | ~~`<html lang>` never updates~~ **RESOLVED (already in main via #65):** `src/routes/+layout.svelte:65` sets `document.documentElement.lang = $locale` alongside `dir` | `src/routes/+layout.svelte:65` | n/a | n/a | No action |
 | 14 | Push permission requested automatically right after login (no user gesture) → often auto-denied | `src/routes/(auth)/login/+page.svelte:71` | Med | Med | Gate behind an explicit "Enable notifications" action |
 | 15 | Fonts are render-blocking Google Fonts (blocks first paint on slow networks; privacy) | `src/app.html` (fonts link) | Med | High | Self-host + `preload` a woff2 subset, `font-display: swap` |
 
@@ -65,10 +68,11 @@ These are designed to adapt across phone / tablet / desktop, not to be mobile-on
 
 ## PR batching plan
 
-- **PR-A — iOS safe-area + theme sync** (#1, #10 theme-color, #13): near-zero-risk
-  head/layout changes, high cross-device payoff. **[implemented, pending review]**
+- **PR-A — iOS safe-area + theme sync** (#1, #10 theme-color, #13): **already landed
+  in main via #65**; these findings are resolved, no further work.
 - **PR-B — input zoom + tap targets** (#3, #8): CSS only.
 - **PR-C — RTL fixes** (#2, #12, physical leftovers).
 - **PR-D — touch reachability** (#4, #9).
 - **PR-E — Arabic font** (#5, + self-host fonts #15).
-- **PR-F — PWA offline + install** (#6, #7): the largest; needs asset generation.
+- **PR-F — PWA offline + install** (#6, #7, #10 apple-touch-icon PNG): the largest;
+  needs asset generation.
