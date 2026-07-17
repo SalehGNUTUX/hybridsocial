@@ -2,8 +2,9 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/api/client.js';
-  import { setUser } from '$lib/stores/auth.js';
+  import { setUser, currentUser } from '$lib/stores/auth.js';
   import { getCurrentUser } from '$lib/api/auth.js';
+  import Avatar from '$lib/components/ui/Avatar.svelte';
   import { subscribeToPush } from '$lib/utils/push.js';
   import { tError } from '$lib/utils/i18n.js';
   import { solvePow, type PowChallenge, type PowSolution } from '$lib/utils/pow.js';
@@ -358,6 +359,27 @@
   <h1 class="auth-title">Sign in to your server</h1>
   <p class="auth-subtitle">Enter your credentials to continue</p>
 
+  {#if $currentUser}
+    <!-- Reaching /login (e.g. via "Add another account") does NOT log the
+         current account out — the session is still live. Make that visible
+         and give a one-tap way back so bailing out doesn't feel like a
+         logout. Signing in below simply switches to the new account. -->
+    <div class="active-session" role="note">
+      <Avatar
+        src={$currentUser.avatar_url}
+        name={$currentUser.display_name || $currentUser.handle}
+        size="sm"
+      />
+      <div class="active-session-text">
+        <span class="active-session-label">Still signed in as</span>
+        <span class="active-session-handle">@{$currentUser.handle}</span>
+      </div>
+      <button type="button" class="active-session-back" onclick={() => goto('/home')}>
+        Back to app
+      </button>
+    </div>
+  {/if}
+
   {#if error}
     <div class="auth-error" role="alert">
       <span class="auth-error-icon" aria-hidden="true">!</span>
@@ -612,6 +634,58 @@
     color: var(--color-text-secondary);
     text-align: center;
     margin-block-end: 24px;
+  }
+
+  /* ---- Still-signed-in banner ---- */
+  .active-session {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-block-end: 20px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 12px);
+    background: var(--color-surface-2, rgba(127, 127, 127, 0.08));
+  }
+
+  .active-session-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+  }
+
+  .active-session-label {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+  }
+
+  .active-session-handle {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .active-session-back {
+    margin-inline-start: auto;
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full, 999px);
+    background: transparent;
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+  }
+
+  .active-session-back:hover {
+    background: var(--color-surface);
+    border-color: var(--color-text-tertiary);
   }
 
   /* ---- Error ---- */
