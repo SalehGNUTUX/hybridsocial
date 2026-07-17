@@ -74,3 +74,4 @@ mobile/.flutter-plugins-dependencies
 /Extra/
 *.zip
 .claude/
+claude-project-id.txt
