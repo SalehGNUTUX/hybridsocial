@@ -251,5 +251,50 @@ defmodule Hybridsocial.Social.StreamsTest do
       posts = Streams.streams_feed(nil, limit: 3)
       assert length(posts) == 3
     end
+
+    test "sort: newest and oldest order by recency" do
+      alice = create_user("sfeed_sort", "sfeed_sort@example.com")
+
+      older = create_post(alice, %{content: "Older"}) |> attach_video(alice)
+      # Force a strictly later timestamp so ordering is deterministic.
+      newer = create_post(alice, %{content: "Newer"}) |> attach_video(alice)
+
+      Repo.update_all(
+        from(p in Post, where: p.id == ^older.id),
+        set: [inserted_at: ~U[2020-01-01 00:00:00.000000Z]]
+      )
+
+      newest = Streams.streams_feed(nil, sort: "newest") |> Enum.map(& &1.id)
+      oldest = Streams.streams_feed(nil, sort: "oldest") |> Enum.map(& &1.id)
+
+      assert Enum.find_index(newest, &(&1 == newer.id)) <
+               Enum.find_index(newest, &(&1 == older.id))
+
+      assert Enum.find_index(oldest, &(&1 == older.id)) <
+               Enum.find_index(oldest, &(&1 == newer.id))
+    end
+
+    test "q: filters by phrase or hashtag in the post body" do
+      alice = create_user("sfeed_q", "sfeed_q@example.com")
+
+      match = create_post(alice, %{content: "Sunset over #Gaza tonight"}) |> attach_video(alice)
+      other = create_post(alice, %{content: "A cooking clip"}) |> attach_video(alice)
+
+      by_phrase = Streams.streams_feed(nil, q: "sunset") |> Enum.map(& &1.id)
+      assert match.id in by_phrase
+      refute other.id in by_phrase
+
+      by_tag = Streams.streams_feed(nil, q: "#gaza") |> Enum.map(& &1.id)
+      assert match.id in by_tag
+      refute other.id in by_tag
+    end
+
+    test "q: blank query is ignored (returns the full feed)" do
+      alice = create_user("sfeed_blank", "sfeed_blank@example.com")
+      post = create_post(alice, %{content: "Anything"}) |> attach_video(alice)
+
+      ids = Streams.streams_feed(nil, q: "   ") |> Enum.map(& &1.id)
+      assert post.id in ids
+    end
   end
 end
