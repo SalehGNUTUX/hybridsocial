@@ -190,7 +190,23 @@ defmodule HybridsocialWeb.Api.V1.GroupControllerTest do
 
       conn = post(conn, "/api/v1/groups/#{group.id}/join")
       response = json_response(conn, 200)
-      assert response["status"] == "approved"
+      assert response["status"] == "joined"
+    end
+
+    test "requesting to join an approval group returns pending", %{conn: conn} do
+      other = create_user("approvalowner", "approvalowner@test.com")
+
+      {:ok, group} =
+        Groups.create_group(other.id, %{"name" => "Approval Group", "join_policy" => "approval"})
+
+      conn = post(conn, "/api/v1/groups/#{group.id}/join")
+      response = json_response(conn, 202)
+      assert response["status"] == "pending"
+
+      # The request now shows up on the owner's applications list.
+      assert [application] = Groups.get_applications(group.id)
+      identity = Hybridsocial.Accounts.get_identity_by_handle("testuser")
+      assert application.identity_id == identity.id
     end
 
     test "returns 404 for non-existent group", %{conn: conn} do
