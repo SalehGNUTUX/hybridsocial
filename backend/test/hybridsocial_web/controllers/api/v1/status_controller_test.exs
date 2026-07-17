@@ -37,6 +37,46 @@ defmodule HybridsocialWeb.Api.V1.StatusControllerTest do
       assert response["error"] == "validation.failed"
     end
 
+    test "posting to a page the user can edit is authored as the page",
+         %{conn: conn, identity: identity} do
+      {:ok, page} =
+        Hybridsocial.Pages.create_page(identity.id, %{
+          "handle" => "mypage",
+          "display_name" => "My Page"
+        })
+
+      conn =
+        post(conn, "/api/v1/statuses", %{
+          "content" => "From the page",
+          "visibility" => "public",
+          "page_id" => page.id
+        })
+
+      response = json_response(conn, 201)
+      # Authored as the page, not the logged-in user.
+      assert response["account"]["handle"] == "mypage"
+      assert response["account"]["handle"] != "testuser"
+    end
+
+    test "posting to a page the user cannot edit is forbidden", %{conn: conn} do
+      other = create_user("pageowner", "pageowner@test.com")
+
+      {:ok, page} =
+        Hybridsocial.Pages.create_page(other.id, %{
+          "handle" => "otherspage",
+          "display_name" => "Someone Else's Page"
+        })
+
+      conn =
+        post(conn, "/api/v1/statuses", %{
+          "content" => "I should not be able to post here",
+          "visibility" => "public",
+          "page_id" => page.id
+        })
+
+      assert json_response(conn, 403)["error"] == "page.forbidden"
+    end
+
     test "requires authentication", %{conn: _conn} do
       conn = build_conn()
       conn = post(conn, "/api/v1/statuses", %{"content" => "Hello"})

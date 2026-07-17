@@ -7,11 +7,20 @@ defmodule HybridsocialWeb.Api.V1.ScheduledStatusController do
   def create(conn, params) do
     identity = conn.assigns.current_identity
 
-    case ScheduledPosts.schedule_post(identity.id, params) do
-      {:ok, post} ->
+    # Same page-authorship gate as the immediate create path: a scheduled
+    # status carrying a `page_id` is authored AS the page only when the user
+    # can edit it, otherwise refused — closing the impersonation hole that
+    # would otherwise let anyone schedule a post in any page's name.
+    with {:ok, author_id} <- Hybridsocial.Pages.resolve_post_author(params, identity.id),
+         {:ok, post} <- ScheduledPosts.schedule_post(author_id, params) do
+      conn
+      |> put_status(:created)
+      |> json(serialize_scheduled_post(post))
+    else
+      {:error, :page_forbidden} ->
         conn
-        |> put_status(:created)
-        |> json(serialize_scheduled_post(post))
+        |> put_status(:forbidden)
+        |> json(%{error: "page.forbidden"})
 
       {:error, %Ecto.Changeset{} = changeset} ->
         conn

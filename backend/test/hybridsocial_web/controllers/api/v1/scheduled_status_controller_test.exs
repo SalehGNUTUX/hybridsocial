@@ -56,6 +56,49 @@ defmodule HybridsocialWeb.Api.V1.ScheduledStatusControllerTest do
 
       assert json_response(conn, 401)
     end
+
+    test "scheduling to a page the user can edit is authored as the page",
+         %{conn: conn, identity: identity} do
+      {:ok, page} =
+        Hybridsocial.Pages.create_page(identity.id, %{
+          "handle" => "schedpage",
+          "display_name" => "Sched Page"
+        })
+
+      conn =
+        post(conn, "/api/v1/statuses/schedule", %{
+          "content" => "Scheduled from the page",
+          "scheduled_at" => future_time(),
+          "page_id" => page.id
+        })
+
+      %{"id" => id} = json_response(conn, 201)
+
+      # Authored as the page, not the logged-in user. The scheduled serializer
+      # omits the account, so verify authorship on the persisted row.
+      post = Hybridsocial.Repo.get!(Hybridsocial.Social.Post, id)
+      assert post.identity_id == page.id
+      refute post.identity_id == identity.id
+    end
+
+    test "scheduling to a page the user cannot edit is forbidden", %{conn: conn} do
+      other = create_user("schedpageowner", "schedpageowner@test.com")
+
+      {:ok, page} =
+        Hybridsocial.Pages.create_page(other.id, %{
+          "handle" => "othersschedpage",
+          "display_name" => "Someone Else's Page"
+        })
+
+      conn =
+        post(conn, "/api/v1/statuses/schedule", %{
+          "content" => "I should not be able to schedule here",
+          "scheduled_at" => future_time(),
+          "page_id" => page.id
+        })
+
+      assert json_response(conn, 403)["error"] == "page.forbidden"
+    end
   end
 
   describe "GET /api/v1/scheduled_statuses" do

@@ -221,6 +221,28 @@ defmodule Hybridsocial.Pages do
   end
 
   @doc """
+  Resolves who a status is authored as. A status carrying a `page_id` is
+  authored AS the page, not the acting user — but only when that user has
+  edit rights on the page (parent owner / org owner / admin / editor).
+  Without this guard any authenticated user could post in any page's name.
+  Any other status is authored as the acting identity. An unknown or
+  non-editable `page_id` is refused with `{:error, :page_forbidden}`.
+
+  Used by every post-creation entry point (immediate and scheduled) so the
+  authorization and page-attribution rules stay identical across paths.
+  """
+  def resolve_post_author(%{"page_id" => page_id}, identity_id)
+      when is_binary(page_id) and page_id != "" do
+    if can_edit?(page_id, identity_id) do
+      {:ok, page_id}
+    else
+      {:error, :page_forbidden}
+    end
+  end
+
+  def resolve_post_author(_params, identity_id), do: {:ok, identity_id}
+
+  @doc """
   True when the identity may take moderate-tier actions on the page:
   pin/unpin posts, lock replies, hide content. Anyone who `can_edit?`
   also qualifies (admins / editors edit content so they implicitly

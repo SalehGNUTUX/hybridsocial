@@ -11,8 +11,9 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
     limits = TierLimits.limits_for(identity)
 
     with :ok <- validate_tier_limits(params, limits),
-         :ok <- check_bot_rate_limit(identity) do
-      case Posts.create_post(identity.id, params, identity) do
+         :ok <- check_bot_rate_limit(identity),
+         {:ok, author_id} <- Hybridsocial.Pages.resolve_post_author(params, identity.id) do
+      case Posts.create_post(author_id, params, identity) do
         {:ok, post} ->
           post = Hybridsocial.Repo.preload(post, [:identity, :quote])
 
@@ -54,6 +55,11 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
           |> json(%{error: "validation.failed", details: format_errors(changeset)})
       end
     else
+      {:error, :page_forbidden} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "page.forbidden"})
+
       {:error, error_key, max} ->
         conn
         |> put_status(:unprocessable_entity)
