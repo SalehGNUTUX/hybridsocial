@@ -1,6 +1,16 @@
-# HybridSocial
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="HybridSocial logo" width="180">
+</p>
 
-A decentralized social networking platform built on [ActivityPub](https://www.w3.org/TR/activitypub/), designed for communities, organizations, and individuals who want control over their social experience.
+<h1 align="center">HybridSocial</h1>
+
+<p align="center">
+  A decentralized social networking platform built on <a href="https://www.w3.org/TR/activitypub/">ActivityPub</a>, designed for communities, organizations, and individuals who want control over their social experience.
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo.png" alt="HybridSocial platform demo" width="800">
+</p>
 
 ## Features
 
