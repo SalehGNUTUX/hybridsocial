@@ -11,8 +11,10 @@ defmodule HybridsocialWeb.Plugs.SecurityHeadersTest do
       assert get_resp_header(conn, "x-xss-protection") == ["0"]
       assert get_resp_header(conn, "referrer-policy") == ["strict-origin-when-cross-origin"]
 
+      # microphone=(self) allows same-origin voice-message recording;
+      # camera and geolocation remain fully disabled.
       assert get_resp_header(conn, "permissions-policy") == [
-               "camera=(), microphone=(), geolocation=()"
+               "camera=(), microphone=(self), geolocation=()"
              ]
 
       assert get_resp_header(conn, "strict-transport-security") == [
