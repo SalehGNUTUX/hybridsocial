@@ -4,6 +4,9 @@
   import type { Post, MediaAttachment } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import PostActions from '$lib/components/post/PostActions.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import ThreadedReplies from '$lib/components/post/ThreadedReplies.svelte';
+  import { getPostContext } from '$lib/api/statuses.js';
   import { instanceName } from '$lib/stores/instance.js';
 
   let posts: Post[] = $state([]);
@@ -60,6 +63,61 @@
   // Track which posts we've already reported a view for so we don't
   // double-count the initial `play` event.
   const viewsReported = new Set<string>();
+
+  // Comments sheet — a full-bleed vertical feed has no room for an inline
+  // thread, so the comment button opens a sheet (like the reels pattern) that
+  // shows existing replies and lets the viewer add one, instead of only
+  // launching a reply composer with no way to read the conversation.
+  let commentsOpen = $state(false);
+  let commentsPost = $state<Post | null>(null);
+  let commentsDescendants = $state<Post[]>([]);
+  let commentsLoading = $state(false);
+  let commentsError = $state('');
+
+  async function openComments(post: Post) {
+    commentsPost = post;
+    commentsOpen = true;
+    commentsError = '';
+    commentsDescendants = [];
+    commentsLoading = true;
+    try {
+      const context = await getPostContext(post.id);
+      commentsDescendants = context.descendants ?? [];
+    } catch {
+      commentsError = 'Failed to load comments.';
+    } finally {
+      commentsLoading = false;
+    }
+  }
+
+  function closeComments() {
+    commentsOpen = false;
+    commentsPost = null;
+    commentsDescendants = [];
+  }
+
+  function addComment() {
+    if (!commentsPost) return;
+    // Reuse the existing global composer for the actual reply; the new-post
+    // listener below folds the result back into the open thread.
+    window.dispatchEvent(
+      new CustomEvent('open-composer', { detail: { replyTo: commentsPost } }),
+    );
+  }
+
+  // Fold optimistic replies into the open thread so a just-sent comment shows
+  // up immediately, matching how the post-detail thread reconciles them.
+  function handleNewComment(e: Event) {
+    const newPost = (e as CustomEvent<Post>).detail;
+    if (!newPost || !commentsPost) return;
+    const belongsHere =
+      newPost.parent_id === commentsPost.id ||
+      newPost.root_id === commentsPost.id ||
+      commentsDescendants.some((d) => d.id === newPost.parent_id);
+    if (belongsHere && !commentsDescendants.some((d) => d.id === newPost.id)) {
+      commentsDescendants = [...commentsDescendants, newPost];
+    }
+  }
 
   // Reserve the video box with the real aspect ratio (from media meta,
   // falling back to 16:9) so a not-yet-loaded video shows a proper frame
@@ -148,6 +206,8 @@
       /* ignore */
     }
     loadStreams();
+    window.addEventListener('new-post', handleNewComment);
+    return () => window.removeEventListener('new-post', handleNewComment);
   });
 
   // Loads metadata as a card nears the viewport, pauses playback when it
@@ -323,13 +383,34 @@
                  reply/comment + boost/bookmark/share) instead of the old
                  read-only counts, so viewers can engage without leaving the
                  feed. -->
-            <PostActions {post} />
+            <PostActions {post} oncomment={() => openComments(post)} />
           </div>
         </div>
       {/each}
     </div>
   {/if}
 </div>
+
+<Modal open={commentsOpen} title="Comments" onclose={closeComments}>
+  <div class="comments-sheet">
+    <button type="button" class="comments-add" onclick={addComment}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+      Add a comment
+    </button>
+
+    {#if commentsLoading}
+      <p class="comments-status">Loading comments…</p>
+    {:else if commentsError}
+      <p class="comments-status">{commentsError}</p>
+    {:else if !commentsPost || commentsDescendants.length === 0}
+      <p class="comments-status">No comments yet. Be the first to comment.</p>
+    {:else}
+      <ThreadedReplies descendants={commentsDescendants} rootPostId={commentsPost.id} />
+    {/if}
+  </div>
+</Modal>
 
 <style>
   .streams-page {
@@ -407,6 +488,41 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+  }
+
+  .comments-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .comments-add {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    align-self: stretch;
+    justify-content: center;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--color-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+  }
+
+  .comments-add:hover {
+    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.12));
+    border-color: transparent;
+  }
+
+  .comments-status {
+    padding: var(--space-4) 0;
+    text-align: center;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
   }
 
   .stream-card {
