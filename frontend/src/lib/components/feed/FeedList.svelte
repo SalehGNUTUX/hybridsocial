@@ -291,9 +291,16 @@
     {@const boost = isBoostEntry(entry) ? entry : null}
     {@const post = boost ? boost.post : entry as Post}
     {#if post && post.content !== undefined}
+      <!-- data-post-anchor lives on this wrapper, not on PostCard: windowing
+           unmounts the card, and the j/k scroll target has to outlive that or
+           `scrollPostIntoView` finds nothing and silently no-ops. Note the two
+           ids differ on a boost — `data-post-id` keys the windowing observer by
+           feed entry, while the anchor must carry the original post id, which
+           is what `setFeedPosts` publishes to the focused-post store. -->
       <div
         class="feed-item"
         data-post-id={entry.id}
+        data-post-anchor={post.id}
         use:observeItem
         style={showStagger ? `animation-delay: ${i * 60}ms` : ''}
         class:stagger={showStagger}
