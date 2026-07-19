@@ -674,7 +674,6 @@
   class:detail
   class:post-card-pending={post.pending}
   class:post-card-focused={isFocused && !detail}
-  data-post-anchor={post.id}
   aria-busy={post.pending ? 'true' : undefined}
   role="article"
   tabindex={detail ? -1 : 0}
