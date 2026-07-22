@@ -18,7 +18,8 @@ defmodule Hybridsocial.Moderation do
     Appeal,
     ModerationNote,
     QueuedItem,
-    MediaHashBan
+    MediaHashBan,
+    Takedown
   }
 
   alias Hybridsocial.Accounts.Identity
@@ -220,6 +221,107 @@ defmodule Hybridsocial.Moderation do
   defp filter_audit_by_date_range(query, from, to) do
     where(query, [a], a.created_at >= ^from and a.created_at <= ^to)
   end
+
+  # ── Takedowns (moderation removal + notice + appeal window) ───────────
+  #
+  # Records that staff removed a piece of content for a reason, notifies the
+  # owner (in-app + email) with that reason and the appeal window, and gives
+  # the auto-purge worker a `purge_after` deadline. The content itself is
+  # soft-deleted by its own context (Groups/Pages/Posts); this only layers the
+  # notice + appeal lifecycle on top.
+
+  @default_takedown_days 60
+
+  @doc """
+  Creates a takedown record and notifies the content owner. `attrs` needs
+  `:target_type`, `:target_id`, `:owner_id`, `:moderator_id`, `:reason`, and
+  optional `:category`. `purge_after` is derived from `takedown_retention_days`.
+  """
+  def create_takedown(attrs) do
+    days = takedown_retention_days()
+
+    purge_after =
+      DateTime.utc_now()
+      |> DateTime.add(days * 86_400, :second)
+      |> DateTime.truncate(:microsecond)
+
+    result =
+      %Takedown{}
+      |> Takedown.changeset(Map.put(attrs, :purge_after, purge_after))
+      |> Repo.insert()
+
+    with {:ok, takedown} <- result do
+      notify_content_owner(takedown, days)
+      {:ok, takedown}
+    end
+  end
+
+  @doc "The appeal window, in days, before an un-appealed takedown is purged."
+  def takedown_retention_days do
+    case Hybridsocial.Config.get("takedown_retention_days", @default_takedown_days) do
+      n when is_integer(n) and n > 0 ->
+        n
+
+      s when is_binary(s) ->
+        case Integer.parse(s) do
+          {n, _} when n > 0 -> n
+          _ -> @default_takedown_days
+        end
+
+      _ ->
+        @default_takedown_days
+    end
+  end
+
+  # No owner to notify (e.g. an orphaned identity) — nothing to do.
+  defp notify_content_owner(%Takedown{owner_id: nil}, _days), do: :ok
+  defp notify_content_owner(%Takedown{moderator_id: nil}, _days), do: :ok
+
+  defp notify_content_owner(%Takedown{} = takedown, days) do
+    # In-app notification — the bell/SSE "internal message". Actor is the
+    # moderator so it isn't self-skipped.
+    Hybridsocial.Notifications.create_notification(%{
+      recipient_id: takedown.owner_id,
+      actor_id: takedown.moderator_id,
+      type: "moderation_takedown",
+      target_type: notification_target_type(takedown.target_type),
+      target_id: takedown.target_id
+    })
+
+    # Email is sent directly (the notification email channel is opt-out by
+    # default) and fire-and-forget so it never blocks the takedown.
+    send_takedown_email(takedown, days)
+    :ok
+  end
+
+  # media/account_badge aren't linkable notification targets; leave nil.
+  defp notification_target_type(t) when t in ~w(group page post), do: t
+  defp notification_target_type(_), do: nil
+
+  defp send_takedown_email(%Takedown{owner_id: owner_id} = takedown, days) do
+    Task.Supervisor.start_child(Hybridsocial.TaskSupervisor, fn ->
+      with identity when not is_nil(identity) <- Hybridsocial.Accounts.get_identity(owner_id),
+           user when not is_nil(user) <- Hybridsocial.Accounts.get_user_by_identity(owner_id),
+           true <- is_binary(user.email) and user.email != "" do
+        identity
+        |> Map.from_struct()
+        |> Map.put(:email, user.email)
+        |> Hybridsocial.Emails.content_removed_email(%{
+          target_label: takedown_label(takedown.target_type),
+          reason: takedown.reason,
+          appeal_days: days
+        })
+        |> Hybridsocial.Mailer.deliver()
+      end
+    end)
+  end
+
+  defp takedown_label("group"), do: "group"
+  defp takedown_label("page"), do: "page"
+  defp takedown_label("post"), do: "post"
+  defp takedown_label("media"), do: "media"
+  defp takedown_label("account_badge"), do: "verification badge"
+  defp takedown_label(_), do: "content"
 
   # ── Content Filters ──────────────────────────────────────────────────
 

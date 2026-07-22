@@ -415,6 +415,7 @@ defmodule Hybridsocial.Notifications do
       "page_invite" -> "#{actor_name} invited you to manage a page"
       "report" -> "New report filed"
       "admin" -> "Admin notification"
+      "moderation_takedown" -> "Your content was removed"
       _ -> "New notification"
     end
   end
@@ -434,6 +435,7 @@ defmodule Hybridsocial.Notifications do
       "page_invite" -> "You have been invited to manage a page"
       "report" -> "A new report requires attention"
       "admin" -> "You have an admin notification"
+      "moderation_takedown" -> "A moderator removed your content — open to see why and how to appeal"
       _ -> "You have a new notification"
     end
   end

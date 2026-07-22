@@ -148,6 +148,7 @@ defmodule Hybridsocial.Groups do
       |> case do
         {:ok, %{group: deleted_group}} ->
           log_group_action(identity_id, "group.delete", deleted_group, role, opts)
+          maybe_open_takedown(deleted_group, identity_id, role, opts)
 
           Phoenix.PubSub.broadcast(
             Hybridsocial.PubSub,
@@ -261,6 +262,38 @@ defmodule Hybridsocial.Groups do
     Group
     |> where([g], not is_nil(g.deleted_at))
     |> Repo.get(group_id)
+  end
+
+  # A staff deletion is a moderation takedown: open a takedown record so the
+  # owner is notified with the reason and given the appeal window. An owner
+  # tearing down their own group is not a takedown — skip it. Also skip when no
+  # reason was given (nothing to explain to the owner).
+  defp maybe_open_takedown(group, moderator_id, :staff, opts) do
+    reason = Keyword.get(opts, :reason)
+    owner_id = owner_identity_id(group.id)
+
+    if is_binary(reason) and reason != "" and owner_id do
+      Hybridsocial.Moderation.create_takedown(%{
+        target_type: "group",
+        target_id: group.id,
+        owner_id: owner_id,
+        moderator_id: moderator_id,
+        reason: reason,
+        category: Keyword.get(opts, :category)
+      })
+    end
+
+    :ok
+  end
+
+  defp maybe_open_takedown(_group, _moderator_id, _role, _opts), do: :ok
+
+  defp owner_identity_id(group_id) do
+    GroupMember
+    |> where([m], m.group_id == ^group_id and m.role == :owner and m.status == :approved)
+    |> select([m], m.identity_id)
+    |> limit(1)
+    |> Repo.one()
   end
 
   def get_group(id) do

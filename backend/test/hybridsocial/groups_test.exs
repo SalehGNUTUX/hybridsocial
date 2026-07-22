@@ -5,6 +5,8 @@ defmodule Hybridsocial.GroupsTest do
   alias Hybridsocial.Accounts
   alias Hybridsocial.Auth.RBAC
   alias Hybridsocial.Moderation.AuditLog
+  alias Hybridsocial.Moderation.Takedown
+  alias Hybridsocial.Notifications.Notification
 
   defp create_identity(handle, email) do
     {:ok, identity} =
@@ -168,6 +170,38 @@ defmodule Hybridsocial.GroupsTest do
       assert entry.target_id == group.id
       assert entry.details["actor_role"] == "owner"
       assert entry.details["reason"] == "spam"
+    end
+
+    test "a staff deletion with a reason opens a takedown and notifies the owner",
+         %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Reported"})
+      make_staff(bob)
+
+      {:ok, _} = Groups.delete_group(group.id, bob.id, reason: "hate speech")
+
+      takedown = Repo.get_by(Takedown, target_type: "group", target_id: group.id)
+      assert takedown
+      assert takedown.owner_id == alice.id
+      assert takedown.moderator_id == bob.id
+      assert takedown.status == "active"
+      assert takedown.reason == "hate speech"
+      # The appeal window is in the future (default 60 days).
+      assert DateTime.compare(takedown.purge_after, DateTime.utc_now()) == :gt
+
+      # The owner got an in-app takedown notification (actor = the moderator).
+      notif =
+        Repo.get_by(Notification, recipient_id: alice.id, type: "moderation_takedown")
+
+      assert notif
+      assert notif.actor_id == bob.id
+    end
+
+    test "an owner tearing down their own group does not open a takedown",
+         %{alice: alice} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Mine"})
+      {:ok, _} = Groups.delete_group(group.id, alice.id, reason: "cleaning up")
+
+      refute Repo.get_by(Takedown, target_type: "group", target_id: group.id)
     end
   end
 
