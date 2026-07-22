@@ -386,9 +386,12 @@ defmodule HybridsocialWeb.Router do
 
     post "/", GroupController, :create
     get "/", GroupController, :index
+    # Must precede "/:id" so "deleted" isn't captured as a group id.
+    get "/deleted", GroupController, :deleted
     get "/:id", GroupController, :show
     patch "/:id", GroupController, :update
     delete "/:id", GroupController, :delete
+    post "/:id/restore", GroupController, :restore
 
     post "/:id/join", GroupController, :join
     post "/:id/leave", GroupController, :leave

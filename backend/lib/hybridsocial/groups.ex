@@ -121,9 +121,17 @@ defmodule Hybridsocial.Groups do
     end
   end
 
-  def delete_group(group_id, identity_id) do
+  @doc """
+  Soft-deletes a group. `opts` may carry `:reason` and `:ip`, which are
+  written to the moderation audit log alongside the actor's role — so a group
+  vanishing (especially at the hands of instance staff, who can delete any
+  group without being a member) leaves an accountable trail. Deletion only
+  stamps `deleted_at`; member rows and posts are untouched, so `restore_group/3`
+  can bring it back whole.
+  """
+  def delete_group(group_id, identity_id, opts \\ []) do
     with {:ok, group} <- get_existing_group(group_id),
-         {:ok, _role} <- require_role(group_id, identity_id, @destroy_roles) do
+         {:ok, role} <- require_role(group_id, identity_id, @destroy_roles) do
       Ecto.Multi.new()
       |> Ecto.Multi.update(:group, Group.soft_delete_changeset(group))
       |> Ecto.Multi.run(:soft_delete_identity, fn _repo, _ ->
@@ -139,6 +147,8 @@ defmodule Hybridsocial.Groups do
       |> Repo.transaction()
       |> case do
         {:ok, %{group: deleted_group}} ->
+          log_group_action(identity_id, "group.delete", deleted_group, role, opts)
+
           Phoenix.PubSub.broadcast(
             Hybridsocial.PubSub,
             "groups",
@@ -154,6 +164,103 @@ defmodule Hybridsocial.Groups do
           {:error, reason}
       end
     end
+  end
+
+  @doc """
+  Restores a soft-deleted group and its actor identity. Instance staff only:
+  restoring reverses a moderation action, so a group owner must not be able to
+  undo a staff takedown — the intended flow is the owner appeals, and staff
+  restore after reviewing. Members and posts were never deleted, so the group
+  comes back with all its non-removed content intact (any individual posts a
+  moderator took down separately stay down). Audited like the deletion.
+  """
+  def restore_group(group_id, actor_id, opts \\ []) do
+    if staff_member?(actor_id) do
+      case get_deleted_group(group_id) do
+        nil ->
+          {:error, :not_found}
+
+        group ->
+          Ecto.Multi.new()
+          |> Ecto.Multi.update(:group, Group.restore_changeset(group))
+          |> Ecto.Multi.run(:restore_identity, fn _repo, _ ->
+            if group.identity_id do
+              case Repo.get(Identity, group.identity_id) do
+                nil -> {:ok, nil}
+                identity -> identity |> Identity.restore_changeset() |> Repo.update()
+              end
+            else
+              {:ok, nil}
+            end
+          end)
+          |> Repo.transaction()
+          |> case do
+            {:ok, %{group: restored_group}} ->
+              log_group_action(actor_id, "group.restore", restored_group, :staff, opts)
+
+              Phoenix.PubSub.broadcast(
+                Hybridsocial.PubSub,
+                "groups",
+                {:group_restored, restored_group.id}
+              )
+
+              {:ok, restored_group}
+
+            {:error, :group, changeset, _} ->
+              {:error, changeset}
+
+            {:error, _, reason, _} ->
+              {:error, reason}
+          end
+      end
+    else
+      {:error, :forbidden}
+    end
+  end
+
+  @doc """
+  Lists soft-deleted groups (most recently deleted first) so staff can find one
+  to restore. Instance staff only.
+  """
+  def list_deleted_groups(actor_id, opts \\ []) do
+    if staff_member?(actor_id) do
+      limit = Keyword.get(opts, :limit, @default_page_size)
+
+      groups =
+        Group
+        |> where([g], not is_nil(g.deleted_at))
+        |> order_by([g], desc: g.deleted_at)
+        |> limit(^limit)
+        |> Repo.all()
+
+      {:ok, groups}
+    else
+      {:error, :forbidden}
+    end
+  end
+
+  # Best-effort audit entry for a group create/delete/restore. The role tells a
+  # reviewer whether a deletion was an owner tearing down their own group or
+  # instance staff acting as a moderator; the reason (if given) explains it.
+  defp log_group_action(actor_id, action, group, role, opts) do
+    Hybridsocial.Moderation.log(
+      actor_id,
+      action,
+      "group",
+      group.id,
+      %{
+        "name" => group.name,
+        "actor_role" => to_string(role),
+        "reason" => Keyword.get(opts, :reason)
+      },
+      Keyword.get(opts, :ip)
+    )
+  end
+
+  defp get_deleted_group(group_id) do
+    Group
+    |> where([g], not is_nil(g.deleted_at))
+    |> Repo.get(group_id)
   end
 
   def get_group(id) do

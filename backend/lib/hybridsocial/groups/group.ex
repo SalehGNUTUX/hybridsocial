@@ -82,4 +82,11 @@ defmodule Hybridsocial.Groups.Group do
     group
     |> change(deleted_at: DateTime.utc_now() |> DateTime.truncate(:microsecond))
   end
+
+  # Reverse a soft delete. Deletion only stamps `deleted_at` (member rows and
+  # posts are never touched), so clearing it brings the group back whole.
+  def restore_changeset(group) do
+    group
+    |> change(deleted_at: nil)
+  end
 end

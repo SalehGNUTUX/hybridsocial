@@ -3,6 +3,8 @@ defmodule Hybridsocial.GroupsTest do
 
   alias Hybridsocial.Groups
   alias Hybridsocial.Accounts
+  alias Hybridsocial.Auth.RBAC
+  alias Hybridsocial.Moderation.AuditLog
 
   defp create_identity(handle, email) do
     {:ok, identity} =
@@ -15,6 +17,21 @@ defmodule Hybridsocial.GroupsTest do
       })
 
     identity
+  end
+
+  # Grant an instance-level role so RBAC.staff?/1 is true — the "instance
+  # moderator" the group role ladder defers to.
+  defp make_staff(identity) do
+    {:ok, _} = RBAC.assign_role(identity.id, "moderator", identity.id)
+    identity
+  end
+
+  defp last_audit(action) do
+    AuditLog
+    |> where([a], a.action == ^action)
+    |> order_by([a], desc: a.created_at)
+    |> limit(1)
+    |> Repo.one()
   end
 
   setup do
@@ -130,6 +147,82 @@ defmodule Hybridsocial.GroupsTest do
       {:ok, group} = Groups.create_group(alice.id, %{"name" => "Safe"})
       {:ok, _} = Groups.join_group(group.id, bob.id)
       assert {:error, :forbidden} = Groups.delete_group(group.id, bob.id)
+    end
+
+    test "instance staff can delete any group without being a member", %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Under review"})
+      make_staff(bob)
+      refute Groups.member_role(group.id, bob.id)
+
+      assert {:ok, _deleted} = Groups.delete_group(group.id, bob.id, reason: "policy violation")
+      assert Groups.get_group(group.id) == nil
+    end
+
+    test "writes an audit entry recording who deleted, their role, and why", %{alice: alice} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Doomed"})
+      {:ok, _} = Groups.delete_group(group.id, alice.id, reason: "spam")
+
+      entry = last_audit("group.delete")
+      assert entry.actor_id == alice.id
+      assert entry.target_type == "group"
+      assert entry.target_id == group.id
+      assert entry.details["actor_role"] == "owner"
+      assert entry.details["reason"] == "spam"
+    end
+  end
+
+  describe "restore_group/3" do
+    test "staff can restore a soft-deleted group with members intact",
+         %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Wrongly removed"})
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+      staff = create_identity("modstaff", "modstaff@example.com")
+      make_staff(staff)
+
+      {:ok, _} = Groups.delete_group(group.id, staff.id, reason: "misunderstanding")
+      assert Groups.get_group(group.id) == nil
+
+      assert {:ok, restored} = Groups.restore_group(group.id, staff.id)
+      assert is_nil(restored.deleted_at)
+      # Back and whole: still fetchable, and memberships/roles survived.
+      assert Groups.get_group(group.id) != nil
+      assert Groups.member_role(group.id, alice.id) == :owner
+    end
+
+    test "a non-staff member cannot restore (can't undo a staff takedown)",
+         %{alice: alice} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Removed"})
+      staff = create_identity("mod2", "mod2@example.com")
+      make_staff(staff)
+      {:ok, _} = Groups.delete_group(group.id, staff.id)
+
+      # Even the owner cannot self-restore a moderation takedown.
+      assert {:error, :forbidden} = Groups.restore_group(group.id, alice.id)
+    end
+
+    test "restore writes its own audit entry", %{alice: alice} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Back soon"})
+      staff = create_identity("mod3", "mod3@example.com")
+      make_staff(staff)
+      {:ok, _} = Groups.delete_group(group.id, staff.id)
+      {:ok, _} = Groups.restore_group(group.id, staff.id)
+
+      entry = last_audit("group.restore")
+      assert entry.actor_id == staff.id
+      assert entry.target_id == group.id
+    end
+  end
+
+  describe "list_deleted_groups/2" do
+    test "staff see deleted groups; non-staff are forbidden", %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Gone"})
+      staff = create_identity("mod4", "mod4@example.com")
+      make_staff(staff)
+      {:ok, _} = Groups.delete_group(group.id, staff.id)
+
+      assert {:ok, groups} = Groups.list_deleted_groups(staff.id)
+      assert Enum.any?(groups, &(&1.id == group.id))
+      assert {:error, :forbidden} = Groups.list_deleted_groups(bob.id)
     end
   end
 
