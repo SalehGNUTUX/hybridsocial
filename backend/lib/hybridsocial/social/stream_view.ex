@@ -5,7 +5,11 @@ defmodule Hybridsocial.Social.StreamView do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @valid_sources ~w(feed profile trending direct_link)
+  # The value the client sends in `source`. `streams_feed`/`reels_feed` are what
+  # the Streams and Reels players actually post; omitting them rejected every
+  # view those two feeds recorded (422 validation.failed), so view tracking for
+  # both silently never worked. `feed` is the generic fallback.
+  @valid_sources ~w(feed streams_feed reels_feed profile trending direct_link)
 
   schema "stream_views" do
     field :watch_duration, :float
