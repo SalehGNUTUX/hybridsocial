@@ -210,15 +210,24 @@
 
   function handlePlay(postId: string, event: Event) {
     if (viewsReported.has(postId)) return;
-    viewsReported.add(postId);
 
     const video = event.currentTarget as HTMLVideoElement;
-    reportView(postId, 0, video.duration || 0, false, false);
+    // `play` can fire before metadata loads (preload="none"), when duration is
+    // still 0/NaN. The backend requires total_duration > 0, so reporting then
+    // 422s and the impression is lost. Wait for a real duration — a later
+    // play/timeupdate carries it, and dedup still guards a single report.
+    const duration = video.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+
+    viewsReported.add(postId);
+    reportView(postId, 0, duration, false, false);
   }
 
   function handleEnded(postId: string, event: Event) {
     const video = event.currentTarget as HTMLVideoElement;
-    const duration = video.duration || 0;
+    const duration = video.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+
     const replayed = viewsReported.has(`${postId}:ended`);
 
     viewsReported.add(`${postId}:ended`);

@@ -90,6 +90,28 @@ defmodule Hybridsocial.Social.StreamsTest do
       attrs = %{"watch_duration" => -1.0, "total_duration" => 0.0}
       assert {:error, _changeset} = Streams.record_view(post.id, nil, attrs)
     end
+
+    test "accepts the source values the Streams and Reels players actually send" do
+      alice = create_user("stream_sources", "stream_sources@example.com")
+      post = create_post(alice)
+      base = %{"watch_duration" => 5.0, "total_duration" => 30.0}
+
+      for source <- ["streams_feed", "reels_feed"] do
+        assert {:ok, view} =
+                 Streams.record_view(post.id, alice.id, Map.put(base, "source", source))
+
+        assert view.source == source
+      end
+    end
+
+    test "rejects an unknown source" do
+      alice = create_user("stream_badsource", "stream_badsource@example.com")
+      post = create_post(alice)
+
+      attrs = %{"watch_duration" => 5.0, "total_duration" => 30.0, "source" => "bogus"}
+      assert {:error, changeset} = Streams.record_view(post.id, nil, attrs)
+      assert %{source: ["is invalid"]} = errors_on(changeset)
+    end
   end
 
   describe "get_view_stats/1" do
