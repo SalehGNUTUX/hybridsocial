@@ -541,6 +541,30 @@ defmodule Hybridsocial.Moderation do
 
   defp restore_badge(_), do: {:ok, :no_op}
 
+  @verified_badge_tiers ~w(verified_starter verified_creator verified_pro)
+
+  @doc """
+  Opens a takedown notice when staff revoke a verified badge — i.e. a downgrade
+  from a verified tier to a non-verified one. A no-op for grants, upgrades, or
+  moves between non-verified tiers, and when no reason is given. The revoked-
+  from tier is stored in `category` so a later restore can re-grant it.
+  """
+  def open_badge_takedown(identity_id, admin_id, old_tier, new_tier, reason) do
+    if old_tier in @verified_badge_tiers and new_tier not in @verified_badge_tiers and
+         is_binary(reason) and reason != "" do
+      create_takedown(%{
+        target_type: "account_badge",
+        target_id: identity_id,
+        owner_id: identity_id,
+        moderator_id: admin_id,
+        reason: reason,
+        category: old_tier
+      })
+    else
+      {:ok, :noop}
+    end
+  end
+
   # ── Content Filters ──────────────────────────────────────────────────
 
   def create_filter(attrs) do
