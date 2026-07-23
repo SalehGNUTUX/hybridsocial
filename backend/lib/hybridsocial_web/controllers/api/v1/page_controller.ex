@@ -185,10 +185,11 @@ defmodule HybridsocialWeb.Api.V1.PageController do
   end
 
   @doc "DELETE /api/v1/pages/:id"
-  def delete(conn, %{"id" => id}) do
+  def delete(conn, %{"id" => id} = params) do
     identity = conn.assigns.current_identity
+    opts = [reason: params["reason"], category: params["category"], ip: client_ip(conn)]
 
-    case Pages.delete_page(id, identity.id) do
+    case Pages.delete_page(id, identity.id, opts) do
       {:ok, _} ->
         send_resp(conn, :no_content, "")
 
@@ -197,6 +198,43 @@ defmodule HybridsocialWeb.Api.V1.PageController do
 
       {:error, :forbidden} ->
         conn |> put_status(:forbidden) |> json(%{error: "page.forbidden"})
+    end
+  end
+
+  # GET /api/v1/pages/deleted — staff only: soft-deleted pages awaiting a
+  # restore decision.
+  def deleted(conn, params) do
+    identity = conn.assigns.current_identity
+    opts = if params["limit"], do: [limit: clamp_limit(params["limit"])], else: []
+
+    case Pages.list_deleted_pages(identity.id, opts) do
+      {:ok, pages} ->
+        json(conn, Enum.map(pages, &serialize_page/1))
+
+      {:error, :forbidden} ->
+        conn |> put_status(:forbidden) |> json(%{error: "page.forbidden"})
+    end
+  end
+
+  # POST /api/v1/pages/:id/restore — staff only: reverse a takedown after an
+  # owner's appeal.
+  def restore(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+
+    case Pages.restore_page(id, identity.id, ip: client_ip(conn)) do
+      {:ok, page} ->
+        json(conn, serialize_page(page))
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "page.not_found"})
+
+      {:error, :forbidden} ->
+        conn |> put_status(:forbidden) |> json(%{error: "page.forbidden"})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "validation.failed", details: format_errors(changeset)})
     end
   end
 
@@ -601,4 +639,6 @@ defmodule HybridsocialWeb.Api.V1.PageController do
       end)
     end)
   end
+
+  defp client_ip(conn), do: conn.remote_ip |> :inet.ntoa() |> to_string()
 end
