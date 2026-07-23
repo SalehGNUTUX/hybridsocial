@@ -221,6 +221,19 @@ defmodule Hybridsocial.Pages do
     |> Repo.one()
   end
 
+  @doc """
+  PERMANENTLY deletes a page. Used only by the takedown auto-purge worker after
+  the appeal window. Deleting the organization's actor identity cascades to the
+  organization row, its roles/invites, and the posts/media authored under it via
+  `on_delete: :delete_all`. Irreversible.
+  """
+  def purge_page(page_identity_id) do
+    case Repo.get(Identity, page_identity_id) do
+      nil -> {:ok, :already_gone}
+      identity -> Repo.delete(identity)
+    end
+  end
+
   @doc "Gets a page identity with its organization preloaded."
   def get_page(identity_id) do
     Identity

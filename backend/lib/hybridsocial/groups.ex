@@ -264,6 +264,35 @@ defmodule Hybridsocial.Groups do
     |> Repo.get(group_id)
   end
 
+  @doc """
+  PERMANENTLY deletes a group and everything that hangs off it. Used only by the
+  takedown auto-purge worker after the appeal window. Members, applications,
+  invites and screening cascade via `on_delete: :delete_all`; the group's actor
+  identity (and the media/notifications it owns) go with it. Irreversible.
+  """
+  def purge_group(group_id) do
+    case Repo.get(Group, group_id) do
+      nil ->
+        {:ok, :already_gone}
+
+      group ->
+        Ecto.Multi.new()
+        |> Ecto.Multi.delete(:group, group)
+        |> Ecto.Multi.run(:identity, fn _repo, _ ->
+          case group.identity_id && Repo.get(Identity, group.identity_id) do
+            nil -> {:ok, nil}
+            false -> {:ok, nil}
+            identity -> Repo.delete(identity)
+          end
+        end)
+        |> Repo.transaction()
+        |> case do
+          {:ok, _} -> {:ok, :purged}
+          {:error, _step, reason, _} -> {:error, reason}
+        end
+    end
+  end
+
   # A staff deletion is a moderation takedown: open a takedown record so the
   # owner is notified with the reason and given the appeal window. An owner
   # tearing down their own group is not a takedown — skip it. Also skip when no

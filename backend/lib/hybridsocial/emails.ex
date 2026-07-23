@@ -127,6 +127,21 @@ defmodule Hybridsocial.Emails do
   defp content_reason(reason) when is_binary(reason) and reason != "", do: reason
   defp content_reason(_), do: "No reason provided."
 
+  @doc """
+  Final warning before a takedown is permanently deleted. `target_label` names
+  the removed thing; `days_left` is how long is left to appeal.
+  """
+  def content_purge_reminder_email(user, opts \\ %{}) do
+    assigns = %{
+      "instance_name" => instance_name(),
+      "user" => user_assigns(user),
+      "target_label" => Map.get(opts, :target_label, "content"),
+      "days_left" => to_string(Map.get(opts, :days_left, 0))
+    }
+
+    render("content_purge_reminder", user, assigns)
+  end
+
   @doc "Sent to the appellant when their appeal is approved."
   def appeal_approved_email(user, appeal, response) do
     assigns = %{

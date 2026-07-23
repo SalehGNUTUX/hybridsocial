@@ -27,6 +27,9 @@ defmodule Hybridsocial.Emails.Defaults do
   def for("appeal_rejected"), do: {appeal_rejected_subject(), appeal_rejected_html()}
   def for("content_removed"), do: {content_removed_subject(), content_removed_html()}
 
+  def for("content_purge_reminder"),
+    do: {content_purge_reminder_subject(), content_purge_reminder_html()}
+
   def for("admin_pending_account"),
     do: {admin_pending_account_subject(), admin_pending_account_html()}
 
@@ -60,6 +63,9 @@ defmodule Hybridsocial.Emails.Defaults do
 
   defp content_removed_subject,
     do: "{{instance_name}}: your {{target_label}} was removed"
+
+  defp content_purge_reminder_subject,
+    do: "{{instance_name}}: {{days_left}} days left to appeal your removed {{target_label}}"
 
   defp admin_pending_account_subject,
     do: "{{instance_name}}: new pending account @{{applicant.handle}}"
@@ -250,6 +256,22 @@ defmodule Hybridsocial.Emails.Defaults do
 
     footer =
       "You're receiving this because content you own was moderated on {{instance_name}}."
+
+    layout(content, footer)
+  end
+
+  defp content_purge_reminder_html do
+    content = """
+    <h1 style="margin:0 0 16px 0;font-size:20px;font-weight:700;">Last chance to appeal</h1>
+    <p style="margin:0 0 12px 0;">Hi {{user.display_name}},</p>
+    <p style="margin:0 0 12px 0;">Your {{target_label}} that was removed on {{instance_name}} is scheduled to be <strong>permanently deleted in {{days_left}} days</strong>. Once that happens it can't be recovered.</p>
+    <p style="margin:0 0 12px 0;">If you'd like it restored, appeal now — explain the situation and confirm the issue won't recur.</p>
+    #{button("Appeal now", "{{app_url}}/appeals")}
+    <p style="margin:0;font-size:13px;color:#6b7280;">If you take no action, the content will be deleted for good.</p>
+    """
+
+    footer =
+      "You're receiving this because content you own is about to be permanently deleted on {{instance_name}}."
 
     layout(content, footer)
   end

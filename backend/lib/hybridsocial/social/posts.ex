@@ -1684,6 +1684,18 @@ defmodule Hybridsocial.Social.Posts do
   end
 
   @doc """
+  PERMANENTLY deletes a post. Used only by the takedown auto-purge worker after
+  the appeal window. Reactions, boosts, media, mentions and stream-views cascade
+  via `on_delete: :delete_all`. Irreversible.
+  """
+  def purge_post(post_id) do
+    case Repo.get(Post, post_id) do
+      nil -> {:ok, :already_gone}
+      post -> Repo.delete(post)
+    end
+  end
+
+  @doc """
   Force-marks a post as sensitive with an audit log entry.
   """
   def admin_force_sensitive(post_id, admin_id) do

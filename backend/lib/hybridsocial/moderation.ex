@@ -4,6 +4,7 @@ defmodule Hybridsocial.Moderation do
   banned domains, and moderation webhooks.
   """
   import Ecto.Query
+  require Logger
   alias Hybridsocial.Repo
 
   alias Hybridsocial.Moderation.{
@@ -335,6 +336,124 @@ defmodule Hybridsocial.Moderation do
     |> limit(^limit)
     |> Repo.all()
   end
+
+  # ── Auto-purge (Phase 3): remind, then permanently delete ────────────
+  #
+  # After the appeal window, an un-appealed takedown is permanently deleted.
+  # This is IRREVERSIBLE. `send_purge_reminders/1` warns the owner as the
+  # deadline nears; `purge_expired_takedowns/0` does the hard delete. The
+  # TakedownPurgeWorker drives both hourly and — importantly — only calls the
+  # purge when the `takedown_purge_enabled` setting is on, so the destructive
+  # half is opt-in.
+
+  @doc """
+  Sends a one-time reminder for each `active` takedown whose purge deadline is
+  within `lead_days` and that hasn't been reminded yet. Returns the count sent.
+  """
+  def send_purge_reminders(lead_days) when is_integer(lead_days) and lead_days >= 0 do
+    now = DateTime.utc_now()
+    threshold = DateTime.add(now, lead_days * 86_400, :second)
+
+    due =
+      Takedown
+      |> where([t], t.status == "active")
+      |> where([t], is_nil(t.reminded_at))
+      |> where([t], t.purge_after <= ^threshold)
+      |> Repo.all()
+
+    Enum.each(due, &deliver_purge_reminder/1)
+    length(due)
+  end
+
+  defp deliver_purge_reminder(%Takedown{} = takedown) do
+    days_left =
+      DateTime.diff(takedown.purge_after, DateTime.utc_now(), :second)
+      |> then(&max(0, div(&1, 86_400)))
+
+    if takedown.owner_id && takedown.moderator_id do
+      Hybridsocial.Notifications.create_notification(%{
+        recipient_id: takedown.owner_id,
+        actor_id: takedown.moderator_id,
+        type: "moderation_takedown",
+        target_type: notification_target_type(takedown.target_type),
+        target_id: takedown.target_id
+      })
+    end
+
+    send_purge_reminder_email(takedown, days_left)
+    takedown |> Ecto.Changeset.change(reminded_at: DateTime.utc_now()) |> Repo.update()
+  end
+
+  defp send_purge_reminder_email(%Takedown{owner_id: nil}, _days), do: :ok
+
+  defp send_purge_reminder_email(%Takedown{owner_id: owner_id} = takedown, days_left) do
+    Task.Supervisor.start_child(Hybridsocial.TaskSupervisor, fn ->
+      with identity when not is_nil(identity) <- Hybridsocial.Accounts.get_identity(owner_id),
+           user when not is_nil(user) <- Hybridsocial.Accounts.get_user_by_identity(owner_id),
+           true <- is_binary(user.email) and user.email != "" do
+        identity
+        |> Map.from_struct()
+        |> Map.put(:email, user.email)
+        |> Hybridsocial.Emails.content_purge_reminder_email(%{
+          target_label: takedown_label(takedown.target_type),
+          days_left: days_left
+        })
+        |> Hybridsocial.Mailer.deliver()
+      end
+    end)
+  end
+
+  @doc """
+  Permanently deletes the content of every `active` takedown whose window has
+  passed, and marks the takedown `purged`. IRREVERSIBLE. Each purge is isolated
+  so one failure doesn't halt the batch. Returns the count purged.
+  """
+  def purge_expired_takedowns do
+    now = DateTime.utc_now()
+
+    expired =
+      Takedown
+      |> where([t], t.status == "active")
+      |> where([t], t.purge_after <= ^now)
+      |> Repo.all()
+
+    Enum.reduce(expired, 0, fn takedown, acc ->
+      if purge_one(takedown), do: acc + 1, else: acc
+    end)
+  end
+
+  defp purge_one(%Takedown{} = takedown) do
+    case purge_takedown_target(takedown) do
+      {:ok, _} ->
+        takedown |> Takedown.status_changeset("purged") |> Repo.update()
+        log(takedown.moderator_id, "takedown.purged", takedown.target_type, takedown.target_id, %{})
+        true
+
+      {:error, reason} ->
+        Logger.error("Takedown #{takedown.id} purge failed: #{inspect(reason)}")
+        false
+    end
+  rescue
+    e ->
+      Logger.error("Takedown #{takedown.id} purge crashed: #{Exception.message(e)}")
+      false
+  end
+
+  # Hard-delete the removed content. All dependent rows cascade via
+  # `on_delete: :delete_all` FKs (members, media, reactions, …). A revoked
+  # badge has no content to delete — the revocation just stands for good.
+  defp purge_takedown_target(%Takedown{target_type: "group", target_id: id}),
+    do: Hybridsocial.Groups.purge_group(id)
+
+  defp purge_takedown_target(%Takedown{target_type: "page", target_id: id}),
+    do: Hybridsocial.Pages.purge_page(id)
+
+  defp purge_takedown_target(%Takedown{target_type: "post", target_id: id}),
+    do: Hybridsocial.Social.Posts.purge_post(id)
+
+  defp purge_takedown_target(%Takedown{target_type: "account_badge"}), do: {:ok, :no_content}
+
+  defp purge_takedown_target(_), do: {:ok, :no_content}
 
   @doc """
   The content owner appeals a takedown. Only the owner may appeal, only while

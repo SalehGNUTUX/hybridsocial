@@ -430,4 +430,82 @@ defmodule Hybridsocial.ModerationTest do
       assert Moderation.get_takedown(takedown.id).status == "active"
     end
   end
+
+  # ── Auto-purge: reminders + permanent deletion ───────────────────────
+
+  describe "takedown auto-purge" do
+    setup do
+      owner = create_identity("purge_owner", "purge_owner@example.com")
+      staff = create_identity("purge_staff", "purge_staff@example.com")
+      {:ok, _} = Hybridsocial.Auth.RBAC.assign_role(staff.id, "moderator", staff.id)
+      %{owner: owner, staff: staff}
+    end
+
+    test "send_purge_reminders warns an owner near the deadline, exactly once",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Nearly gone"})
+      soon = DateTime.add(DateTime.utc_now(), 2 * 86_400, :second)
+      td = insert_takedown(owner, staff, group.id, soon)
+
+      assert Moderation.send_purge_reminders(7) == 1
+      assert Moderation.get_takedown(td.id).reminded_at
+      # A second pass doesn't re-remind.
+      assert Moderation.send_purge_reminders(7) == 0
+    end
+
+    test "send_purge_reminders ignores takedowns still far from the deadline",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Plenty of time"})
+      far = DateTime.add(DateTime.utc_now(), 30 * 86_400, :second)
+      insert_takedown(owner, staff, group.id, far)
+
+      assert Moderation.send_purge_reminders(7) == 0
+    end
+
+    test "purge_expired_takedowns permanently deletes the content and marks it purged",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Doomed"})
+      past = DateTime.add(DateTime.utc_now(), -86_400, :second)
+      td = insert_takedown(owner, staff, group.id, past)
+
+      assert Moderation.purge_expired_takedowns() == 1
+      # Hard-deleted, not just soft-deleted.
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) == nil
+      assert Moderation.get_takedown(td.id).status == "purged"
+    end
+
+    test "purge_expired_takedowns leaves a takedown whose window hasn't passed",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Safe"})
+      future = DateTime.add(DateTime.utc_now(), 30 * 86_400, :second)
+      insert_takedown(owner, staff, group.id, future)
+
+      assert Moderation.purge_expired_takedowns() == 0
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) != nil
+    end
+
+    test "purge_expired_takedowns skips an appealed takedown",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Under appeal"})
+      past = DateTime.add(DateTime.utc_now(), -86_400, :second)
+      td = insert_takedown(owner, staff, group.id, past)
+      td |> Hybridsocial.Moderation.Takedown.status_changeset("appealed") |> Hybridsocial.Repo.update!()
+
+      assert Moderation.purge_expired_takedowns() == 0
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) != nil
+    end
+  end
+
+  defp insert_takedown(owner, staff, group_id, purge_after) do
+    %Hybridsocial.Moderation.Takedown{}
+    |> Hybridsocial.Moderation.Takedown.changeset(%{
+      "target_type" => "group",
+      "target_id" => group_id,
+      "owner_id" => owner.id,
+      "moderator_id" => staff.id,
+      "reason" => "policy violation",
+      "purge_after" => purge_after
+    })
+    |> Hybridsocial.Repo.insert!()
+  end
 end

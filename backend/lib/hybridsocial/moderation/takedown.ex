@@ -23,6 +23,7 @@ defmodule Hybridsocial.Moderation.Takedown do
     field :purge_after, :utc_datetime_usec
     field :notified_inapp_at, :utc_datetime_usec
     field :notified_email_at, :utc_datetime_usec
+    field :reminded_at, :utc_datetime_usec
 
     belongs_to :owner, Hybridsocial.Accounts.Identity
     belongs_to :moderator, Hybridsocial.Accounts.Identity
@@ -42,7 +43,8 @@ defmodule Hybridsocial.Moderation.Takedown do
       :status,
       :purge_after,
       :notified_inapp_at,
-      :notified_email_at
+      :notified_email_at,
+      :reminded_at
     ])
     |> validate_required([:target_type, :target_id, :reason, :purge_after])
     |> validate_inclusion(:target_type, @target_types)
