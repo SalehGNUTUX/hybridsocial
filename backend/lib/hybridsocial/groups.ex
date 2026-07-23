@@ -316,15 +316,33 @@ defmodule Hybridsocial.Groups do
   def ban_member(group_id, admin_id, member_id) do
     with {:ok, actor_role} <- require_role(group_id, admin_id, @moderate_roles),
          member when not is_nil(member) <- get_member_by_id(member_id, group_id),
-         :ok <- authorize_ban(actor_role, member.role) do
-      member
-      |> GroupMember.changeset(%{status: :banned})
-      |> Repo.update()
+         :ok <- authorize_ban(actor_role, member.role),
+         :ok <- ensure_not_sole_owner(group_id, member) do
+      # Only approved members are counted in member_count, so only decrement
+      # when banning one that was actually counted (mirrors insert_member).
+      was_approved = member.status == :approved
+
+      case member |> GroupMember.changeset(%{status: :banned}) |> Repo.update() do
+        {:ok, banned} ->
+          if was_approved, do: update_member_count(group_id, -1)
+          {:ok, banned}
+
+        error ->
+          error
+      end
     else
       nil -> {:error, :not_found}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # Banning the only owner would leave the group ownerless (no one could then
+  # grant owner or delete it) — the same state `leave_group` guards against.
+  defp ensure_not_sole_owner(group_id, %GroupMember{role: :owner}) do
+    if count_owners(group_id) > 1, do: :ok, else: {:error, :owner_must_transfer}
+  end
+
+  defp ensure_not_sole_owner(_group_id, _member), do: :ok
 
   # Only an owner (or instance staff) may change an existing owner's role or
   # hand out the `:owner` role. Without this, an admin could demote the owner
