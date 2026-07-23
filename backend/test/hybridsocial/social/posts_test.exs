@@ -513,4 +513,39 @@ defmodule Hybridsocial.Social.PostsTest do
       assert {:ok, _} = result
     end
   end
+
+  describe "admin_delete_post/3" do
+    test "a staff removal with a reason opens a takedown notifying the author" do
+      author = create_user("td_author", "td_author@test.com")
+      admin = create_user("td_admin", "td_admin@test.com")
+
+      {:ok, post} = Posts.create_post(author.id, %{"content" => "bad post", "visibility" => "public"})
+
+      {:ok, _} = Posts.admin_delete_post(post.id, admin.id, "spam")
+
+      td =
+        Hybridsocial.Moderation.Takedown
+        |> Hybridsocial.Repo.get_by(target_type: "post", target_id: post.id)
+
+      assert td
+      assert td.owner_id == author.id
+      assert td.moderator_id == admin.id
+      assert td.reason == "spam"
+      assert td.status == "active"
+    end
+
+    test "a removal without a reason does not open a takedown" do
+      author = create_user("td_author2", "td_author2@test.com")
+      admin = create_user("td_admin2", "td_admin2@test.com")
+
+      {:ok, post} = Posts.create_post(author.id, %{"content" => "post", "visibility" => "public"})
+
+      {:ok, _} = Posts.admin_delete_post(post.id, admin.id)
+
+      refute Hybridsocial.Repo.get_by(Hybridsocial.Moderation.Takedown,
+               target_type: "post",
+               target_id: post.id
+             )
+    end
+  end
 end
