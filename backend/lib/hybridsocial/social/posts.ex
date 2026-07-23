@@ -1850,9 +1850,26 @@ defmodule Hybridsocial.Social.Posts do
     |> where([p], is_nil(p.deleted_at))
     |> Repo.get(post_id)
     |> case do
-      nil -> {:error, :not_found}
-      %Post{identity_id: ^identity_id} = post -> {:ok, post}
-      _post -> {:error, :forbidden}
+      nil ->
+        {:error, :not_found}
+
+      %Post{identity_id: ^identity_id} = post ->
+        {:ok, post}
+
+      # A post authored *as a page* is owned by the page identity, not the
+      # human who wrote it — so a strict identity match always fails and the
+      # post would be uneditable/undeletable. Mirror the create-time authority
+      # (`Pages.resolve_post_author` → `can_edit?`): anyone who can edit the
+      # page can edit and delete its posts.
+      %Post{page_id: page_id} = post when is_binary(page_id) ->
+        if Hybridsocial.Pages.can_edit?(page_id, identity_id) do
+          {:ok, post}
+        else
+          {:error, :forbidden}
+        end
+
+      _post ->
+        {:error, :forbidden}
     end
   end
 
