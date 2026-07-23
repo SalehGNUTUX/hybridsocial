@@ -65,6 +65,47 @@ defmodule HybridsocialWeb.Api.V1.AppealController do
     |> json(%{data: Enum.map(appeals, &serialize_appeal/1)})
   end
 
+  # ── Content takedowns: the owner's list + appealing one ─────────────
+
+  # GET /api/v1/takedowns — the caller's own takedowns (to find one to appeal).
+  def my_takedowns(conn, params) do
+    identity_id = conn.assigns.current_identity.id
+
+    takedowns =
+      Moderation.list_takedowns_for_owner(identity_id, limit: clamp_limit(params["limit"]))
+
+    conn
+    |> put_status(:ok)
+    |> json(%{data: Enum.map(takedowns, &serialize_takedown/1)})
+  end
+
+  # POST /api/v1/takedowns/:id/appeal — the owner appeals a specific takedown.
+  def appeal_takedown(conn, %{"id" => takedown_id} = params) do
+    identity_id = conn.assigns.current_identity.id
+
+    case Moderation.create_takedown_appeal(identity_id, takedown_id, params["reason"]) do
+      {:ok, appeal} ->
+        conn |> put_status(:created) |> json(%{data: serialize_appeal(appeal)})
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "takedown.not_found"})
+
+      {:error, :forbidden} ->
+        conn |> put_status(:forbidden) |> json(%{error: "takedown.forbidden"})
+
+      {:error, :not_appealable} ->
+        conn |> put_status(:conflict) |> json(%{error: "takedown.not_appealable"})
+
+      {:error, :already_pending} ->
+        conn |> put_status(:conflict) |> json(%{error: "appeal.already_pending"})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "validation.failed", details: format_errors(changeset)})
+    end
+  end
+
   # ── Helpers ─────────────────────────────────────────────────────────
 
   defp serialize_appeal(appeal) do
@@ -77,7 +118,21 @@ defmodule HybridsocialWeb.Api.V1.AppealController do
       reviewed_by: appeal.reviewed_by,
       reviewed_at: appeal.reviewed_at,
       response: appeal.response,
+      takedown_id: appeal.takedown_id,
       created_at: appeal.inserted_at
+    }
+  end
+
+  defp serialize_takedown(takedown) do
+    %{
+      id: takedown.id,
+      target_type: takedown.target_type,
+      target_id: takedown.target_id,
+      reason: takedown.reason,
+      category: takedown.category,
+      status: takedown.status,
+      purge_after: takedown.purge_after,
+      created_at: takedown.inserted_at
     }
   end
 

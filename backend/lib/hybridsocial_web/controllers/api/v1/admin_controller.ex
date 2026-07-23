@@ -4352,10 +4352,15 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
             conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
 
           identity ->
+            old_tier = identity.verification_tier
+
             case Accounts.admin_update_identity(identity, %{"verification_tier" => tier}) do
               {:ok, updated} ->
                 admin_id = conn.assigns.current_identity.id
                 Moderation.log(admin_id, "account.tier_changed", "identity", id, %{tier: tier})
+                # Revoking a verified badge notifies the account owner with the
+                # reason and the appeal window (a no-op for grants/upgrades).
+                Moderation.open_badge_takedown(id, admin_id, old_tier, tier, params["reason"])
                 json(conn, %{data: serialize_account(updated)})
 
               {:error, _} ->

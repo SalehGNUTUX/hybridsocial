@@ -106,6 +106,42 @@ defmodule Hybridsocial.Emails do
     render("account_rejected", user, assigns)
   end
 
+  @doc """
+  Sent to a content owner when staff remove their group/page/post/media/badge.
+  `target_label` is a human word for the removed thing ("group", "post", …);
+  `reason` is the moderator's free text (escaped); `appeal_days` is the window
+  before permanent deletion.
+  """
+  def content_removed_email(user, opts \\ %{}) do
+    assigns = %{
+      "instance_name" => instance_name(),
+      "user" => user_assigns(user),
+      "target_label" => Map.get(opts, :target_label, "content"),
+      "reason" => content_reason(Map.get(opts, :reason)),
+      "appeal_days" => to_string(Map.get(opts, :appeal_days, 60))
+    }
+
+    render("content_removed", user, assigns)
+  end
+
+  defp content_reason(reason) when is_binary(reason) and reason != "", do: reason
+  defp content_reason(_), do: "No reason provided."
+
+  @doc """
+  Final warning before a takedown is permanently deleted. `target_label` names
+  the removed thing; `days_left` is how long is left to appeal.
+  """
+  def content_purge_reminder_email(user, opts \\ %{}) do
+    assigns = %{
+      "instance_name" => instance_name(),
+      "user" => user_assigns(user),
+      "target_label" => Map.get(opts, :target_label, "content"),
+      "days_left" => to_string(Map.get(opts, :days_left, 0))
+    }
+
+    render("content_purge_reminder", user, assigns)
+  end
+
   @doc "Sent to the appellant when their appeal is approved."
   def appeal_approved_email(user, appeal, response) do
     assigns = %{

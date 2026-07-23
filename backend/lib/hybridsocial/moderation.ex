@@ -4,6 +4,7 @@ defmodule Hybridsocial.Moderation do
   banned domains, and moderation webhooks.
   """
   import Ecto.Query
+  require Logger
   alias Hybridsocial.Repo
 
   alias Hybridsocial.Moderation.{
@@ -18,7 +19,8 @@ defmodule Hybridsocial.Moderation do
     Appeal,
     ModerationNote,
     QueuedItem,
-    MediaHashBan
+    MediaHashBan,
+    Takedown
   }
 
   alias Hybridsocial.Accounts.Identity
@@ -219,6 +221,398 @@ defmodule Hybridsocial.Moderation do
 
   defp filter_audit_by_date_range(query, from, to) do
     where(query, [a], a.created_at >= ^from and a.created_at <= ^to)
+  end
+
+  # ── Takedowns (moderation removal + notice + appeal window) ───────────
+  #
+  # Records that staff removed a piece of content for a reason, notifies the
+  # owner (in-app + email) with that reason and the appeal window, and gives
+  # the auto-purge worker a `purge_after` deadline. The content itself is
+  # soft-deleted by its own context (Groups/Pages/Posts); this only layers the
+  # notice + appeal lifecycle on top.
+
+  @default_takedown_days 60
+
+  @doc """
+  Creates a takedown record and notifies the content owner. `attrs` needs
+  `:target_type`, `:target_id`, `:owner_id`, `:moderator_id`, `:reason`, and
+  optional `:category`. `purge_after` is derived from `takedown_retention_days`.
+  """
+  def create_takedown(attrs) do
+    days = takedown_retention_days()
+
+    purge_after =
+      DateTime.utc_now()
+      |> DateTime.add(days * 86_400, :second)
+      |> DateTime.truncate(:microsecond)
+
+    result =
+      %Takedown{}
+      |> Takedown.changeset(Map.put(attrs, :purge_after, purge_after))
+      |> Repo.insert()
+
+    with {:ok, takedown} <- result do
+      notify_content_owner(takedown, days)
+      {:ok, takedown}
+    else
+      {:error, changeset} ->
+        # Callers (maybe_open_*_takedown) fire-and-forget this, so a rejected
+        # takedown — e.g. a reason under the 3-char minimum — would otherwise
+        # remove the content while silently sending the owner no notice.
+        Logger.warning("Takedown not opened: #{inspect(changeset.errors)}")
+        {:error, changeset}
+    end
+  end
+
+  @doc "The appeal window, in days, before an un-appealed takedown is purged."
+  def takedown_retention_days do
+    case Hybridsocial.Config.get("takedown_retention_days", @default_takedown_days) do
+      n when is_integer(n) and n > 0 ->
+        n
+
+      s when is_binary(s) ->
+        case Integer.parse(s) do
+          {n, _} when n > 0 -> n
+          _ -> @default_takedown_days
+        end
+
+      _ ->
+        @default_takedown_days
+    end
+  end
+
+  # No owner to notify (e.g. an orphaned identity) — nothing to do.
+  defp notify_content_owner(%Takedown{owner_id: nil}, _days), do: :ok
+  defp notify_content_owner(%Takedown{moderator_id: nil}, _days), do: :ok
+
+  defp notify_content_owner(%Takedown{} = takedown, days) do
+    # In-app notification — the bell/SSE "internal message". Actor is the
+    # moderator so it isn't self-skipped.
+    Hybridsocial.Notifications.create_notification(%{
+      recipient_id: takedown.owner_id,
+      actor_id: takedown.moderator_id,
+      type: "moderation_takedown",
+      target_type: notification_target_type(takedown.target_type),
+      target_id: takedown.target_id
+    })
+
+    # Email is sent directly (the notification email channel is opt-out by
+    # default) and fire-and-forget so it never blocks the takedown.
+    send_takedown_email(takedown, days)
+    :ok
+  end
+
+  # media/account_badge aren't linkable notification targets; leave nil.
+  defp notification_target_type(t) when t in ~w(group page post), do: t
+  defp notification_target_type(_), do: nil
+
+  defp send_takedown_email(%Takedown{owner_id: owner_id} = takedown, days) do
+    Task.Supervisor.start_child(Hybridsocial.TaskSupervisor, fn ->
+      with identity when not is_nil(identity) <- Hybridsocial.Accounts.get_identity(owner_id),
+           user when not is_nil(user) <- Hybridsocial.Accounts.get_user_by_identity(owner_id),
+           true <- is_binary(user.email) and user.email != "" do
+        identity
+        |> Map.from_struct()
+        |> Map.put(:email, user.email)
+        |> Hybridsocial.Emails.content_removed_email(%{
+          target_label: takedown_label(takedown.target_type),
+          reason: takedown.reason,
+          appeal_days: days
+        })
+        |> Hybridsocial.Mailer.deliver()
+      end
+    end)
+  end
+
+  defp takedown_label("group"), do: "group"
+  defp takedown_label("page"), do: "page"
+  defp takedown_label("post"), do: "post"
+  defp takedown_label("media"), do: "media"
+  defp takedown_label("account_badge"), do: "verification badge"
+  defp takedown_label(_), do: "content"
+
+  def get_takedown(id), do: Repo.get(Takedown, id)
+
+  @doc "Takedowns against content owned by `owner_id`, most recent first."
+  def list_takedowns_for_owner(owner_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 20)
+
+    Takedown
+    |> where([t], t.owner_id == ^owner_id)
+    |> order_by([t], desc: t.inserted_at)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  # ── Auto-purge (Phase 3): remind, then permanently delete ────────────
+  #
+  # After the appeal window, an un-appealed takedown is permanently deleted.
+  # This is IRREVERSIBLE. `send_purge_reminders/1` warns the owner as the
+  # deadline nears; `purge_expired_takedowns/0` does the hard delete. The
+  # TakedownPurgeWorker drives both hourly and — importantly — only calls the
+  # purge when the `takedown_purge_enabled` setting is on, so the destructive
+  # half is opt-in.
+
+  @doc """
+  Sends a one-time reminder for each `active` takedown whose purge deadline is
+  within `lead_days` and that hasn't been reminded yet. Returns the count sent.
+  """
+  def send_purge_reminders(lead_days) when is_integer(lead_days) and lead_days >= 0 do
+    now = DateTime.utc_now()
+    threshold = DateTime.add(now, lead_days * 86_400, :second)
+
+    due =
+      Takedown
+      |> where([t], t.status == "active")
+      |> where([t], is_nil(t.reminded_at))
+      |> where([t], t.purge_after <= ^threshold)
+      |> Repo.all()
+
+    Enum.each(due, &deliver_purge_reminder/1)
+    length(due)
+  end
+
+  defp deliver_purge_reminder(%Takedown{} = takedown) do
+    days_left =
+      DateTime.diff(takedown.purge_after, DateTime.utc_now(), :second)
+      |> then(&max(0, div(&1, 86_400)))
+
+    if takedown.owner_id && takedown.moderator_id do
+      Hybridsocial.Notifications.create_notification(%{
+        recipient_id: takedown.owner_id,
+        actor_id: takedown.moderator_id,
+        type: "moderation_takedown",
+        target_type: notification_target_type(takedown.target_type),
+        target_id: takedown.target_id
+      })
+    end
+
+    send_purge_reminder_email(takedown, days_left)
+    takedown |> Ecto.Changeset.change(reminded_at: DateTime.utc_now()) |> Repo.update()
+  end
+
+  defp send_purge_reminder_email(%Takedown{owner_id: nil}, _days), do: :ok
+
+  defp send_purge_reminder_email(%Takedown{owner_id: owner_id} = takedown, days_left) do
+    Task.Supervisor.start_child(Hybridsocial.TaskSupervisor, fn ->
+      with identity when not is_nil(identity) <- Hybridsocial.Accounts.get_identity(owner_id),
+           user when not is_nil(user) <- Hybridsocial.Accounts.get_user_by_identity(owner_id),
+           true <- is_binary(user.email) and user.email != "" do
+        identity
+        |> Map.from_struct()
+        |> Map.put(:email, user.email)
+        |> Hybridsocial.Emails.content_purge_reminder_email(%{
+          target_label: takedown_label(takedown.target_type),
+          days_left: days_left
+        })
+        |> Hybridsocial.Mailer.deliver()
+      end
+    end)
+  end
+
+  @doc """
+  Permanently deletes the content of every `active` takedown whose window has
+  passed, and marks the takedown `purged`. IRREVERSIBLE. Each purge is isolated
+  so one failure doesn't halt the batch. Returns the count purged.
+  """
+  def purge_expired_takedowns do
+    now = DateTime.utc_now()
+
+    expired =
+      Takedown
+      |> where([t], t.status == "active")
+      |> where([t], t.purge_after <= ^now)
+      |> Repo.all()
+
+    Enum.reduce(expired, 0, fn takedown, acc ->
+      if purge_one(takedown), do: acc + 1, else: acc
+    end)
+  end
+
+  defp purge_one(%Takedown{} = takedown) do
+    case purge_takedown_target(takedown) do
+      {:ok, _} ->
+        takedown |> Takedown.status_changeset("purged") |> Repo.update()
+
+        log(
+          takedown.moderator_id,
+          "takedown.purged",
+          takedown.target_type,
+          takedown.target_id,
+          %{}
+        )
+
+        true
+
+      {:error, reason} ->
+        Logger.error("Takedown #{takedown.id} purge failed: #{inspect(reason)}")
+        false
+    end
+  rescue
+    e ->
+      Logger.error("Takedown #{takedown.id} purge crashed: #{Exception.message(e)}")
+      false
+  end
+
+  # Hard-delete the removed content. All dependent rows cascade via
+  # `on_delete: :delete_all` FKs (members, media, reactions, …). A revoked
+  # badge has no content to delete — the revocation just stands for good.
+  defp purge_takedown_target(%Takedown{target_type: "group", target_id: id}),
+    do: Hybridsocial.Groups.purge_group(id)
+
+  defp purge_takedown_target(%Takedown{target_type: "page", target_id: id}),
+    do: Hybridsocial.Pages.purge_page(id)
+
+  defp purge_takedown_target(%Takedown{target_type: "post", target_id: id}),
+    do: Hybridsocial.Social.Posts.purge_post(id)
+
+  defp purge_takedown_target(%Takedown{target_type: "account_badge"}), do: {:ok, :no_content}
+
+  defp purge_takedown_target(_), do: {:ok, :no_content}
+
+  @doc """
+  Deletes rows that reference `identity_id` through a *non-cascading* foreign key
+  so a purge can hard-delete the actor identity without a `foreign_key_violation`.
+
+  A group/page that survives to auto-purge was very likely reported, and
+  `reports.reported_id` is `on_delete: :nothing` — deleting the identity would
+  otherwise raise and the worker would crash-loop, purging nothing (the exact
+  failure the cascade claim overlooked). Reports naming the identity as subject,
+  reporter, or assignee are dropped (their subject is being permanently removed);
+  `audit_log.actor_id` references are nilified so the immutable log survives.
+  Meant to run inside the purge transaction — takes the transaction's `repo`.
+  """
+  def purge_dangling_identity_refs(repo, identity_id) when is_binary(identity_id) do
+    repo.delete_all(
+      from(r in "reports",
+        where:
+          r.reported_id == type(^identity_id, :binary_id) or
+            r.reporter_id == type(^identity_id, :binary_id) or
+            r.assigned_to == type(^identity_id, :binary_id)
+      )
+    )
+
+    repo.update_all(
+      from(a in "audit_log", where: a.actor_id == type(^identity_id, :binary_id)),
+      set: [actor_id: nil]
+    )
+
+    {:ok, :cleaned}
+  end
+
+  def purge_dangling_identity_refs(_repo, _identity_id), do: {:ok, :no_identity}
+
+  @doc """
+  The content owner appeals a takedown. Only the owner may appeal, only while
+  the takedown is still `active`, and only once at a time. Filing the appeal
+  flips the takedown to `appealed` so the auto-purge worker leaves it alone
+  until staff decide.
+  """
+  def create_takedown_appeal(identity_id, takedown_id, reason) do
+    case get_takedown(takedown_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Takedown{owner_id: owner_id} when owner_id != identity_id ->
+        {:error, :forbidden}
+
+      %Takedown{status: status} when status != "active" ->
+        {:error, :not_appealable}
+
+      takedown ->
+        pending? =
+          Appeal
+          |> where([a], a.takedown_id == ^takedown_id and a.status == "pending")
+          |> Repo.exists?()
+
+        if pending? do
+          {:error, :already_pending}
+        else
+          Ecto.Multi.new()
+          |> Ecto.Multi.insert(
+            :appeal,
+            Appeal.changeset(%Appeal{}, %{
+              "identity_id" => identity_id,
+              "action_type" => "content_takedown",
+              "reason" => reason,
+              "takedown_id" => takedown_id
+            })
+          )
+          |> Ecto.Multi.update(:takedown, Takedown.status_changeset(takedown, "appealed"))
+          |> Repo.transaction()
+          |> case do
+            {:ok, %{appeal: appeal}} -> {:ok, appeal}
+            {:error, _step, reason, _} -> {:error, reason}
+          end
+        end
+    end
+  end
+
+  # Restore the content a takedown removed, dispatching by target type, then
+  # mark the takedown `restored`. Called from an already-staff-gated appeal
+  # approval, so `admin_id` is a valid instance moderator for the entity-level
+  # restore functions (which re-check staff).
+  defp restore_takedown_target(%Takedown{} = takedown, admin_id) do
+    result =
+      case takedown.target_type do
+        "group" -> Hybridsocial.Groups.restore_group(takedown.target_id, admin_id)
+        "page" -> Hybridsocial.Pages.restore_page(takedown.target_id, admin_id)
+        "post" -> Hybridsocial.Social.Posts.admin_restore_post(takedown.target_id, admin_id)
+        "account_badge" -> restore_badge(takedown)
+        _ -> {:ok, :no_op}
+      end
+
+    case result do
+      # Only claim the takedown was restored when something actually was — a
+      # no-op (unknown/unhandled target) must not be marked "restored".
+      {:ok, :no_op} ->
+        {:ok, :no_op}
+
+      {:ok, _} ->
+        takedown |> Takedown.status_changeset("restored") |> Repo.update()
+
+      error ->
+        error
+    end
+  end
+
+  # Re-grant the verification tier a badge takedown revoked (stored in
+  # `category`). Nothing to restore if the tier wasn't recorded.
+  defp restore_badge(%Takedown{target_id: identity_id, category: tier})
+       when is_binary(tier) and tier != "" do
+    case Hybridsocial.Accounts.get_identity(identity_id) do
+      nil ->
+        {:ok, :no_op}
+
+      identity ->
+        Hybridsocial.Accounts.admin_update_identity(identity, %{"verification_tier" => tier})
+    end
+  end
+
+  defp restore_badge(_), do: {:ok, :no_op}
+
+  @verified_badge_tiers ~w(verified_starter verified_creator verified_pro)
+
+  @doc """
+  Opens a takedown notice when staff revoke a verified badge — i.e. a downgrade
+  from a verified tier to a non-verified one. A no-op for grants, upgrades, or
+  moves between non-verified tiers, and when no reason is given. The revoked-
+  from tier is stored in `category` so a later restore can re-grant it.
+  """
+  def open_badge_takedown(identity_id, admin_id, old_tier, new_tier, reason) do
+    if old_tier in @verified_badge_tiers and new_tier not in @verified_badge_tiers and
+         is_binary(reason) and reason != "" do
+      create_takedown(%{
+        target_type: "account_badge",
+        target_id: identity_id,
+        owner_id: identity_id,
+        moderator_id: admin_id,
+        reason: reason,
+        category: old_tier
+      })
+    else
+      {:ok, :noop}
+    end
   end
 
   # ── Content Filters ──────────────────────────────────────────────────
@@ -612,7 +1006,7 @@ defmodule Hybridsocial.Moderation do
           })
         )
         |> Ecto.Multi.run(:reverse_action, fn _repo, %{appeal: approved_appeal} ->
-          reverse_moderation_action(approved_appeal)
+          reverse_moderation_action(approved_appeal, admin_id)
         end)
         |> Ecto.Multi.run(:audit, fn _repo, %{appeal: approved_appeal} ->
           log(admin_id, "appeal.approved", "appeal", approved_appeal.id, %{
@@ -647,6 +1041,9 @@ defmodule Hybridsocial.Moderation do
             response: response
           })
         )
+        |> Ecto.Multi.run(:reactivate_takedown, fn _repo, %{appeal: rejected_appeal} ->
+          reactivate_takedown_on_reject(rejected_appeal)
+        end)
         |> Ecto.Multi.run(:audit, fn _repo, %{appeal: rejected_appeal} ->
           log(admin_id, "appeal.rejected", "appeal", rejected_appeal.id, %{
             action_type: rejected_appeal.action_type,
@@ -661,14 +1058,46 @@ defmodule Hybridsocial.Moderation do
     end
   end
 
-  defp reverse_moderation_action(%Appeal{action_type: "suspension", identity_id: identity_id}) do
+  # Appeal rejected: the takedown stands, so flip it from `appealed` back to
+  # `active` — the auto-purge window resumes. Non-takedown appeals are a no-op.
+  defp reactivate_takedown_on_reject(%Appeal{takedown_id: nil}), do: {:ok, :no_op}
+
+  defp reactivate_takedown_on_reject(%Appeal{takedown_id: takedown_id}) do
+    case get_takedown(takedown_id) do
+      nil ->
+        {:ok, :no_op}
+
+      %Takedown{status: "appealed"} = td ->
+        td |> Takedown.status_changeset("active") |> Repo.update()
+
+      _ ->
+        {:ok, :no_op}
+    end
+  end
+
+  # A content-takedown appeal: restore the specific group/page/post.
+  defp reverse_moderation_action(%Appeal{takedown_id: takedown_id}, admin_id)
+       when not is_nil(takedown_id) do
+    case get_takedown(takedown_id) do
+      nil -> {:ok, :no_op}
+      takedown -> restore_takedown_target(takedown, admin_id)
+    end
+  end
+
+  defp reverse_moderation_action(
+         %Appeal{action_type: "suspension", identity_id: identity_id},
+         _admin_id
+       ) do
     case Repo.get(Identity, identity_id) do
       nil -> {:ok, :no_op}
       identity -> Hybridsocial.Accounts.unsuspend_identity(identity)
     end
   end
 
-  defp reverse_moderation_action(%Appeal{action_type: "silencing", identity_id: identity_id}) do
+  defp reverse_moderation_action(
+         %Appeal{action_type: "silencing", identity_id: identity_id},
+         _admin_id
+       ) do
     case Repo.get(Identity, identity_id) do
       nil ->
         {:ok, :no_op}
@@ -680,7 +1109,10 @@ defmodule Hybridsocial.Moderation do
     end
   end
 
-  defp reverse_moderation_action(%Appeal{action_type: "shadow_ban", identity_id: identity_id}) do
+  defp reverse_moderation_action(
+         %Appeal{action_type: "shadow_ban", identity_id: identity_id},
+         _admin_id
+       ) do
     case Repo.get(Identity, identity_id) do
       nil ->
         {:ok, :no_op}
@@ -692,8 +1124,9 @@ defmodule Hybridsocial.Moderation do
     end
   end
 
-  # For post_removal and warning, there's no automatic reversal
-  defp reverse_moderation_action(_appeal), do: {:ok, :no_op}
+  # For a bare post_removal/warning (no linked takedown), there's no automatic
+  # reversal — the moderator restores manually.
+  defp reverse_moderation_action(_appeal, _admin_id), do: {:ok, :no_op}
 
   # ── Moderation Notes ────────────────────────────────────────────────
 

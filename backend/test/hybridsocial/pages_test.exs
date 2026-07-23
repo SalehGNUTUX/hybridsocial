@@ -2,6 +2,8 @@ defmodule Hybridsocial.PagesTest do
   use Hybridsocial.DataCase, async: false
 
   alias Hybridsocial.Pages
+  alias Hybridsocial.Auth.RBAC
+  alias Hybridsocial.Moderation.{AuditLog, Takedown}
 
   # ---------------------------------------------------------------------------
   # Helpers
@@ -18,6 +20,19 @@ defmodule Hybridsocial.PagesTest do
       })
 
     page
+  end
+
+  defp make_staff(identity) do
+    {:ok, _} = RBAC.assign_role(identity.id, "moderator", identity.id)
+    identity
+  end
+
+  defp last_audit(action) do
+    AuditLog
+    |> where([a], a.action == ^action)
+    |> order_by([a], desc: a.created_at)
+    |> limit(1)
+    |> Repo.one()
   end
 
   # ---------------------------------------------------------------------------
@@ -132,6 +147,84 @@ defmodule Hybridsocial.PagesTest do
       page = create_test_page(owner, "del_page2")
 
       assert {:error, :forbidden} = Pages.delete_page(page.id, rando.id)
+    end
+
+    test "deletion writes an audit entry with the actor role and reason" do
+      owner = create_user("pg_audit", "pg_audit@example.com")
+      page = create_test_page(owner, "audit_page")
+
+      {:ok, _} = Pages.delete_page(page.id, owner.id, reason: "cleaning up")
+
+      entry = last_audit("page.delete")
+      assert entry.target_type == "page"
+      assert entry.target_id == page.id
+      assert entry.details["actor_role"] == "owner"
+      assert entry.details["reason"] == "cleaning up"
+    end
+
+    test "a staff takedown with a reason opens a takedown for the page owner" do
+      owner = create_user("pg_td_owner", "pg_td_owner@example.com")
+      staff = create_user("pg_td_staff", "pg_td_staff@example.com") |> make_staff()
+      page = create_test_page(owner, "td_page")
+
+      {:ok, _} = Pages.delete_page(page.id, staff.id, reason: "impersonation")
+
+      td = Repo.get_by(Takedown, target_type: "page", target_id: page.id)
+      assert td
+      assert td.owner_id == owner.id
+      assert td.moderator_id == staff.id
+      assert td.reason == "impersonation"
+      assert td.status == "active"
+    end
+
+    test "an owner deleting their own page does not open a takedown" do
+      owner = create_user("pg_td_owner2", "pg_td_owner2@example.com")
+      page = create_test_page(owner, "td_page2")
+
+      {:ok, _} = Pages.delete_page(page.id, owner.id, reason: "done with it")
+
+      refute Repo.get_by(Takedown, target_type: "page", target_id: page.id)
+    end
+  end
+
+  describe "restore_page/3" do
+    test "staff can restore a soft-deleted page" do
+      owner = create_user("pg_r_owner", "pg_r_owner@example.com")
+      staff = create_user("pg_r_staff", "pg_r_staff@example.com") |> make_staff()
+      page = create_test_page(owner, "restore_page")
+
+      {:ok, _} = Pages.delete_page(page.id, staff.id, reason: "under review")
+      assert Pages.get_page(page.id) == nil
+
+      assert {:ok, restored} = Pages.restore_page(page.id, staff.id)
+      assert is_nil(restored.deleted_at)
+      # Organization must be preloaded so the controller can serialize it
+      # without a NotLoaded crash.
+      assert %Hybridsocial.Accounts.Organization{} = restored.organization
+      assert Pages.get_page(page.id) != nil
+    end
+
+    test "a non-staff owner cannot restore a staff takedown" do
+      owner = create_user("pg_r_owner2", "pg_r_owner2@example.com")
+      staff = create_user("pg_r_staff2", "pg_r_staff2@example.com") |> make_staff()
+      page = create_test_page(owner, "restore_page2")
+
+      {:ok, _} = Pages.delete_page(page.id, staff.id, reason: "under review")
+      assert {:error, :forbidden} = Pages.restore_page(page.id, owner.id)
+    end
+
+    test "list_deleted_pages is staff-gated" do
+      owner = create_user("pg_ld_owner", "pg_ld_owner@example.com")
+      staff = create_user("pg_ld_staff", "pg_ld_staff@example.com") |> make_staff()
+      page = create_test_page(owner, "ld_page")
+      {:ok, _} = Pages.delete_page(page.id, staff.id, reason: "x")
+
+      assert {:ok, pages} = Pages.list_deleted_pages(staff.id)
+      listed = Enum.find(pages, &(&1.id == page.id))
+      assert listed
+      # Preloaded for serialization (no NotLoaded crash).
+      assert %Hybridsocial.Accounts.Organization{} = listed.organization
+      assert {:error, :forbidden} = Pages.list_deleted_pages(owner.id)
     end
   end
 

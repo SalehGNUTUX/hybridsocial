@@ -93,10 +93,11 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
   end
 
   # DELETE /api/v1/groups/:id
-  def delete(conn, %{"id" => id}) do
+  def delete(conn, %{"id" => id} = params) do
     identity = conn.assigns.current_identity
+    opts = [reason: params["reason"], ip: client_ip(conn)]
 
-    case Groups.delete_group(id, identity.id) do
+    case Groups.delete_group(id, identity.id, opts) do
       {:ok, _group} ->
         conn
         |> put_status(:ok)
@@ -111,6 +112,53 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
         conn
         |> put_status(:forbidden)
         |> json(%{error: "group.forbidden"})
+    end
+  end
+
+  # GET /api/v1/groups/deleted — staff only: soft-deleted groups awaiting a
+  # restore decision.
+  def deleted(conn, params) do
+    identity = conn.assigns.current_identity
+    opts = maybe_add_limit([], params["limit"])
+
+    case Groups.list_deleted_groups(identity.id, opts) do
+      {:ok, groups} ->
+        conn
+        |> put_status(:ok)
+        |> json(Enum.map(groups, &serialize_group/1))
+
+      {:error, :forbidden} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "group.forbidden"})
+    end
+  end
+
+  # POST /api/v1/groups/:id/restore — staff only: reverse a deletion after an
+  # owner's appeal. The group comes back with its non-removed content intact.
+  def restore(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+
+    case Groups.restore_group(id, identity.id, ip: client_ip(conn)) do
+      {:ok, group} ->
+        conn
+        |> put_status(:ok)
+        |> json(serialize_group(group))
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "group.not_found"})
+
+      {:error, :forbidden} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "group.forbidden"})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "validation.failed", details: format_errors(changeset)})
     end
   end
 
@@ -396,14 +444,12 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
   def screening(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
 
-    cond do
-      not Groups.can_manage?(id, identity.id) ->
-        conn
-        |> put_status(:forbidden)
-        |> json(%{error: "group.forbidden"})
-
-      true ->
-        render_screening_config(conn, id)
+    if Groups.can_manage?(id, identity.id) do
+      render_screening_config(conn, id)
+    else
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "group.forbidden"})
     end
   end
 
@@ -612,4 +658,6 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
 
   defp maybe_add_limit(opts, nil), do: opts
   defp maybe_add_limit(opts, val), do: Keyword.put(opts, :limit, clamp_limit(val))
+
+  defp client_ip(conn), do: conn.remote_ip |> :inet.ntoa() |> to_string()
 end

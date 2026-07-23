@@ -1633,6 +1633,11 @@ defmodule Hybridsocial.Social.Posts do
         post_identity_id: post.identity_id
       })
 
+      # A staff removal with a reason is a takedown: notify the author with the
+      # reason and open the appeal window. (Owner-initiated delete_post/2 is a
+      # separate path and never lands here.)
+      maybe_open_post_takedown(post, admin_id, reason)
+
       # Publish Delete activity for federated posts
       if post.ap_id do
         try do
@@ -1647,6 +1652,20 @@ defmodule Hybridsocial.Social.Posts do
     end
   end
 
+  defp maybe_open_post_takedown(post, moderator_id, reason) do
+    if is_binary(reason) and reason != "" and post.identity_id do
+      Hybridsocial.Moderation.create_takedown(%{
+        target_type: "post",
+        target_id: post.id,
+        owner_id: post.identity_id,
+        moderator_id: moderator_id,
+        reason: reason
+      })
+    end
+
+    :ok
+  end
+
   defp do_admin_soft_delete(%Post{deleted_at: nil} = post) do
     post
     |> Post.soft_delete_changeset()
@@ -1654,6 +1673,60 @@ defmodule Hybridsocial.Social.Posts do
   end
 
   defp do_admin_soft_delete(%Post{} = post), do: {:ok, post}
+
+  @doc """
+  Reverses an admin soft-delete (used when a takedown appeal is approved).
+  Clears `deleted_at` and audit-logs the restore. The caller is responsible for
+  authorization (the appeal-approval path is already staff-gated).
+  """
+  def admin_restore_post(post_id, admin_id, reason \\ "") do
+    case Repo.get(Post, post_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Post{deleted_at: nil} = post ->
+        {:ok, post}
+
+      post ->
+        case post |> Post.restore_changeset() |> Repo.update() do
+          {:ok, restored} ->
+            Hybridsocial.Moderation.log(admin_id, "post.admin_restored", "post", post_id, %{
+              reason: reason
+            })
+
+            {:ok, restored}
+
+          error ->
+            error
+        end
+    end
+  end
+
+  @doc """
+  PERMANENTLY deletes a post. Used only by the takedown auto-purge worker after
+  the appeal window. Reactions, boosts, mentions and stream-views cascade via
+  `on_delete: :delete_all`; the post's media is `nilify_all`, so it is deleted
+  explicitly here rather than left orphaned with a null `post_id`. Irreversible.
+  """
+  def purge_post(post_id) do
+    case Repo.get(Post, post_id) do
+      nil ->
+        {:ok, :already_gone}
+
+      post ->
+        Ecto.Multi.new()
+        |> Ecto.Multi.delete_all(
+          :media,
+          from(m in Hybridsocial.Media.MediaFile, where: m.post_id == ^post_id)
+        )
+        |> Ecto.Multi.delete(:post, post)
+        |> Repo.transaction()
+        |> case do
+          {:ok, _} -> {:ok, :purged}
+          {:error, _step, reason, _} -> {:error, reason}
+        end
+    end
+  end
 
   @doc """
   Force-marks a post as sensitive with an audit log entry.
@@ -1850,9 +1923,26 @@ defmodule Hybridsocial.Social.Posts do
     |> where([p], is_nil(p.deleted_at))
     |> Repo.get(post_id)
     |> case do
-      nil -> {:error, :not_found}
-      %Post{identity_id: ^identity_id} = post -> {:ok, post}
-      _post -> {:error, :forbidden}
+      nil ->
+        {:error, :not_found}
+
+      %Post{identity_id: ^identity_id} = post ->
+        {:ok, post}
+
+      # A post authored *as a page* is owned by the page identity, not the
+      # human who wrote it — so a strict identity match always fails and the
+      # post would be uneditable/undeletable. Mirror the create-time authority
+      # (`Pages.resolve_post_author` → `can_edit?`): anyone who can edit the
+      # page can edit and delete its posts.
+      %Post{page_id: page_id} = post when is_binary(page_id) ->
+        if Hybridsocial.Pages.can_edit?(page_id, identity_id) do
+          {:ok, post}
+        else
+          {:error, :forbidden}
+        end
+
+      _post ->
+        {:error, :forbidden}
     end
   end
 

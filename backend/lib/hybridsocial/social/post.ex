@@ -152,6 +152,12 @@ defmodule Hybridsocial.Social.Post do
     |> change(deleted_at: DateTime.utc_now() |> DateTime.truncate(:microsecond))
   end
 
+  @doc "Reverses a soft delete by clearing `deleted_at`."
+  def restore_changeset(post) do
+    post
+    |> change(deleted_at: nil)
+  end
+
   @doc """
   Flips a scheduled post to "published now". Kept separate from the
   generic changeset so the scheduler's call site is explicit about

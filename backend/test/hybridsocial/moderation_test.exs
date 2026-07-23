@@ -369,4 +369,227 @@ defmodule Hybridsocial.ModerationTest do
       refute Moderation.domain_banned?("good.com", "email")
     end
   end
+
+  # ── Takedown appeals (Phase 2: appeal restores the content) ──────────
+
+  describe "takedown appeals" do
+    setup do
+      owner = create_identity("td_owner", "td_owner@example.com")
+      staff = create_identity("td_staff", "td_staff@example.com")
+      {:ok, _} = Hybridsocial.Auth.RBAC.assign_role(staff.id, "moderator", staff.id)
+      %{owner: owner, staff: staff}
+    end
+
+    defp staff_takedown_group(owner, staff) do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Appealed group"})
+      {:ok, _} = Hybridsocial.Groups.delete_group(group.id, staff.id, reason: "review")
+      [takedown] = Moderation.list_takedowns_for_owner(owner.id)
+      {group, takedown}
+    end
+
+    test "the owner can appeal, which pauses the purge window", %{owner: owner, staff: staff} do
+      {_group, takedown} = staff_takedown_group(owner, staff)
+      assert takedown.status == "active"
+
+      assert {:ok, appeal} =
+               Moderation.create_takedown_appeal(
+                 owner.id,
+                 takedown.id,
+                 "It was a misunderstanding"
+               )
+
+      assert appeal.action_type == "content_takedown"
+      assert appeal.takedown_id == takedown.id
+      assert Moderation.get_takedown(takedown.id).status == "appealed"
+    end
+
+    test "a non-owner cannot appeal", %{owner: owner, staff: staff} do
+      {_group, takedown} = staff_takedown_group(owner, staff)
+      other = create_identity("td_other", "td_other@example.com")
+
+      assert {:error, :forbidden} =
+               Moderation.create_takedown_appeal(other.id, takedown.id, "let me in")
+    end
+
+    test "approving the appeal restores the content and marks it restored",
+         %{owner: owner, staff: staff} do
+      {group, takedown} = staff_takedown_group(owner, staff)
+      assert Hybridsocial.Groups.get_group(group.id) == nil
+
+      {:ok, appeal} = Moderation.create_takedown_appeal(owner.id, takedown.id, "please restore")
+      assert {:ok, _} = Moderation.approve_appeal(appeal.id, staff.id)
+
+      assert Hybridsocial.Groups.get_group(group.id) != nil
+      assert Moderation.get_takedown(takedown.id).status == "restored"
+    end
+
+    test "rejecting the appeal leaves the content down and reactivates the window",
+         %{owner: owner, staff: staff} do
+      {group, takedown} = staff_takedown_group(owner, staff)
+
+      {:ok, appeal} =
+        Moderation.create_takedown_appeal(owner.id, takedown.id, "please reconsider")
+
+      assert {:ok, _} = Moderation.reject_appeal(appeal.id, staff.id, "denied")
+
+      assert Hybridsocial.Groups.get_group(group.id) == nil
+      assert Moderation.get_takedown(takedown.id).status == "active"
+    end
+  end
+
+  # ── Auto-purge: reminders + permanent deletion ───────────────────────
+
+  describe "takedown auto-purge" do
+    setup do
+      owner = create_identity("purge_owner", "purge_owner@example.com")
+      staff = create_identity("purge_staff", "purge_staff@example.com")
+      {:ok, _} = Hybridsocial.Auth.RBAC.assign_role(staff.id, "moderator", staff.id)
+      %{owner: owner, staff: staff}
+    end
+
+    test "send_purge_reminders warns an owner near the deadline, exactly once",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Nearly gone"})
+      soon = DateTime.add(DateTime.utc_now(), 2 * 86_400, :second)
+      td = insert_takedown(owner, staff, group.id, soon)
+
+      assert Moderation.send_purge_reminders(7) == 1
+      assert Moderation.get_takedown(td.id).reminded_at
+      # A second pass doesn't re-remind.
+      assert Moderation.send_purge_reminders(7) == 0
+    end
+
+    test "send_purge_reminders ignores takedowns still far from the deadline",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Plenty of time"})
+      far = DateTime.add(DateTime.utc_now(), 30 * 86_400, :second)
+      insert_takedown(owner, staff, group.id, far)
+
+      assert Moderation.send_purge_reminders(7) == 0
+    end
+
+    test "purge_expired_takedowns permanently deletes the content and marks it purged",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Doomed"})
+      past = DateTime.add(DateTime.utc_now(), -86_400, :second)
+      td = insert_takedown(owner, staff, group.id, past)
+
+      assert Moderation.purge_expired_takedowns() == 1
+      # Hard-deleted, not just soft-deleted.
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) == nil
+      assert Moderation.get_takedown(td.id).status == "purged"
+    end
+
+    test "purge succeeds even when the group was reported (non-cascading FK)",
+         %{owner: owner, staff: staff} do
+      # A group that survives to auto-purge has very likely been reported, and
+      # reports.reported_id is on_delete: :nothing. Without the reference cleanup
+      # the identity delete raises a foreign_key_violation and the worker
+      # crash-loops, purging nothing. This pins that the purge completes.
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Reported"})
+      identity_id = Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id).identity_id
+      reporter = create_identity("td_reporter", "td_reporter@example.com")
+
+      {:ok, report} =
+        Moderation.create_report(reporter.id, %{
+          "reported_id" => identity_id,
+          "category" => "spam",
+          "target_type" => "group",
+          "target_id" => group.id
+        })
+
+      past = DateTime.add(DateTime.utc_now(), -86_400, :second)
+      td = insert_takedown(owner, staff, group.id, past)
+
+      assert Moderation.purge_expired_takedowns() == 1
+      # The group row, its actor identity, and the blocking report are all gone.
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) == nil
+      assert Hybridsocial.Repo.get(Hybridsocial.Accounts.Identity, identity_id) == nil
+      assert Hybridsocial.Repo.get(Hybridsocial.Moderation.Report, report.id) == nil
+      assert Moderation.get_takedown(td.id).status == "purged"
+    end
+
+    test "purge_expired_takedowns leaves a takedown whose window hasn't passed",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Safe"})
+      future = DateTime.add(DateTime.utc_now(), 30 * 86_400, :second)
+      insert_takedown(owner, staff, group.id, future)
+
+      assert Moderation.purge_expired_takedowns() == 0
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) != nil
+    end
+
+    test "purge_expired_takedowns skips an appealed takedown",
+         %{owner: owner, staff: staff} do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Under appeal"})
+      past = DateTime.add(DateTime.utc_now(), -86_400, :second)
+      td = insert_takedown(owner, staff, group.id, past)
+
+      td
+      |> Hybridsocial.Moderation.Takedown.status_changeset("appealed")
+      |> Hybridsocial.Repo.update!()
+
+      assert Moderation.purge_expired_takedowns() == 0
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) != nil
+    end
+  end
+
+  defp insert_takedown(owner, staff, group_id, purge_after) do
+    %Hybridsocial.Moderation.Takedown{}
+    |> Hybridsocial.Moderation.Takedown.changeset(%{
+      "target_type" => "group",
+      "target_id" => group_id,
+      "owner_id" => owner.id,
+      "moderator_id" => staff.id,
+      "reason" => "policy violation",
+      "purge_after" => purge_after
+    })
+    |> Hybridsocial.Repo.insert!()
+  end
+
+  # ── Verified-badge revocation takedowns ──────────────────────────────
+
+  describe "open_badge_takedown/5" do
+    setup do
+      owner = create_identity("badge_owner", "badge_owner@example.com")
+      admin = create_identity("badge_admin", "badge_admin@example.com")
+      %{owner: owner, admin: admin}
+    end
+
+    test "revoking a verified badge opens a takedown for the account owner",
+         %{owner: owner, admin: admin} do
+      assert {:ok, td} =
+               Moderation.open_badge_takedown(
+                 owner.id,
+                 admin.id,
+                 "verified_pro",
+                 "free",
+                 "verification was obtained fraudulently"
+               )
+
+      assert td.target_type == "account_badge"
+      assert td.owner_id == owner.id
+      assert td.moderator_id == admin.id
+      # The revoked-from tier is kept so a later restore can re-grant it.
+      assert td.category == "verified_pro"
+    end
+
+    test "granting or upgrading a badge does not open a takedown",
+         %{owner: owner, admin: admin} do
+      assert {:ok, :noop} =
+               Moderation.open_badge_takedown(
+                 owner.id,
+                 admin.id,
+                 "free",
+                 "verified_pro",
+                 "granted"
+               )
+    end
+
+    test "revoking without a reason does not open a takedown",
+         %{owner: owner, admin: admin} do
+      assert {:ok, :noop} =
+               Moderation.open_badge_takedown(owner.id, admin.id, "verified_pro", "free", "")
+    end
+  end
 end

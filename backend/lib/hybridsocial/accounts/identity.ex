@@ -339,6 +339,12 @@ defmodule Hybridsocial.Accounts.Identity do
     |> change(deleted_at: DateTime.utc_now())
   end
 
+  @doc "Reverse a soft delete by clearing `deleted_at`."
+  def restore_changeset(identity) do
+    identity
+    |> change(deleted_at: nil)
+  end
+
   @doc "Returns true if this identity type must have a parent (is a subaccount)."
   def subaccount_type?(type) when type in ~w(bot group organization), do: true
   def subaccount_type?(_), do: false

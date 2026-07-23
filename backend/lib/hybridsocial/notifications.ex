@@ -413,28 +413,75 @@ defmodule Hybridsocial.Notifications do
       "group_invite" -> "#{actor_name} invited you to a group"
       "group_application" -> "New group membership application"
       "page_invite" -> "#{actor_name} invited you to manage a page"
+      _ -> push_title_staff(type)
+    end
+  end
+
+  # Staff/moderation-facing notification titles, split out so the main lookup
+  # stays under the cyclomatic-complexity limit as new types are added.
+  defp push_title_staff(type) do
+    case type do
       "report" -> "New report filed"
       "admin" -> "Admin notification"
+      "moderation_takedown" -> "Your content was removed"
       _ -> "New notification"
     end
   end
 
   defp push_body(type) do
     case type do
-      "follow" -> "You have a new follower"
-      "follow_request" -> "You have a new follow request"
-      "reaction" -> "Someone reacted to your post"
-      "boost" -> "Your post was boosted"
-      "quote" -> "Your post was quoted"
-      "reply" -> "You have a new reply"
-      "mention" -> "You were mentioned in a post"
-      "poll_ended" -> "A poll you participated in has ended"
-      "group_invite" -> "You have been invited to join a group"
-      "group_application" -> "Someone applied to join your group"
-      "page_invite" -> "You have been invited to manage a page"
-      "report" -> "A new report requires attention"
-      "admin" -> "You have an admin notification"
-      _ -> "You have a new notification"
+      "follow" ->
+        "You have a new follower"
+
+      "follow_request" ->
+        "You have a new follow request"
+
+      "reaction" ->
+        "Someone reacted to your post"
+
+      "boost" ->
+        "Your post was boosted"
+
+      "quote" ->
+        "Your post was quoted"
+
+      "reply" ->
+        "You have a new reply"
+
+      "mention" ->
+        "You were mentioned in a post"
+
+      "poll_ended" ->
+        "A poll you participated in has ended"
+
+      "group_invite" ->
+        "You have been invited to join a group"
+
+      "group_application" ->
+        "Someone applied to join your group"
+
+      "page_invite" ->
+        "You have been invited to manage a page"
+
+      _ ->
+        push_body_staff(type)
+    end
+  end
+
+  # Staff/moderation-facing notification bodies (see push_title_staff/1).
+  defp push_body_staff(type) do
+    case type do
+      "report" ->
+        "A new report requires attention"
+
+      "admin" ->
+        "You have an admin notification"
+
+      "moderation_takedown" ->
+        "A moderator removed your content, open to see why and how to appeal"
+
+      _ ->
+        "You have a new notification"
     end
   end
 

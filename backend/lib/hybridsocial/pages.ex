@@ -81,12 +81,20 @@ defmodule Hybridsocial.Pages do
     end
   end
 
-  @doc "Soft deletes a page. Must be the owner or instance staff."
-  def delete_page(page_identity_id, owner_id) do
+  @doc """
+  Soft deletes a page. Must be the owner or instance staff. `opts` may carry
+  `:reason`/`:category`/`:ip`; a *staff* deletion with a reason is a moderation
+  takedown — it's audited and opens a takedown notice to the page owner (an
+  owner deleting their own page is not). Mirrors `Groups.delete_group/3`.
+  """
+  def delete_page(page_identity_id, actor_id, opts \\ []) do
     with {:ok, identity, org} <- get_page_with_auth(page_identity_id),
-         true <- org.owner_id == owner_id or staff_member?(owner_id) do
+         {:ok, role} <- authorize_page_deletion(org, actor_id) do
       case identity |> Identity.soft_delete_changeset() |> Repo.update() do
         {:ok, deleted} ->
+          log_page_action(actor_id, "page.delete", deleted, role, opts)
+          maybe_open_page_takedown(deleted, org, actor_id, role, opts)
+
           Phoenix.PubSub.broadcast(
             Hybridsocial.PubSub,
             "identities",
@@ -99,8 +107,144 @@ defmodule Hybridsocial.Pages do
           error
       end
     else
-      false -> {:error, :forbidden}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Restores a soft-deleted page. Instance staff only — an owner must not be able
+  to undo a staff takedown (the flow is: owner appeals → staff restore). The
+  page identity comes back with its posts/roles intact. Mirrors
+  `Groups.restore_group/3`.
+  """
+  def restore_page(page_identity_id, actor_id, opts \\ []) do
+    if staff_member?(actor_id) do
+      case get_deleted_page(page_identity_id) do
+        nil ->
+          {:error, :not_found}
+
+        identity ->
+          case identity |> Identity.restore_changeset() |> Repo.update() do
+            {:ok, restored} ->
+              log_page_action(actor_id, "page.restore", restored, :staff, opts)
+
+              Phoenix.PubSub.broadcast(
+                Hybridsocial.PubSub,
+                "identities",
+                {:identity_restored, restored.id}
+              )
+
+              # Serializers read `page.organization`; preload so the caller can
+              # render the restored page without a NotLoaded crash.
+              {:ok, Repo.preload(restored, :organization)}
+
+            error ->
+              error
+          end
+      end
+    else
+      {:error, :forbidden}
+    end
+  end
+
+  @doc "Lists soft-deleted pages (most recent first). Instance staff only."
+  def list_deleted_pages(actor_id, opts \\ []) do
+    if staff_member?(actor_id) do
+      limit = Keyword.get(opts, :limit, 20)
+
+      pages =
+        Identity
+        |> where([i], i.type == "organization" and not is_nil(i.deleted_at))
+        |> order_by([i], desc: i.deleted_at)
+        |> limit(^limit)
+        |> Repo.all()
+        # Serializers read `page.organization`.
+        |> Repo.preload(:organization)
+
+      {:ok, pages}
+    else
+      {:error, :forbidden}
+    end
+  end
+
+  # An owner deleting their own page vs. instance staff moderating it.
+  defp authorize_page_deletion(org, actor_id) do
+    cond do
+      org.owner_id == actor_id -> {:ok, :owner}
+      staff_member?(actor_id) -> {:ok, :staff}
+      true -> {:error, :forbidden}
+    end
+  end
+
+  defp log_page_action(actor_id, action, identity, role, opts) do
+    Hybridsocial.Moderation.log(
+      actor_id,
+      action,
+      "page",
+      identity.id,
+      %{
+        "name" => identity.display_name,
+        "actor_role" => to_string(role),
+        "reason" => Keyword.get(opts, :reason)
+      },
+      Keyword.get(opts, :ip)
+    )
+  end
+
+  # A staff takedown (with a reason) notifies the page owner; an owner deleting
+  # their own page does not.
+  defp maybe_open_page_takedown(identity, org, moderator_id, :staff, opts) do
+    reason = Keyword.get(opts, :reason)
+
+    if is_binary(reason) and reason != "" and org.owner_id do
+      Hybridsocial.Moderation.create_takedown(%{
+        target_type: "page",
+        target_id: identity.id,
+        owner_id: org.owner_id,
+        moderator_id: moderator_id,
+        reason: reason,
+        category: Keyword.get(opts, :category)
+      })
+    end
+
+    :ok
+  end
+
+  defp maybe_open_page_takedown(_identity, _org, _moderator_id, _role, _opts), do: :ok
+
+  defp get_deleted_page(page_identity_id) do
+    Identity
+    |> where(
+      [i],
+      i.id == ^page_identity_id and i.type == "organization" and not is_nil(i.deleted_at)
+    )
+    |> Repo.one()
+  end
+
+  @doc """
+  PERMANENTLY deletes a page. Used only by the takedown auto-purge worker after
+  the appeal window. Deleting the organization's actor identity cascades to the
+  organization row, its roles/invites, and the posts/media authored under it via
+  `on_delete: :delete_all`. Irreversible.
+  """
+  def purge_page(page_identity_id) do
+    case Repo.get(Identity, page_identity_id) do
+      nil ->
+        {:ok, :already_gone}
+
+      identity ->
+        # Drop non-cascading references (reports/audit_log) to the org identity
+        # before deleting it, or the delete raises a foreign_key_violation.
+        Ecto.Multi.new()
+        |> Ecto.Multi.run(:refs, fn repo, _ ->
+          Hybridsocial.Moderation.purge_dangling_identity_refs(repo, identity.id)
+        end)
+        |> Ecto.Multi.delete(:identity, identity)
+        |> Repo.transaction()
+        |> case do
+          {:ok, _} -> {:ok, :purged}
+          {:error, _step, reason, _} -> {:error, reason}
+        end
     end
   end
 

@@ -386,9 +386,12 @@ defmodule HybridsocialWeb.Router do
 
     post "/", GroupController, :create
     get "/", GroupController, :index
+    # Must precede "/:id" so "deleted" isn't captured as a group id.
+    get "/deleted", GroupController, :deleted
     get "/:id", GroupController, :show
     patch "/:id", GroupController, :update
     delete "/:id", GroupController, :delete
+    post "/:id/restore", GroupController, :restore
 
     post "/:id/join", GroupController, :join
     post "/:id/leave", GroupController, :leave
@@ -413,8 +416,12 @@ defmodule HybridsocialWeb.Router do
     pipe_through [:api, :authenticated]
 
     post "/", PageController, :create
+    # Staff-only; must be authenticated. Declared in this (authenticated) scope,
+    # which precedes the optional-auth scope, so "deleted" isn't parsed as an id.
+    get "/deleted", PageController, :deleted
     patch "/:id", PageController, :update
     delete "/:id", PageController, :delete
+    post "/:id/restore", PageController, :restore
     post "/:id/roles", PageController, :add_role
     delete "/:id/roles/:role_id", PageController, :remove_role
     patch "/:id/branding", PageController, :update_branding
@@ -656,6 +663,14 @@ defmodule HybridsocialWeb.Router do
 
     post "/", AppealController, :create
     get "/", AppealController, :index
+  end
+
+  # Content takedowns the caller owns, and appealing one.
+  scope "/api/v1/takedowns", HybridsocialWeb.Api.V1 do
+    pipe_through [:api, :authenticated]
+
+    get "/", AppealController, :my_takedowns
+    post "/:id/appeal", AppealController, :appeal_takedown
   end
 
   # Admin step-up (sudo) endpoints — auth + staff, but NOT sudo-gated
