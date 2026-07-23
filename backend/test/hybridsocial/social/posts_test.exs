@@ -2,6 +2,7 @@ defmodule Hybridsocial.Social.PostsTest do
   use Hybridsocial.DataCase, async: true
 
   alias Hybridsocial.Social.Posts
+  alias Hybridsocial.Pages
 
   describe "create_post/2" do
     test "creates a post with valid attrs" do
@@ -546,6 +547,45 @@ defmodule Hybridsocial.Social.PostsTest do
                target_type: "post",
                target_id: post.id
              )
+    end
+  end
+
+  describe "editing/deleting a post authored as a page" do
+    setup do
+      owner = create_user("pgpost_owner", "pgpost_owner@test.com")
+
+      {:ok, page} =
+        Pages.create_page(owner.id, %{
+          "handle" => "pgpost_page",
+          "display_name" => "Page",
+          "bio" => "b",
+          "category" => "tech"
+        })
+
+      # A post authored *as the page*: identity_id AND page_id are the page.
+      {:ok, post} =
+        Posts.create_post(page.id, %{
+          "content" => "Hello from the page",
+          "visibility" => "public",
+          "page_id" => page.id
+        })
+
+      %{owner: owner, page: page, post: post}
+    end
+
+    test "the page's editor (its owner) can edit it", %{owner: owner, post: post} do
+      assert {:ok, edited} = Posts.edit_post(post.id, owner.id, %{"content" => "Edited"})
+      assert edited.content == "Edited"
+    end
+
+    test "the page's editor can delete it", %{owner: owner, post: post} do
+      assert {:ok, _} = Posts.delete_post(post.id, owner.id)
+    end
+
+    test "someone with no authority over the page cannot edit it", %{post: post} do
+      rando = create_user("pgpost_rando", "pgpost_rando@test.com")
+      assert {:error, :forbidden} = Posts.edit_post(post.id, rando.id, %{"content" => "nope"})
+      assert {:error, :forbidden} = Posts.delete_post(post.id, rando.id)
     end
   end
 end
