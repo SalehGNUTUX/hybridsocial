@@ -9,6 +9,9 @@
   import ReactionPicker from './ReactionPicker.svelte';
   import RadialReactionPicker from './RadialReactionPicker.svelte';
   import { markSeen } from '$lib/utils/seen-posts.js';
+  import { t } from '$lib/stores/i18n.js';
+  // Plain translate for imperative use (toasts / config objects).
+  import { t as translate } from '$lib/utils/i18n.js';
 
   let {
     post,
@@ -216,12 +219,13 @@
   // Confirmation dialog state
   let confirmAction: 'mute_user' | 'unmute_user' | 'block_user' | 'unblock_user' | null = $state(null);
 
-  const confirmMessages: Record<string, { title: string; message: string; button: string }> = {
-    mute_user: { title: 'Mute this user?', message: 'Their posts will be hidden from your feeds. They will not be notified.', button: 'Mute' },
-    unmute_user: { title: 'Unmute this user?', message: 'Their posts will appear in your feeds again.', button: 'Unmute' },
-    block_user: { title: 'Block this user?', message: 'They will not be able to see your posts or interact with you. You can unblock them at any time.', button: 'Block' },
-    unblock_user: { title: 'Unblock this user?', message: 'They will be able to see your posts and interact with you again.', button: 'Unblock' },
-  };
+  // $derived so the copy re-resolves when the locale changes.
+  let confirmMessages = $derived<Record<string, { title: string; message: string; button: string }>>({
+    mute_user: { title: $t('post.mute_user_title'), message: $t('post.mute_user_msg'), button: $t('profile.mute') },
+    unmute_user: { title: $t('post.unmute_user_title'), message: $t('post.unmute_user_msg'), button: $t('profile.unmute') },
+    block_user: { title: $t('post.block_user_title'), message: $t('post.block_user_msg'), button: $t('profile.block') },
+    unblock_user: { title: $t('post.unblock_user_title'), message: $t('post.unblock_user_msg'), button: $t('profile.unblock') },
+  });
 
   // Report modal state
   let showReportModal = $state(false);
@@ -242,14 +246,15 @@
     reportIsRemote ? ((post.account as any).acct.split('@')[1] || '') : ''
   );
 
-  const reportCategories = [
-    { value: 'spam', label: 'Spam' },
-    { value: 'harassment', label: 'Harassment' },
-    { value: 'hate_speech', label: 'Hate speech' },
-    { value: 'illegal', label: 'Illegal content' },
-    { value: 'misinformation', label: 'Misinformation' },
-    { value: 'other', label: 'Other' },
-  ];
+  // Values are the enum sent to the backend — keep them; translate labels.
+  let reportCategories = $derived([
+    { value: 'spam', label: $t('report.spam') },
+    { value: 'harassment', label: $t('report.harassment') },
+    { value: 'hate_speech', label: $t('report.hate_speech') },
+    { value: 'illegal', label: $t('report.illegal') },
+    { value: 'misinformation', label: $t('report.misinformation') },
+    { value: 'other', label: $t('report.other') },
+  ]);
 
   async function handleReply(e: MouseEvent) {
     e.stopPropagation();
@@ -354,15 +359,15 @@
   // The default 7 reactions every user can pick. Mirrors the canonical
   // list in ReactionPicker.svelte / reactionEmojis above — keep all
   // three in sync.
-  const defaultRadialReactions: Array<{ type: string; emoji: string; label: string; image?: string | null }> = [
-    { type: 'like', emoji: '\u{1F44D}', label: 'Like' },
-    { type: 'love', emoji: '\u{2764}\u{FE0F}', label: 'Love' },
-    { type: 'wow', emoji: '\u{1F92F}', label: 'Wow' },
-    { type: 'care', emoji: '\u{1F970}', label: 'Care' },
-    { type: 'angry', emoji: '\u{1F621}', label: 'Angry' },
-    { type: 'sad', emoji: '\u{1F622}', label: 'Sad' },
-    { type: 'lol', emoji: '\u{1F602}', label: 'LOL' },
-  ];
+  let defaultRadialReactions = $derived<Array<{ type: string; emoji: string; label: string; image?: string | null }>>([
+    { type: 'like', emoji: '\u{1F44D}', label: $t('reaction.like') },
+    { type: 'love', emoji: '\u{2764}\u{FE0F}', label: $t('reaction.love') },
+    { type: 'wow', emoji: '\u{1F92F}', label: $t('reaction.wow') },
+    { type: 'care', emoji: '\u{1F970}', label: $t('reaction.care') },
+    { type: 'angry', emoji: '\u{1F621}', label: $t('reaction.angry') },
+    { type: 'sad', emoji: '\u{1F622}', label: $t('reaction.sad') },
+    { type: 'lol', emoji: '\u{1F602}', label: $t('reaction.lol') },
+  ]);
 
   // Premium reactions get appended for tiers whose limits include
   // `custom_emoji` — same gate the desktop ReactionPicker uses. The
@@ -812,7 +817,7 @@
     showMoreMenu = false;
 
     const url = `${window.location.origin}/post/${post.id}`;
-    const title = `Post by ${post.account.display_name || post.account.handle}`;
+    const title = translate('post.share_title', { name: post.account.display_name || post.account.handle });
     const text = (post.content || '').slice(0, 200);
 
     // Only invoke the native share sheet on touch devices, where it's the
@@ -834,9 +839,9 @@
     // Desktop (or no native share): copy the link and confirm.
     try {
       await navigator.clipboard.writeText(url);
-      window.dispatchEvent(new CustomEvent('toast', { detail: { message: 'Link copied', type: 'success' } }));
+      window.dispatchEvent(new CustomEvent('toast', { detail: { message: translate('post.link_copied'), type: 'success' } }));
     } catch {
-      window.dispatchEvent(new CustomEvent('toast', { detail: { message: 'Could not copy link', type: 'error' } }));
+      window.dispatchEvent(new CustomEvent('toast', { detail: { message: translate('post.link_copy_failed'), type: 'error' } }));
     }
   }
 
@@ -857,18 +862,18 @@
           new CustomEvent('bookmark-removed', { detail: { id: post.id } }),
         );
         window.dispatchEvent(
-          new CustomEvent('toast', { detail: { message: 'Bookmark removed', type: 'success' } }),
+          new CustomEvent('toast', { detail: { message: translate('post.bookmark_removed'), type: 'success' } }),
         );
       } else {
         await api.post(`/api/v1/statuses/${post.id}/bookmark`);
         window.dispatchEvent(
-          new CustomEvent('toast', { detail: { message: 'Saved to bookmarks', type: 'success' } }),
+          new CustomEvent('toast', { detail: { message: translate('post.bookmark_saved'), type: 'success' } }),
         );
       }
     } catch {
       isBookmarked = wasBookmarked;
       window.dispatchEvent(
-        new CustomEvent('toast', { detail: { message: 'Could not update bookmark', type: 'error' } }),
+        new CustomEvent('toast', { detail: { message: translate('post.bookmark_failed'), type: 'error' } }),
       );
     }
   }
@@ -901,16 +906,10 @@
       // "Pinned in group" rather than the confusing "Pinned to
       // profile".
       const scope = post.group ? 'group' : post.page ? 'page' : 'profile';
-      const verb = isPinned ? 'Pinned' : 'Unpinned';
-      const where =
-        scope === 'group'
-          ? isPinned ? 'in group' : 'from group'
-          : scope === 'page'
-            ? isPinned ? 'on page' : 'from page'
-            : isPinned ? 'to profile' : 'from profile';
+      const message = translate(`post.${isPinned ? 'pinned' : 'unpinned'}_${scope}`);
       window.dispatchEvent(
         new CustomEvent('toast', {
-          detail: { message: `${verb} ${where}`, type: 'success' },
+          detail: { message, type: 'success' },
         }),
       );
     } catch (err: unknown) {
@@ -922,15 +921,14 @@
         body?: { error?: string; max?: number; scope?: string };
         message?: string;
       };
-      let message = 'Could not update pin';
+      let message = translate('post.pin_failed');
       if (apiErr?.body?.error === 'limits.max_pinned_posts') {
         const max = apiErr.body.max ?? 1;
         const scope = apiErr.body.scope ?? 'profile';
-        const noun =
-          scope === 'group' ? 'this group' : scope === 'page' ? 'this page' : 'your profile';
-        message = `Pin limit reached for ${noun} (${max}). Unpin another post first.`;
+        const noun = translate(`post.pin_noun_${scope === 'group' || scope === 'page' ? scope : 'profile'}`);
+        message = translate('post.pin_limit', { noun, max });
       } else if (apiErr?.body?.error === 'status.forbidden') {
-        message = 'You do not have permission to pin posts here.';
+        message = translate('post.pin_no_permission');
       }
       window.dispatchEvent(
         new CustomEvent('toast', { detail: { message, type: 'error' } }),
@@ -976,7 +974,7 @@
       });
       showReportModal = false;
     } catch {
-      reportError = 'Failed to submit report. Please try again.';
+      reportError = translate('report.submit_failed');
     } finally {
       reportSubmitting = false;
     }
@@ -1175,7 +1173,7 @@
   {/if}
 {/snippet}
 
-<div class="post-actions" role="group" aria-label="Post actions">
+<div class="post-actions" role="group" aria-label={$t('post.actions_label')}>
   <div class="post-actions-left">
     <!-- Like / React -->
     <div
@@ -1194,7 +1192,7 @@
         ontouchend={reactionTouchEnd}
         ontouchcancel={reactionTouchCancel}
         oncontextmenu={(e) => e.preventDefault()}
-        aria-label="React (long-press for more)"
+        aria-label={$t('post.react_aria')}
         aria-expanded={showReactionPicker}
       >
         {#if currentReaction}
@@ -1259,11 +1257,11 @@
         type="button"
         class="action-btn action-reply action-reply-locked"
         disabled
-        aria-label="Replies are disabled on this post"
-        title="Replies are disabled on this post"
+        aria-label={$t('post.replies_disabled_aria')}
+        title={$t('post.replies_disabled_aria')}
       >
         <span class="material-symbols-outlined action-icon">speaker_notes_off</span>
-        <span class="action-locked-label">Replies disabled</span>
+        <span class="action-locked-label">{$t('post.replies_disabled')}</span>
       </button>
     {:else}
       <button
@@ -1271,7 +1269,7 @@
         class="action-btn action-reply"
         onclick={handleReply}
         onkeydown={(e) => handleActionKeydown(e, () => handleReply(new MouseEvent('click')))}
-        aria-label="Reply ({replyCount})"
+        aria-label={$t('post.reply_aria', { count: replyCount })}
       >
         <svg
           class="action-icon"
@@ -1300,7 +1298,7 @@
       class="action-btn action-boost"
       class:active-boost={isBoosted}
       onclick={handleBoost}
-      aria-label="{isBoosted ? 'Undo boost' : 'Boost'} ({boostCount})"
+      aria-label="{isBoosted ? $t('post.undo_boost') : $t('post.boost')} ({boostCount})"
       aria-pressed={isBoosted}
     >
       <span class="material-symbols-outlined action-icon">cached</span>
@@ -1318,7 +1316,7 @@
         type="button"
         class="reaction-stack"
         onclick={(e) => { e.stopPropagation(); fetchReactionDetail(); }}
-        aria-label="View reactions"
+        aria-label={$t('post.view_reactions')}
       >
         <span class="reaction-stack-emojis">
           {#each sorted.slice(0, 3) as r, i (r.name)}
@@ -1336,7 +1334,7 @@
       type="button"
       class="action-btn action-options"
       onclick={toggleMoreMenu}
-      aria-label="More options"
+      aria-label={$t('post.more_options')}
       aria-expanded={showMoreMenu}
       aria-haspopup="menu"
     >
@@ -1348,83 +1346,82 @@
         {#if isRemotePost()}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleDisplayOnInstance}>
             <span class="material-symbols-outlined menu-icon">open_in_new</span>
-            Display on original instance
+            {$t('post.display_on_instance')}
           </button>
         {/if}
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleQuote}>
           <span class="material-symbols-outlined menu-icon">format_quote</span>
-          Quote post
+          {$t('post.quote_post')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShare}>
           <span class="material-symbols-outlined menu-icon">share</span>
-          Share
+          {$t('post.share')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleBookmark}>
           <span class="material-symbols-outlined menu-icon">{isBookmarked ? 'bookmark_remove' : 'bookmark'}</span>
-          {isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+          {isBookmarked ? $t('post.remove_bookmark') : $t('post.bookmark')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleMuteNotifications}>
           <span class="material-symbols-outlined menu-icon">{isPostMuted ? 'notifications_active' : 'notifications_off'}</span>
-          {isPostMuted ? 'Unmute notifications' : 'Mute notifications'}
+          {isPostMuted ? $t('post.unmute_notifications') : $t('post.mute_notifications')}
         </button>
         {#if isOwnPost()}
           {#if !isPinned || viewerContext === null || viewerContext === pinScope}
-            {@const pinNoun =
-              pinScope === 'group'
-                ? (post.group?.name ? `from ${post.group.name}` : 'from group')
-                : pinScope === 'page'
-                  ? (post.page?.name ? `from ${post.page.name}` : 'from page')
-                  : 'from profile'}
-            {@const pinNounAdd =
-              pinScope === 'group'
-                ? (post.group?.name ? `in ${post.group.name}` : 'in group')
-                : pinScope === 'page'
-                  ? (post.page?.name ? `on ${post.page.name}` : 'on page')
-                  : 'to profile'}
+            {@const pinLabel = isPinned
+              ? (pinScope === 'group'
+                  ? (post.group?.name ? $t('post.unpin_from_named', { name: post.group.name }) : $t('post.unpin_from_group'))
+                  : pinScope === 'page'
+                    ? (post.page?.name ? $t('post.unpin_from_named', { name: post.page.name }) : $t('post.unpin_from_page'))
+                    : $t('post.unpin_from_profile'))
+              : (pinScope === 'group'
+                  ? (post.group?.name ? $t('post.pin_in_named', { name: post.group.name }) : $t('post.pin_in_group'))
+                  : pinScope === 'page'
+                    ? (post.page?.name ? $t('post.pin_on_named', { name: post.page.name }) : $t('post.pin_on_page'))
+                    : $t('post.pin_to_profile'))}
             <button type="button" class="more-menu-item" role="menuitem" onclick={handlePinToggle}>
               <span class="material-symbols-outlined menu-icon">{isPinned ? 'keep_off' : 'push_pin'}</span>
-              {isPinned ? `Unpin ${pinNoun}` : `Pin ${pinNounAdd}`}
+              {pinLabel}
             </button>
           {/if}
           {#if !post.edit_expires_at || new Date(post.edit_expires_at) > new Date()}
             <button type="button" class="more-menu-item" role="menuitem" onclick={handleEdit}>
               <span class="material-symbols-outlined menu-icon">edit</span>
-              Edit
+              {$t('post.edit')}
             </button>
           {/if}
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleDelete}>
             <span class="material-symbols-outlined menu-icon">delete</span>
-            Delete
+            {$t('post.delete')}
           </button>
         {/if}
         {#if post.edited_at}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleViewHistory}>
             <span class="material-symbols-outlined menu-icon">history</span>
-            Edit history
+            {$t('post.edit_history')}
           </button>
         {/if}
         {#if !isOwnPost()}
           <div class="more-menu-divider"></div>
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleMentionUser}>
             <span class="material-symbols-outlined menu-icon">alternate_email</span>
-            Mention @{post.account.acct || post.account.handle}
+            {$t('post.mention_user', { handle: post.account.acct || post.account.handle })}
           </button>
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleChatWithUser}>
             <span class="material-symbols-outlined menu-icon">chat</span>
-            Chat with @{post.account.acct || post.account.handle}
+            {$t('post.chat_with', { handle: post.account.acct || post.account.handle })}
           </button>
           <div class="more-menu-divider"></div>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleMuteUser}>
             <span class="material-symbols-outlined menu-icon">volume_off</span>
-            Mute @{post.account.acct || post.account.handle}
+            {$t('post.mute_user_named', { handle: post.account.acct || post.account.handle })}
           </button>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleBlockUser}>
             <span class="material-symbols-outlined menu-icon">block</span>
-            Block @{post.account.acct || post.account.handle}
+            {$t('post.block_user_named', { handle: post.account.acct || post.account.handle })}
           </button>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleReport}>
             <span class="material-symbols-outlined menu-icon">flag</span>
-            Report
+            {$t('post.report')}
           </button>
         {/if}
       </div>
@@ -1434,49 +1431,49 @@
 </div>
 
 {#if showDeleteConfirm}
-  <div class="dialog-overlay" onclick={cancelDelete} role="dialog" aria-modal="true" aria-label="Confirm delete">
+  <div class="dialog-overlay" onclick={cancelDelete} role="dialog" aria-modal="true" aria-label={$t('post.confirm_delete_label')}>
     <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-      <h3 class="dialog-title">Delete post?</h3>
-      <p class="dialog-message">This action cannot be undone. The post will be permanently removed.</p>
+      <h3 class="dialog-title">{$t('post.delete_title')}</h3>
+      <p class="dialog-message">{$t('post.delete_message')}</p>
       <div class="dialog-actions">
-        <button type="button" class="dialog-cancel" onclick={cancelDelete}>Cancel</button>
-        <button type="button" class="dialog-confirm-danger" onclick={confirmDelete}>Delete</button>
+        <button type="button" class="dialog-cancel" onclick={cancelDelete}>{$t('common.cancel')}</button>
+        <button type="button" class="dialog-confirm-danger" onclick={confirmDelete}>{$t('post.delete')}</button>
       </div>
     </div>
   </div>
 {/if}
 
 {#if showReportModal}
-  <div class="dialog-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label="Report post">
+  <div class="dialog-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label={$t('report.modal_label')}>
     <div class="dialog-panel report-panel" onclick={(e) => e.stopPropagation()}>
       <button
         type="button"
         class="report-close"
         onclick={cancelReport}
-        aria-label="Close without reporting"
-        title="Close without reporting"
+        aria-label={$t('report.close')}
+        title={$t('report.close')}
       >
         <span class="material-symbols-outlined">close</span>
       </button>
 
       {#if reportStep === 1}
-        <h3 class="dialog-title">Report post — step 1 of 2</h3>
-        <p class="dialog-message">Why are you reporting this post?</p>
+        <h3 class="dialog-title">{$t('report.step1_title')}</h3>
+        <p class="dialog-message">{$t('report.step1_question')}</p>
 
         <div class="report-form">
-          <label class="report-label" for="report-category">Category</label>
+          <label class="report-label" for="report-category">{$t('report.category')}</label>
           <select id="report-category" class="report-select" bind:value={reportCategory}>
             {#each reportCategories as cat (cat.value)}
               <option value={cat.value}>{cat.label}</option>
             {/each}
           </select>
 
-          <label class="report-label" for="report-description">Description <span class="report-optional">(optional)</span></label>
+          <label class="report-label" for="report-description">{$t('report.description')} <span class="report-optional">{$t('report.optional')}</span></label>
           <textarea
             id="report-description"
             class="report-textarea"
             bind:value={reportDescription}
-            placeholder="Give moderators context — what's wrong with this post, and anything they should know before acting on it."
+            placeholder={$t('report.description_placeholder')}
             rows="4"
           ></textarea>
 
@@ -1486,29 +1483,29 @@
         </div>
 
         <div class="dialog-actions">
-          <button type="button" class="dialog-cancel" onclick={cancelReport}>Cancel</button>
+          <button type="button" class="dialog-cancel" onclick={cancelReport}>{$t('common.cancel')}</button>
           <button type="button" class="dialog-confirm" onclick={reportNext}>
-            Next
+            {$t('common.next')}
           </button>
         </div>
 
       {:else}
-        <h3 class="dialog-title">Report post — step 2 of 2</h3>
+        <h3 class="dialog-title">{$t('report.step2_title')}</h3>
 
         {#if reportIsRemote}
           <div class="report-remote-notice" role="note">
             <span class="material-symbols-outlined" aria-hidden="true">public</span>
             <div>
-              <strong>This account is hosted at <code>{reportRemoteDomain}</code>.</strong>
-              Our moderators can still act on your report locally (hide the post, block the account here), but the account's home instance has more authority over it.
+              <strong>{$t('report.remote_hosted', { domain: reportRemoteDomain })}</strong>
+              {$t('report.remote_hosted_detail')}
             </div>
           </div>
 
           <label class="report-checkbox">
             <input type="checkbox" bind:checked={reportForward} />
             <span>
-              <strong>Send a copy of this report to <code>{reportRemoteDomain}</code>.</strong>
-              <span class="report-hint">Their admins decide what happens to the account on their end.</span>
+              <strong>{$t('report.forward', { domain: reportRemoteDomain })}</strong>
+              <span class="report-hint">{$t('report.forward_hint')}</span>
             </span>
           </label>
         {/if}
@@ -1516,8 +1513,8 @@
         <label class="report-checkbox">
           <input type="checkbox" bind:checked={reportBlock} />
           <span>
-            <strong>Block @{(post.account as any)?.acct || post.account?.handle}</strong>
-            <span class="report-hint">You'll stop seeing their posts, and they won't see yours. You can undo this from their profile.</span>
+            <strong>{$t('post.block_user_named', { handle: (post.account as any)?.acct || post.account?.handle })}</strong>
+            <span class="report-hint">{$t('report.block_hint')}</span>
           </span>
         </label>
 
@@ -1526,9 +1523,9 @@
         {/if}
 
         <div class="dialog-actions">
-          <button type="button" class="dialog-cancel" onclick={reportBack} disabled={reportSubmitting}>Back</button>
+          <button type="button" class="dialog-cancel" onclick={reportBack} disabled={reportSubmitting}>{$t('common.back')}</button>
           <button type="button" class="dialog-confirm-danger" onclick={submitReport} disabled={reportSubmitting}>
-            {reportSubmitting ? 'Submitting…' : 'Submit report'}
+            {reportSubmitting ? $t('report.submitting') : $t('report.submit')}
           </button>
         </div>
       {/if}
@@ -1542,7 +1539,7 @@
       <h3 class="dialog-title">{confirmMessages[confirmAction].title}</h3>
       <p class="dialog-message">{confirmMessages[confirmAction].message}</p>
       <div class="dialog-actions">
-        <button type="button" class="dialog-cancel" onclick={() => confirmAction = null}>Cancel</button>
+        <button type="button" class="dialog-cancel" onclick={() => confirmAction = null}>{$t('common.cancel')}</button>
         <button
           type="button"
           class={confirmAction === 'block_user' || confirmAction === 'mute_user' ? 'dialog-confirm-danger' : 'dialog-confirm'}
@@ -1556,17 +1553,17 @@
 {/if}
 
 {#if showReactionDetail}
-  <div class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label="Reactions">
+  <div class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label={$t('post.reactions')}>
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
-        <h3 class="reactions-modal-title">Reactions</h3>
-        <button type="button" class="reactions-modal-close" onclick={() => showReactionDetail = false} aria-label="Close">
+        <h3 class="reactions-modal-title">{$t('post.reactions')}</h3>
+        <button type="button" class="reactions-modal-close" onclick={() => showReactionDetail = false} aria-label={$t('common.close')}>
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
 
       {#if reactionDetailLoading}
-        <div class="reactions-modal-loading">Loading...</div>
+        <div class="reactions-modal-loading">{$t('common.loading')}</div>
       {:else}
         <div class="reactions-modal-tabs" role="tablist">
           <button
@@ -1576,7 +1573,7 @@
             class:reactions-tab-active={reactionDetailTab === 'all'}
             onclick={() => reactionDetailTab = 'all'}
           >
-            All
+            {$t('post.reactions_all')}
           </button>
           {#each reactionDetailData as group (group.type)}
             <button
@@ -1622,25 +1619,25 @@
 {/if}
 
 {#if showHistoryModal}
-  <div class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label="Edit history">
+  <div class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label={$t('post.edit_history')}>
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
-        <h3 class="reactions-modal-title">Edit History</h3>
-        <button type="button" class="reactions-modal-close" onclick={() => showHistoryModal = false} aria-label="Close">
+        <h3 class="reactions-modal-title">{$t('post.edit_history_title')}</h3>
+        <button type="button" class="reactions-modal-close" onclick={() => showHistoryModal = false} aria-label={$t('common.close')}>
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
 
       {#if historyLoading}
-        <div class="reactions-modal-loading">Loading...</div>
+        <div class="reactions-modal-loading">{$t('common.loading')}</div>
       {:else if historyData.length === 0}
-        <div class="reactions-modal-loading">No edit history</div>
+        <div class="reactions-modal-loading">{$t('post.no_edit_history')}</div>
       {:else}
         <div class="history-list">
           {#each historyData as rev (rev.id)}
             <div class="history-item">
               <div class="history-meta">
-                <span class="history-revision">Revision {rev.revision_number}</span>
+                <span class="history-revision">{$t('post.revision', { number: rev.revision_number })}</span>
                 <span class="history-date">{new Date(rev.edited_at).toLocaleString()}</span>
               </div>
               <div class="history-content">
@@ -2468,14 +2465,6 @@
     margin-top: 1px;
   }
 
-  .report-remote-notice code {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.8em;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--scrim-soft);
-  }
-
   .report-checkbox {
     display: flex;
     gap: 10px;
@@ -2504,13 +2493,6 @@
     color: var(--color-text);
   }
 
-  .report-checkbox code {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.8em;
-    padding: 1px 4px;
-    border-radius: 4px;
-    background: var(--color-surface);
-  }
 
   .report-hint {
     display: block;
