@@ -431,6 +431,26 @@ defmodule Hybridsocial.GroupsTest do
   end
 
   describe "ban_member/3" do
+    test "banning an approved member decrements member_count", %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Group"})
+      {:ok, member} = Groups.join_group(group.id, bob.id)
+      assert Groups.get_group(group.id).member_count == 2
+
+      assert {:ok, banned} = Groups.ban_member(group.id, alice.id, member.id)
+      assert banned.status == :banned
+      assert Groups.get_group(group.id).member_count == 1
+    end
+
+    test "the sole owner cannot be banned (would orphan the group)", %{alice: alice} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Group"})
+      owner = Enum.find(Groups.get_members(group.id), &(&1.identity_id == alice.id))
+
+      assert {:error, :owner_must_transfer} = Groups.ban_member(group.id, alice.id, owner.id)
+      assert Groups.member_role(group.id, alice.id) == :owner
+    end
+  end
+
+  describe "ban_member/3" do
     test "admin can ban member", %{alice: alice, bob: bob} do
       {:ok, group} = Groups.create_group(alice.id, %{"name" => "Group"})
       {:ok, member} = Groups.join_group(group.id, bob.id)
