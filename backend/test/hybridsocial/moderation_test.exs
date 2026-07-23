@@ -369,4 +369,44 @@ defmodule Hybridsocial.ModerationTest do
       refute Moderation.domain_banned?("good.com", "email")
     end
   end
+
+  # ── Verified-badge revocation takedowns ──────────────────────────────
+
+  describe "open_badge_takedown/5" do
+    setup do
+      owner = create_identity("badge_owner", "badge_owner@example.com")
+      admin = create_identity("badge_admin", "badge_admin@example.com")
+      %{owner: owner, admin: admin}
+    end
+
+    test "revoking a verified badge opens a takedown for the account owner",
+         %{owner: owner, admin: admin} do
+      assert {:ok, td} =
+               Moderation.open_badge_takedown(
+                 owner.id,
+                 admin.id,
+                 "verified_pro",
+                 "free",
+                 "verification was obtained fraudulently"
+               )
+
+      assert td.target_type == "account_badge"
+      assert td.owner_id == owner.id
+      assert td.moderator_id == admin.id
+      # The revoked-from tier is kept so a later restore can re-grant it.
+      assert td.category == "verified_pro"
+    end
+
+    test "granting or upgrading a badge does not open a takedown",
+         %{owner: owner, admin: admin} do
+      assert {:ok, :noop} =
+               Moderation.open_badge_takedown(owner.id, admin.id, "free", "verified_pro", "granted")
+    end
+
+    test "revoking without a reason does not open a takedown",
+         %{owner: owner, admin: admin} do
+      assert {:ok, :noop} =
+               Moderation.open_badge_takedown(owner.id, admin.id, "verified_pro", "free", "")
+    end
+  end
 end
