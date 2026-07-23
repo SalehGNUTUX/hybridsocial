@@ -146,6 +146,19 @@
   "discover.follow_failed": "Could not update follow",
   "discover.footer_label": "Footer",
 
+  "feed.post_feed": "Post feed",
+  "feed.empty_title": "Nothing here yet",
+  "feed.no_posts": "No posts yet",
+  "feed.no_media": "No media yet.",
+  "feed.open_post": "Open post",
+  "feed.loading_more": "Loading more posts…",
+  "feed.new_posts.one": "new post",
+  "feed.new_posts.other": "new posts",
+  "feed.new_posts_aria.one": "{display} new post. Scroll to top to view.",
+  "feed.new_posts_aria.other": "{display} new posts. Scroll to top to view.",
+  "feed.show_new_posts.one": "{count} new post",
+  "feed.show_new_posts.other": "{count} new posts",
+
   "announcement.dismiss": "Dismiss announcement",
 
   "footer.about": "About",
