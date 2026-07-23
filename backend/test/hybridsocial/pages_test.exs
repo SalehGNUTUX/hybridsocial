@@ -198,6 +198,9 @@ defmodule Hybridsocial.PagesTest do
 
       assert {:ok, restored} = Pages.restore_page(page.id, staff.id)
       assert is_nil(restored.deleted_at)
+      # Organization must be preloaded so the controller can serialize it
+      # without a NotLoaded crash.
+      assert %Hybridsocial.Accounts.Organization{} = restored.organization
       assert Pages.get_page(page.id) != nil
     end
 
@@ -217,7 +220,10 @@ defmodule Hybridsocial.PagesTest do
       {:ok, _} = Pages.delete_page(page.id, staff.id, reason: "x")
 
       assert {:ok, pages} = Pages.list_deleted_pages(staff.id)
-      assert Enum.any?(pages, &(&1.id == page.id))
+      listed = Enum.find(pages, &(&1.id == page.id))
+      assert listed
+      # Preloaded for serialization (no NotLoaded crash).
+      assert %Hybridsocial.Accounts.Organization{} = listed.organization
       assert {:error, :forbidden} = Pages.list_deleted_pages(owner.id)
     end
   end

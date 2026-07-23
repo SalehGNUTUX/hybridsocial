@@ -134,7 +134,9 @@ defmodule Hybridsocial.Pages do
                 {:identity_restored, restored.id}
               )
 
-              {:ok, restored}
+              # Serializers read `page.organization`; preload so the caller can
+              # render the restored page without a NotLoaded crash.
+              {:ok, Repo.preload(restored, :organization)}
 
             error ->
               error
@@ -156,6 +158,8 @@ defmodule Hybridsocial.Pages do
         |> order_by([i], desc: i.deleted_at)
         |> limit(^limit)
         |> Repo.all()
+        # Serializers read `page.organization`.
+        |> Repo.preload(:organization)
 
       {:ok, pages}
     else

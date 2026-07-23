@@ -416,6 +416,9 @@ defmodule HybridsocialWeb.Router do
     pipe_through [:api, :authenticated]
 
     post "/", PageController, :create
+    # Staff-only; must be authenticated. Declared in this (authenticated) scope,
+    # which precedes the optional-auth scope, so "deleted" isn't parsed as an id.
+    get "/deleted", PageController, :deleted
     patch "/:id", PageController, :update
     delete "/:id", PageController, :delete
     post "/:id/restore", PageController, :restore
@@ -442,8 +445,6 @@ defmodule HybridsocialWeb.Router do
     pipe_through [:api, :optional_auth]
 
     get "/", PageController, :index
-    # Before "/:id" so "deleted" isn't parsed as a page id.
-    get "/deleted", PageController, :deleted
     get "/:id", PageController, :show
     get "/:id/roles", PageController, :roles
     get "/:id/branding", PageController, :branding
