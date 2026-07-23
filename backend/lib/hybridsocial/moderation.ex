@@ -392,10 +392,16 @@ defmodule Hybridsocial.Moderation do
         "group" -> Hybridsocial.Groups.restore_group(takedown.target_id, admin_id)
         "page" -> Hybridsocial.Pages.restore_page(takedown.target_id, admin_id)
         "post" -> Hybridsocial.Social.Posts.admin_restore_post(takedown.target_id, admin_id)
+        "account_badge" -> restore_badge(takedown)
         _ -> {:ok, :no_op}
       end
 
     case result do
+      # Only claim the takedown was restored when something actually was — a
+      # no-op (unknown/unhandled target) must not be marked "restored".
+      {:ok, :no_op} ->
+        {:ok, :no_op}
+
       {:ok, _} ->
         takedown |> Takedown.status_changeset("restored") |> Repo.update()
 
@@ -403,6 +409,18 @@ defmodule Hybridsocial.Moderation do
         error
     end
   end
+
+  # Re-grant the verification tier a badge takedown revoked (stored in
+  # `category`). Nothing to restore if the tier wasn't recorded.
+  defp restore_badge(%Takedown{target_id: identity_id, category: tier})
+       when is_binary(tier) and tier != "" do
+    case Hybridsocial.Accounts.get_identity(identity_id) do
+      nil -> {:ok, :no_op}
+      identity -> Hybridsocial.Accounts.admin_update_identity(identity, %{"verification_tier" => tier})
+    end
+  end
+
+  defp restore_badge(_), do: {:ok, :no_op}
 
   # ── Content Filters ──────────────────────────────────────────────────
 
