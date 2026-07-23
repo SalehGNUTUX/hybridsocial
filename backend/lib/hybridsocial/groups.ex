@@ -185,14 +185,7 @@ defmodule Hybridsocial.Groups do
           Ecto.Multi.new()
           |> Ecto.Multi.update(:group, Group.restore_changeset(group))
           |> Ecto.Multi.run(:restore_identity, fn _repo, _ ->
-            if group.identity_id do
-              case Repo.get(Identity, group.identity_id) do
-                nil -> {:ok, nil}
-                identity -> identity |> Identity.restore_changeset() |> Repo.update()
-              end
-            else
-              {:ok, nil}
-            end
+            restore_group_identity(group.identity_id)
           end)
           |> Repo.transaction()
           |> case do
@@ -216,6 +209,15 @@ defmodule Hybridsocial.Groups do
       end
     else
       {:error, :forbidden}
+    end
+  end
+
+  defp restore_group_identity(nil), do: {:ok, nil}
+
+  defp restore_group_identity(identity_id) do
+    case Repo.get(Identity, identity_id) do
+      nil -> {:ok, nil}
+      identity -> identity |> Identity.restore_changeset() |> Repo.update()
     end
   end
 
@@ -490,25 +492,23 @@ defmodule Hybridsocial.Groups do
          member when not is_nil(member) <- get_member_by_id(member_id, group_id),
          :ok <- authorize_ban(actor_role, member.role),
          :ok <- ensure_not_sole_owner(group_id, member) do
-      cond do
-        # Already banned: idempotent no-op so a repeat/concurrent ban can't
-        # double-decrement the counter.
-        member.status == :banned ->
-          {:ok, member}
+      # Already banned: idempotent no-op so a repeat/concurrent ban can't
+      # double-decrement the counter.
+      if member.status == :banned do
+        {:ok, member}
+      else
+        # Only approved members are counted in member_count, so only decrement
+        # when banning one that was actually counted (mirrors insert_member).
+        was_approved = member.status == :approved
 
-        true ->
-          # Only approved members are counted in member_count, so only decrement
-          # when banning one that was actually counted (mirrors insert_member).
-          was_approved = member.status == :approved
+        case member |> GroupMember.changeset(%{status: :banned}) |> Repo.update() do
+          {:ok, banned} ->
+            if was_approved, do: update_member_count(group_id, -1)
+            {:ok, banned}
 
-          case member |> GroupMember.changeset(%{status: :banned}) |> Repo.update() do
-            {:ok, banned} ->
-              if was_approved, do: update_member_count(group_id, -1)
-              {:ok, banned}
-
-            error ->
-              error
-          end
+          error ->
+            error
+        end
       end
     else
       nil -> {:error, :not_found}

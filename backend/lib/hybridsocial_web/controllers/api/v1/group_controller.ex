@@ -444,14 +444,12 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
   def screening(conn, %{"id" => id}) do
     identity = conn.assigns.current_identity
 
-    cond do
-      not Groups.can_manage?(id, identity.id) ->
-        conn
-        |> put_status(:forbidden)
-        |> json(%{error: "group.forbidden"})
-
-      true ->
-        render_screening_config(conn, id)
+    if Groups.can_manage?(id, identity.id) do
+      render_screening_config(conn, id)
+    else
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "group.forbidden"})
     end
   end
 

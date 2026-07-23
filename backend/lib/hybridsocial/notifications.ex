@@ -413,6 +413,14 @@ defmodule Hybridsocial.Notifications do
       "group_invite" -> "#{actor_name} invited you to a group"
       "group_application" -> "New group membership application"
       "page_invite" -> "#{actor_name} invited you to manage a page"
+      _ -> push_title_staff(type)
+    end
+  end
+
+  # Staff/moderation-facing notification titles, split out so the main lookup
+  # stays under the cyclomatic-complexity limit as new types are added.
+  defp push_title_staff(type) do
+    case type do
       "report" -> "New report filed"
       "admin" -> "Admin notification"
       "moderation_takedown" -> "Your content was removed"
@@ -455,6 +463,14 @@ defmodule Hybridsocial.Notifications do
       "page_invite" ->
         "You have been invited to manage a page"
 
+      _ ->
+        push_body_staff(type)
+    end
+  end
+
+  # Staff/moderation-facing notification bodies (see push_title_staff/1).
+  defp push_body_staff(type) do
+    case type do
       "report" ->
         "A new report requires attention"
 
@@ -462,7 +478,7 @@ defmodule Hybridsocial.Notifications do
         "You have an admin notification"
 
       "moderation_takedown" ->
-        "A moderator removed your content — open to see why and how to appeal"
+        "A moderator removed your content, open to see why and how to appeal"
 
       _ ->
         "You have a new notification"
