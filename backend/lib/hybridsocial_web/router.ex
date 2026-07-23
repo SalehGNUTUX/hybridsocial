@@ -665,6 +665,14 @@ defmodule HybridsocialWeb.Router do
     get "/", AppealController, :index
   end
 
+  # Content takedowns the caller owns, and appealing one.
+  scope "/api/v1/takedowns", HybridsocialWeb.Api.V1 do
+    pipe_through [:api, :authenticated]
+
+    get "/", AppealController, :my_takedowns
+    post "/:id/appeal", AppealController, :appeal_takedown
+  end
+
   # Admin step-up (sudo) endpoints — auth + staff, but NOT sudo-gated
   # (they're how you obtain sudo in the first place).
   scope "/api/v1/admin", HybridsocialWeb.Api.V1 do

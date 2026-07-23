@@ -1656,6 +1656,34 @@ defmodule Hybridsocial.Social.Posts do
   defp do_admin_soft_delete(%Post{} = post), do: {:ok, post}
 
   @doc """
+  Reverses an admin soft-delete (used when a takedown appeal is approved).
+  Clears `deleted_at` and audit-logs the restore. The caller is responsible for
+  authorization (the appeal-approval path is already staff-gated).
+  """
+  def admin_restore_post(post_id, admin_id, reason \\ "") do
+    case Repo.get(Post, post_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Post{deleted_at: nil} = post ->
+        {:ok, post}
+
+      post ->
+        case post |> Post.restore_changeset() |> Repo.update() do
+          {:ok, restored} ->
+            Hybridsocial.Moderation.log(admin_id, "post.admin_restored", "post", post_id, %{
+              reason: reason
+            })
+
+            {:ok, restored}
+
+          error ->
+            error
+        end
+    end
+  end
+
+  @doc """
   Force-marks a post as sensitive with an audit log entry.
   """
   def admin_force_sensitive(post_id, admin_id) do

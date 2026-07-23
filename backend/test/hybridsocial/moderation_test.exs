@@ -369,4 +369,65 @@ defmodule Hybridsocial.ModerationTest do
       refute Moderation.domain_banned?("good.com", "email")
     end
   end
+
+  # ── Takedown appeals (Phase 2: appeal restores the content) ──────────
+
+  describe "takedown appeals" do
+    setup do
+      owner = create_identity("td_owner", "td_owner@example.com")
+      staff = create_identity("td_staff", "td_staff@example.com")
+      {:ok, _} = Hybridsocial.Auth.RBAC.assign_role(staff.id, "moderator", staff.id)
+      %{owner: owner, staff: staff}
+    end
+
+    defp staff_takedown_group(owner, staff) do
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Appealed group"})
+      {:ok, _} = Hybridsocial.Groups.delete_group(group.id, staff.id, reason: "review")
+      [takedown] = Moderation.list_takedowns_for_owner(owner.id)
+      {group, takedown}
+    end
+
+    test "the owner can appeal, which pauses the purge window", %{owner: owner, staff: staff} do
+      {_group, takedown} = staff_takedown_group(owner, staff)
+      assert takedown.status == "active"
+
+      assert {:ok, appeal} =
+               Moderation.create_takedown_appeal(owner.id, takedown.id, "It was a misunderstanding")
+
+      assert appeal.action_type == "content_takedown"
+      assert appeal.takedown_id == takedown.id
+      assert Moderation.get_takedown(takedown.id).status == "appealed"
+    end
+
+    test "a non-owner cannot appeal", %{owner: owner, staff: staff} do
+      {_group, takedown} = staff_takedown_group(owner, staff)
+      other = create_identity("td_other", "td_other@example.com")
+
+      assert {:error, :forbidden} =
+               Moderation.create_takedown_appeal(other.id, takedown.id, "let me in")
+    end
+
+    test "approving the appeal restores the content and marks it restored",
+         %{owner: owner, staff: staff} do
+      {group, takedown} = staff_takedown_group(owner, staff)
+      assert Hybridsocial.Groups.get_group(group.id) == nil
+
+      {:ok, appeal} = Moderation.create_takedown_appeal(owner.id, takedown.id, "please restore")
+      assert {:ok, _} = Moderation.approve_appeal(appeal.id, staff.id)
+
+      assert Hybridsocial.Groups.get_group(group.id) != nil
+      assert Moderation.get_takedown(takedown.id).status == "restored"
+    end
+
+    test "rejecting the appeal leaves the content down and reactivates the window",
+         %{owner: owner, staff: staff} do
+      {group, takedown} = staff_takedown_group(owner, staff)
+      {:ok, appeal} = Moderation.create_takedown_appeal(owner.id, takedown.id, "please reconsider")
+
+      assert {:ok, _} = Moderation.reject_appeal(appeal.id, staff.id, "denied")
+
+      assert Hybridsocial.Groups.get_group(group.id) == nil
+      assert Moderation.get_takedown(takedown.id).status == "active"
+    end
+  end
 end

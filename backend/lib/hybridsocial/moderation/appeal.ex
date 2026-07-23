@@ -5,7 +5,7 @@ defmodule Hybridsocial.Moderation.Appeal do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @action_types ~w(suspension silencing shadow_ban post_removal warning)
+  @action_types ~w(suspension silencing shadow_ban post_removal warning content_takedown)
   @statuses ~w(pending approved rejected)
 
   schema "moderation_appeals" do
@@ -17,13 +17,15 @@ defmodule Hybridsocial.Moderation.Appeal do
 
     belongs_to :identity, Hybridsocial.Accounts.Identity
     belongs_to :reviewer, Hybridsocial.Accounts.Identity, foreign_key: :reviewed_by
+    # Set when this appeal targets a specific content takedown.
+    belongs_to :takedown, Hybridsocial.Moderation.Takedown
 
     timestamps(type: :utc_datetime_usec)
   end
 
   def changeset(appeal, attrs) do
     appeal
-    |> cast(attrs, [:identity_id, :action_type, :reason])
+    |> cast(attrs, [:identity_id, :action_type, :reason, :takedown_id])
     |> validate_required([:identity_id, :action_type, :reason])
     |> validate_inclusion(:action_type, @action_types)
     |> validate_length(:reason, min: 10, max: 5000)

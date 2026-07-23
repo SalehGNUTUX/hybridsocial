@@ -323,6 +323,87 @@ defmodule Hybridsocial.Moderation do
   defp takedown_label("account_badge"), do: "verification badge"
   defp takedown_label(_), do: "content"
 
+  def get_takedown(id), do: Repo.get(Takedown, id)
+
+  @doc "Takedowns against content owned by `owner_id`, most recent first."
+  def list_takedowns_for_owner(owner_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 20)
+
+    Takedown
+    |> where([t], t.owner_id == ^owner_id)
+    |> order_by([t], desc: t.inserted_at)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  @doc """
+  The content owner appeals a takedown. Only the owner may appeal, only while
+  the takedown is still `active`, and only once at a time. Filing the appeal
+  flips the takedown to `appealed` so the auto-purge worker leaves it alone
+  until staff decide.
+  """
+  def create_takedown_appeal(identity_id, takedown_id, reason) do
+    case get_takedown(takedown_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Takedown{owner_id: owner_id} when owner_id != identity_id ->
+        {:error, :forbidden}
+
+      %Takedown{status: status} when status != "active" ->
+        {:error, :not_appealable}
+
+      takedown ->
+        pending? =
+          Appeal
+          |> where([a], a.takedown_id == ^takedown_id and a.status == "pending")
+          |> Repo.exists?()
+
+        if pending? do
+          {:error, :already_pending}
+        else
+          Ecto.Multi.new()
+          |> Ecto.Multi.insert(
+            :appeal,
+            Appeal.changeset(%Appeal{}, %{
+              "identity_id" => identity_id,
+              "action_type" => "content_takedown",
+              "reason" => reason,
+              "takedown_id" => takedown_id
+            })
+          )
+          |> Ecto.Multi.update(:takedown, Takedown.status_changeset(takedown, "appealed"))
+          |> Repo.transaction()
+          |> case do
+            {:ok, %{appeal: appeal}} -> {:ok, appeal}
+            {:error, _step, reason, _} -> {:error, reason}
+          end
+        end
+    end
+  end
+
+  # Restore the content a takedown removed, dispatching by target type, then
+  # mark the takedown `restored`. Called from an already-staff-gated appeal
+  # approval, so `admin_id` is a valid instance moderator for the entity-level
+  # restore functions (which re-check staff).
+  defp restore_takedown_target(%Takedown{} = takedown, admin_id) do
+    result =
+      case takedown.target_type do
+        "group" -> Hybridsocial.Groups.restore_group(takedown.target_id, admin_id)
+        "page" -> Hybridsocial.Pages.restore_page(takedown.target_id, admin_id)
+        "post" -> Hybridsocial.Social.Posts.admin_restore_post(takedown.target_id, admin_id)
+        _ -> {:ok, :no_op}
+      end
+
+    case result do
+      {:ok, _} ->
+        takedown |> Takedown.status_changeset("restored") |> Repo.update()
+
+      error ->
+        error
+    end
+  end
+
   # ── Content Filters ──────────────────────────────────────────────────
 
   def create_filter(attrs) do
@@ -714,7 +795,7 @@ defmodule Hybridsocial.Moderation do
           })
         )
         |> Ecto.Multi.run(:reverse_action, fn _repo, %{appeal: approved_appeal} ->
-          reverse_moderation_action(approved_appeal)
+          reverse_moderation_action(approved_appeal, admin_id)
         end)
         |> Ecto.Multi.run(:audit, fn _repo, %{appeal: approved_appeal} ->
           log(admin_id, "appeal.approved", "appeal", approved_appeal.id, %{
@@ -749,6 +830,9 @@ defmodule Hybridsocial.Moderation do
             response: response
           })
         )
+        |> Ecto.Multi.run(:reactivate_takedown, fn _repo, %{appeal: rejected_appeal} ->
+          reactivate_takedown_on_reject(rejected_appeal)
+        end)
         |> Ecto.Multi.run(:audit, fn _repo, %{appeal: rejected_appeal} ->
           log(admin_id, "appeal.rejected", "appeal", rejected_appeal.id, %{
             action_type: rejected_appeal.action_type,
@@ -763,14 +847,41 @@ defmodule Hybridsocial.Moderation do
     end
   end
 
-  defp reverse_moderation_action(%Appeal{action_type: "suspension", identity_id: identity_id}) do
+  # Appeal rejected: the takedown stands, so flip it from `appealed` back to
+  # `active` — the auto-purge window resumes. Non-takedown appeals are a no-op.
+  defp reactivate_takedown_on_reject(%Appeal{takedown_id: nil}), do: {:ok, :no_op}
+
+  defp reactivate_takedown_on_reject(%Appeal{takedown_id: takedown_id}) do
+    case get_takedown(takedown_id) do
+      nil -> {:ok, :no_op}
+      %Takedown{status: "appealed"} = td -> td |> Takedown.status_changeset("active") |> Repo.update()
+      _ -> {:ok, :no_op}
+    end
+  end
+
+  # A content-takedown appeal: restore the specific group/page/post.
+  defp reverse_moderation_action(%Appeal{takedown_id: takedown_id}, admin_id)
+       when not is_nil(takedown_id) do
+    case get_takedown(takedown_id) do
+      nil -> {:ok, :no_op}
+      takedown -> restore_takedown_target(takedown, admin_id)
+    end
+  end
+
+  defp reverse_moderation_action(
+         %Appeal{action_type: "suspension", identity_id: identity_id},
+         _admin_id
+       ) do
     case Repo.get(Identity, identity_id) do
       nil -> {:ok, :no_op}
       identity -> Hybridsocial.Accounts.unsuspend_identity(identity)
     end
   end
 
-  defp reverse_moderation_action(%Appeal{action_type: "silencing", identity_id: identity_id}) do
+  defp reverse_moderation_action(
+         %Appeal{action_type: "silencing", identity_id: identity_id},
+         _admin_id
+       ) do
     case Repo.get(Identity, identity_id) do
       nil ->
         {:ok, :no_op}
@@ -782,7 +893,10 @@ defmodule Hybridsocial.Moderation do
     end
   end
 
-  defp reverse_moderation_action(%Appeal{action_type: "shadow_ban", identity_id: identity_id}) do
+  defp reverse_moderation_action(
+         %Appeal{action_type: "shadow_ban", identity_id: identity_id},
+         _admin_id
+       ) do
     case Repo.get(Identity, identity_id) do
       nil ->
         {:ok, :no_op}
@@ -794,8 +908,9 @@ defmodule Hybridsocial.Moderation do
     end
   end
 
-  # For post_removal and warning, there's no automatic reversal
-  defp reverse_moderation_action(_appeal), do: {:ok, :no_op}
+  # For a bare post_removal/warning (no linked takedown), there's no automatic
+  # reversal — the moderator restores manually.
+  defp reverse_moderation_action(_appeal, _admin_id), do: {:ok, :no_op}
 
   # ── Moderation Notes ────────────────────────────────────────────────
 
