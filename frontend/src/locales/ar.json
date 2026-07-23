@@ -1,1 +1,31 @@
-{}
+{
+  "nav.home": "الرئيسية",
+  "nav.explore": "استكشاف",
+  "nav.notifications": "الإشعارات",
+  "nav.messages": "الرسائل",
+  "nav.bookmarks": "المحفوظات",
+  "nav.groups": "المجموعات",
+  "nav.lists": "القوائم",
+  "nav.profile": "الملف الشخصي",
+  "nav.settings": "الإعدادات",
+  "nav.search": "بحث",
+  "nav.pages": "الصفحات",
+  "nav.streams": "البث",
+  "nav.reels": "المقاطع",
+  "nav.scheduled": "المجدولة",
+  "nav.drafts": "المسودات",
+  "nav.more": "المزيد",
+  "nav.compose": "منشور جديد",
+  "nav.compose_aria": "إنشاء منشور جديد",
+  "nav.main_label": "التنقل الرئيسي",
+  "nav.mobile_label": "تنقل الجوال",
+  "nav.more_label": "تنقل إضافي",
+  "nav.unread.zero": "{label}، {count} غير مقروء",
+  "nav.unread.one": "{label}، {count} غير مقروء",
+  "nav.unread.two": "{label}، {count} غير مقروءين",
+  "nav.unread.few": "{label}، {count} غير مقروءة",
+  "nav.unread.many": "{label}، {count} غير مقروءة",
+  "nav.unread.other": "{label}، {count} غير مقروء",
+
+  "auth.logout": "تسجيل الخروج"
+}
