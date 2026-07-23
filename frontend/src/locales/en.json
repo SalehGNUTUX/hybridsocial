@@ -146,6 +146,8 @@
   "discover.follow_failed": "Could not update follow",
   "discover.footer_label": "Footer",
 
+  "announcement.dismiss": "Dismiss announcement",
+
   "footer.about": "About",
   "footer.privacy": "Privacy",
   "footer.terms": "Terms",
