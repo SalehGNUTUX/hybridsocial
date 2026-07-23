@@ -119,6 +119,17 @@
     }
   }
 
+  // The composer posts an optimistic reply (temp id) then fires `post-replace`
+  // with the real server post. Without handling it, a just-added comment stays
+  // stuck as the pending optimistic object (temp `optimistic-*` id), so
+  // reacting/replying to it targets a non-existent status until the sheet is
+  // reopened. Swap it in place.
+  function handleCommentReplace(e: Event) {
+    const { oldId, post } = (e as CustomEvent<{ oldId: string; post: Post }>).detail ?? {};
+    if (!oldId || !post) return;
+    commentsDescendants = commentsDescendants.map((d) => (d.id === oldId ? post : d));
+  }
+
   // Reserve the video box with the real aspect ratio (from media meta,
   // falling back to 16:9) so a not-yet-loaded video shows a proper frame
   // instead of collapsing to a thin controls bar.
@@ -235,7 +246,11 @@
     }
     loadStreams();
     window.addEventListener('new-post', handleNewComment);
-    return () => window.removeEventListener('new-post', handleNewComment);
+    window.addEventListener('post-replace', handleCommentReplace);
+    return () => {
+      window.removeEventListener('new-post', handleNewComment);
+      window.removeEventListener('post-replace', handleCommentReplace);
+    };
   });
 
   // Loads metadata as a card nears the viewport, pauses playback when it
@@ -245,11 +260,15 @@
   function lazyVideo(node: HTMLVideoElement, params: { autoplay: boolean; muted: boolean }) {
     let auto = params.autoplay;
     let isMuted = params.muted;
+    // Track the clip's latest visibility so toggling autoplay ON can start a
+    // clip that's already in view (the observer won't re-fire on its own).
+    let lastRatio = 0;
     node.muted = isMuted;
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           const ratio = entry.intersectionRatio;
+          lastRatio = ratio;
           if (entry.isIntersecting && ratio >= 0.25 && node.preload === 'none') {
             node.preload = 'metadata';
           }
@@ -269,6 +288,7 @@
     io.observe(node);
     return {
       update(next: { autoplay: boolean; muted: boolean }) {
+        const wasAuto = auto;
         auto = next.autoplay;
         // Re-apply the shared mute state to this already-mounted clip so a
         // global toggle reaches every video, not just the one interacted with.
@@ -276,7 +296,14 @@
           isMuted = next.muted;
           node.muted = isMuted;
         }
-        if (!auto && !node.paused) node.pause();
+        if (!auto && !node.paused) {
+          node.pause();
+        } else if (auto && !wasAuto && lastRatio >= 0.6 && node.paused) {
+          // Autoplay just turned on and this clip is already mostly in view —
+          // start it now (the IntersectionObserver only fires on a change).
+          node.muted = isMuted;
+          node.play().catch(() => {});
+        }
       },
       destroy: () => io.disconnect(),
     };
