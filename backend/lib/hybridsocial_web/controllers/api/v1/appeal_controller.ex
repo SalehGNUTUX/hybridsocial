@@ -70,7 +70,9 @@ defmodule HybridsocialWeb.Api.V1.AppealController do
   # GET /api/v1/takedowns — the caller's own takedowns (to find one to appeal).
   def my_takedowns(conn, params) do
     identity_id = conn.assigns.current_identity.id
-    takedowns = Moderation.list_takedowns_for_owner(identity_id, limit: clamp_limit(params["limit"]))
+
+    takedowns =
+      Moderation.list_takedowns_for_owner(identity_id, limit: clamp_limit(params["limit"]))
 
     conn
     |> put_status(:ok)

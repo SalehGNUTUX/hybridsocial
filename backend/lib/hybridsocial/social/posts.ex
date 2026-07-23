@@ -1704,13 +1704,27 @@ defmodule Hybridsocial.Social.Posts do
 
   @doc """
   PERMANENTLY deletes a post. Used only by the takedown auto-purge worker after
-  the appeal window. Reactions, boosts, media, mentions and stream-views cascade
-  via `on_delete: :delete_all`. Irreversible.
+  the appeal window. Reactions, boosts, mentions and stream-views cascade via
+  `on_delete: :delete_all`; the post's media is `nilify_all`, so it is deleted
+  explicitly here rather than left orphaned with a null `post_id`. Irreversible.
   """
   def purge_post(post_id) do
     case Repo.get(Post, post_id) do
-      nil -> {:ok, :already_gone}
-      post -> Repo.delete(post)
+      nil ->
+        {:ok, :already_gone}
+
+      post ->
+        Ecto.Multi.new()
+        |> Ecto.Multi.delete_all(
+          :media,
+          from(m in Hybridsocial.Media.MediaFile, where: m.post_id == ^post_id)
+        )
+        |> Ecto.Multi.delete(:post, post)
+        |> Repo.transaction()
+        |> case do
+          {:ok, _} -> {:ok, :purged}
+          {:error, _step, reason, _} -> {:error, reason}
+        end
     end
   end
 

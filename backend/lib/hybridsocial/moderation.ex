@@ -254,6 +254,13 @@ defmodule Hybridsocial.Moderation do
     with {:ok, takedown} <- result do
       notify_content_owner(takedown, days)
       {:ok, takedown}
+    else
+      {:error, changeset} ->
+        # Callers (maybe_open_*_takedown) fire-and-forget this, so a rejected
+        # takedown — e.g. a reason under the 3-char minimum — would otherwise
+        # remove the content while silently sending the owner no notice.
+        Logger.warning("Takedown not opened: #{inspect(changeset.errors)}")
+        {:error, changeset}
     end
   end
 
@@ -426,7 +433,15 @@ defmodule Hybridsocial.Moderation do
     case purge_takedown_target(takedown) do
       {:ok, _} ->
         takedown |> Takedown.status_changeset("purged") |> Repo.update()
-        log(takedown.moderator_id, "takedown.purged", takedown.target_type, takedown.target_id, %{})
+
+        log(
+          takedown.moderator_id,
+          "takedown.purged",
+          takedown.target_type,
+          takedown.target_id,
+          %{}
+        )
+
         true
 
       {:error, reason} ->
@@ -454,6 +469,38 @@ defmodule Hybridsocial.Moderation do
   defp purge_takedown_target(%Takedown{target_type: "account_badge"}), do: {:ok, :no_content}
 
   defp purge_takedown_target(_), do: {:ok, :no_content}
+
+  @doc """
+  Deletes rows that reference `identity_id` through a *non-cascading* foreign key
+  so a purge can hard-delete the actor identity without a `foreign_key_violation`.
+
+  A group/page that survives to auto-purge was very likely reported, and
+  `reports.reported_id` is `on_delete: :nothing` — deleting the identity would
+  otherwise raise and the worker would crash-loop, purging nothing (the exact
+  failure the cascade claim overlooked). Reports naming the identity as subject,
+  reporter, or assignee are dropped (their subject is being permanently removed);
+  `audit_log.actor_id` references are nilified so the immutable log survives.
+  Meant to run inside the purge transaction — takes the transaction's `repo`.
+  """
+  def purge_dangling_identity_refs(repo, identity_id) when is_binary(identity_id) do
+    repo.delete_all(
+      from(r in "reports",
+        where:
+          r.reported_id == type(^identity_id, :binary_id) or
+            r.reporter_id == type(^identity_id, :binary_id) or
+            r.assigned_to == type(^identity_id, :binary_id)
+      )
+    )
+
+    repo.update_all(
+      from(a in "audit_log", where: a.actor_id == type(^identity_id, :binary_id)),
+      set: [actor_id: nil]
+    )
+
+    {:ok, :cleaned}
+  end
+
+  def purge_dangling_identity_refs(_repo, _identity_id), do: {:ok, :no_identity}
 
   @doc """
   The content owner appeals a takedown. Only the owner may appeal, only while
@@ -534,8 +581,11 @@ defmodule Hybridsocial.Moderation do
   defp restore_badge(%Takedown{target_id: identity_id, category: tier})
        when is_binary(tier) and tier != "" do
     case Hybridsocial.Accounts.get_identity(identity_id) do
-      nil -> {:ok, :no_op}
-      identity -> Hybridsocial.Accounts.admin_update_identity(identity, %{"verification_tier" => tier})
+      nil ->
+        {:ok, :no_op}
+
+      identity ->
+        Hybridsocial.Accounts.admin_update_identity(identity, %{"verification_tier" => tier})
     end
   end
 
@@ -1014,9 +1064,14 @@ defmodule Hybridsocial.Moderation do
 
   defp reactivate_takedown_on_reject(%Appeal{takedown_id: takedown_id}) do
     case get_takedown(takedown_id) do
-      nil -> {:ok, :no_op}
-      %Takedown{status: "appealed"} = td -> td |> Takedown.status_changeset("active") |> Repo.update()
-      _ -> {:ok, :no_op}
+      nil ->
+        {:ok, :no_op}
+
+      %Takedown{status: "appealed"} = td ->
+        td |> Takedown.status_changeset("active") |> Repo.update()
+
+      _ ->
+        {:ok, :no_op}
     end
   end
 

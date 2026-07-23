@@ -46,6 +46,23 @@
     if (videoEl) videoEl.muted = muted;
   });
 
+  // Latest visibility of this clip, as seen by the IntersectionObserver. The
+  // observer only re-fires on an intersection *change*, so toggling autoplay
+  // while a clip is already parked in view wouldn't otherwise reach it.
+  let lastRatio = $state(0);
+
+  // React to the autoplay toggle on the already-mounted clip: turning it off
+  // pauses a playing reel; turning it on starts the one currently in view.
+  $effect(() => {
+    if (!videoEl) return;
+    if (!autoplay) {
+      if (!videoEl.paused) videoEl.pause();
+    } else if (lastRatio >= 0.6 && videoEl.paused) {
+      videoEl.muted = muted;
+      videoEl.play().catch(() => {});
+    }
+  });
+
   function firstFrameSrc(url: string): string {
     return url.includes('#') ? url : `${url}#t=0.1`;
   }
@@ -122,6 +139,7 @@
       (entries) => {
         for (const entry of entries) {
           const ratio = entry.intersectionRatio;
+          lastRatio = ratio;
           if (entry.isIntersecting && ratio >= 0.25 && node.preload === 'none') {
             node.preload = 'metadata';
           }

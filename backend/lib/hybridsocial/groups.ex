@@ -278,11 +278,14 @@ defmodule Hybridsocial.Groups do
       group ->
         Ecto.Multi.new()
         |> Ecto.Multi.delete(:group, group)
-        |> Ecto.Multi.run(:identity, fn _repo, _ ->
-          case group.identity_id && Repo.get(Identity, group.identity_id) do
+        |> Ecto.Multi.run(:refs, fn repo, _ ->
+          Hybridsocial.Moderation.purge_dangling_identity_refs(repo, group.identity_id)
+        end)
+        |> Ecto.Multi.run(:identity, fn repo, _ ->
+          case group.identity_id && repo.get(Identity, group.identity_id) do
             nil -> {:ok, nil}
             false -> {:ok, nil}
-            identity -> Repo.delete(identity)
+            identity -> repo.delete(identity)
           end
         end)
         |> Repo.transaction()
@@ -487,17 +490,25 @@ defmodule Hybridsocial.Groups do
          member when not is_nil(member) <- get_member_by_id(member_id, group_id),
          :ok <- authorize_ban(actor_role, member.role),
          :ok <- ensure_not_sole_owner(group_id, member) do
-      # Only approved members are counted in member_count, so only decrement
-      # when banning one that was actually counted (mirrors insert_member).
-      was_approved = member.status == :approved
+      cond do
+        # Already banned: idempotent no-op so a repeat/concurrent ban can't
+        # double-decrement the counter.
+        member.status == :banned ->
+          {:ok, member}
 
-      case member |> GroupMember.changeset(%{status: :banned}) |> Repo.update() do
-        {:ok, banned} ->
-          if was_approved, do: update_member_count(group_id, -1)
-          {:ok, banned}
+        true ->
+          # Only approved members are counted in member_count, so only decrement
+          # when banning one that was actually counted (mirrors insert_member).
+          was_approved = member.status == :approved
 
-        error ->
-          error
+          case member |> GroupMember.changeset(%{status: :banned}) |> Repo.update() do
+            {:ok, banned} ->
+              if was_approved, do: update_member_count(group_id, -1)
+              {:ok, banned}
+
+            error ->
+              error
+          end
       end
     else
       nil -> {:error, :not_found}

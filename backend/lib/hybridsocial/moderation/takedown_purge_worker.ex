@@ -44,7 +44,9 @@ defmodule Hybridsocial.Moderation.TakedownPurgeWorker do
 
     if purge_enabled?() do
       purged = safely(fn -> Moderation.purge_expired_takedowns() end, "purge")
-      if purged > 0, do: Logger.warning("TakedownPurgeWorker: permanently purged #{purged} takedown(s)")
+
+      if purged > 0,
+        do: Logger.warning("TakedownPurgeWorker: permanently purged #{purged} takedown(s)")
     end
 
     :ok

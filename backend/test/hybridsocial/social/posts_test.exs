@@ -520,7 +520,8 @@ defmodule Hybridsocial.Social.PostsTest do
       author = create_user("td_author", "td_author@test.com")
       admin = create_user("td_admin", "td_admin@test.com")
 
-      {:ok, post} = Posts.create_post(author.id, %{"content" => "bad post", "visibility" => "public"})
+      {:ok, post} =
+        Posts.create_post(author.id, %{"content" => "bad post", "visibility" => "public"})
 
       {:ok, _} = Posts.admin_delete_post(post.id, admin.id, "spam")
 

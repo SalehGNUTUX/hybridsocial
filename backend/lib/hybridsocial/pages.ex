@@ -229,8 +229,22 @@ defmodule Hybridsocial.Pages do
   """
   def purge_page(page_identity_id) do
     case Repo.get(Identity, page_identity_id) do
-      nil -> {:ok, :already_gone}
-      identity -> Repo.delete(identity)
+      nil ->
+        {:ok, :already_gone}
+
+      identity ->
+        # Drop non-cascading references (reports/audit_log) to the org identity
+        # before deleting it, or the delete raises a foreign_key_violation.
+        Ecto.Multi.new()
+        |> Ecto.Multi.run(:refs, fn repo, _ ->
+          Hybridsocial.Moderation.purge_dangling_identity_refs(repo, identity.id)
+        end)
+        |> Ecto.Multi.delete(:identity, identity)
+        |> Repo.transaction()
+        |> case do
+          {:ok, _} -> {:ok, :purged}
+          {:error, _step, reason, _} -> {:error, reason}
+        end
     end
   end
 

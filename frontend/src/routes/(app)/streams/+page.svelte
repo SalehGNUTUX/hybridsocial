@@ -121,7 +121,7 @@
 
   // The composer posts an optimistic reply (temp id) then fires `post-replace`
   // with the real server post. Without handling it, a just-added comment stays
-  // stuck as the pending optimistic object (temp `optimistic-*` id), so
+  // stuck as the pending optimistic object (temp `pending-*` id), so
   // reacting/replying to it targets a non-existent status until the sheet is
   // reopened. Swap it in place.
   function handleCommentReplace(e: Event) {
@@ -219,19 +219,30 @@
     }
   }
 
-  function handlePlay(postId: string, event: Event) {
+  function reportImpression(postId: string, video: HTMLVideoElement) {
     if (viewsReported.has(postId)) return;
 
-    const video = event.currentTarget as HTMLVideoElement;
     // `play` can fire before metadata loads (preload="none"), when duration is
     // still 0/NaN. The backend requires total_duration > 0, so reporting then
-    // 422s and the impression is lost. Wait for a real duration — a later
-    // play/timeupdate carries it, and dedup still guards a single report.
+    // 422s and the impression is lost. Wait for a real duration — the
+    // `loadedmetadata` retry below carries it, and dedup guards a single report.
     const duration = video.duration;
     if (!Number.isFinite(duration) || duration <= 0) return;
 
     viewsReported.add(postId);
     reportView(postId, 0, duration, false, false);
+  }
+
+  function handlePlay(postId: string, event: Event) {
+    reportImpression(postId, event.currentTarget as HTMLVideoElement);
+  }
+
+  // When `play` fired before metadata was ready, its impression was skipped;
+  // once the duration lands, report it — but only if the clip is still playing,
+  // so we never log a view for a video the user scrolled past unplayed.
+  function handleLoadedMetadata(postId: string, event: Event) {
+    const video = event.currentTarget as HTMLVideoElement;
+    if (!video.paused) reportImpression(postId, video);
   }
 
   function handleEnded(postId: string, event: Event) {
@@ -431,6 +442,7 @@
                 aria-label={videoAttachment.description || 'Video stream'}
                 use:lazyVideo={{ autoplay, muted }}
                 onplay={(e) => handlePlay(post.id, e)}
+                onloadedmetadata={(e) => handleLoadedMetadata(post.id, e)}
                 onended={(e) => handleEnded(post.id, e)}
                 onvolumechange={syncMutedFromVideo}
               >

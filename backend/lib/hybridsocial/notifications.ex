@@ -422,21 +422,50 @@ defmodule Hybridsocial.Notifications do
 
   defp push_body(type) do
     case type do
-      "follow" -> "You have a new follower"
-      "follow_request" -> "You have a new follow request"
-      "reaction" -> "Someone reacted to your post"
-      "boost" -> "Your post was boosted"
-      "quote" -> "Your post was quoted"
-      "reply" -> "You have a new reply"
-      "mention" -> "You were mentioned in a post"
-      "poll_ended" -> "A poll you participated in has ended"
-      "group_invite" -> "You have been invited to join a group"
-      "group_application" -> "Someone applied to join your group"
-      "page_invite" -> "You have been invited to manage a page"
-      "report" -> "A new report requires attention"
-      "admin" -> "You have an admin notification"
-      "moderation_takedown" -> "A moderator removed your content — open to see why and how to appeal"
-      _ -> "You have a new notification"
+      "follow" ->
+        "You have a new follower"
+
+      "follow_request" ->
+        "You have a new follow request"
+
+      "reaction" ->
+        "Someone reacted to your post"
+
+      "boost" ->
+        "Your post was boosted"
+
+      "quote" ->
+        "Your post was quoted"
+
+      "reply" ->
+        "You have a new reply"
+
+      "mention" ->
+        "You were mentioned in a post"
+
+      "poll_ended" ->
+        "A poll you participated in has ended"
+
+      "group_invite" ->
+        "You have been invited to join a group"
+
+      "group_application" ->
+        "Someone applied to join your group"
+
+      "page_invite" ->
+        "You have been invited to manage a page"
+
+      "report" ->
+        "A new report requires attention"
+
+      "admin" ->
+        "You have an admin notification"
+
+      "moderation_takedown" ->
+        "A moderator removed your content — open to see why and how to appeal"
+
+      _ ->
+        "You have a new notification"
     end
   end
 

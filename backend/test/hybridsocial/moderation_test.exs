@@ -392,7 +392,11 @@ defmodule Hybridsocial.ModerationTest do
       assert takedown.status == "active"
 
       assert {:ok, appeal} =
-               Moderation.create_takedown_appeal(owner.id, takedown.id, "It was a misunderstanding")
+               Moderation.create_takedown_appeal(
+                 owner.id,
+                 takedown.id,
+                 "It was a misunderstanding"
+               )
 
       assert appeal.action_type == "content_takedown"
       assert appeal.takedown_id == takedown.id
@@ -422,7 +426,9 @@ defmodule Hybridsocial.ModerationTest do
     test "rejecting the appeal leaves the content down and reactivates the window",
          %{owner: owner, staff: staff} do
       {group, takedown} = staff_takedown_group(owner, staff)
-      {:ok, appeal} = Moderation.create_takedown_appeal(owner.id, takedown.id, "please reconsider")
+
+      {:ok, appeal} =
+        Moderation.create_takedown_appeal(owner.id, takedown.id, "please reconsider")
 
       assert {:ok, _} = Moderation.reject_appeal(appeal.id, staff.id, "denied")
 
@@ -474,6 +480,35 @@ defmodule Hybridsocial.ModerationTest do
       assert Moderation.get_takedown(td.id).status == "purged"
     end
 
+    test "purge succeeds even when the group was reported (non-cascading FK)",
+         %{owner: owner, staff: staff} do
+      # A group that survives to auto-purge has very likely been reported, and
+      # reports.reported_id is on_delete: :nothing. Without the reference cleanup
+      # the identity delete raises a foreign_key_violation and the worker
+      # crash-loops, purging nothing. This pins that the purge completes.
+      {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Reported"})
+      identity_id = Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id).identity_id
+      reporter = create_identity("td_reporter", "td_reporter@example.com")
+
+      {:ok, report} =
+        Moderation.create_report(reporter.id, %{
+          "reported_id" => identity_id,
+          "category" => "spam",
+          "target_type" => "group",
+          "target_id" => group.id
+        })
+
+      past = DateTime.add(DateTime.utc_now(), -86_400, :second)
+      td = insert_takedown(owner, staff, group.id, past)
+
+      assert Moderation.purge_expired_takedowns() == 1
+      # The group row, its actor identity, and the blocking report are all gone.
+      assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) == nil
+      assert Hybridsocial.Repo.get(Hybridsocial.Accounts.Identity, identity_id) == nil
+      assert Hybridsocial.Repo.get(Hybridsocial.Moderation.Report, report.id) == nil
+      assert Moderation.get_takedown(td.id).status == "purged"
+    end
+
     test "purge_expired_takedowns leaves a takedown whose window hasn't passed",
          %{owner: owner, staff: staff} do
       {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Safe"})
@@ -489,7 +524,10 @@ defmodule Hybridsocial.ModerationTest do
       {:ok, group} = Hybridsocial.Groups.create_group(owner.id, %{"name" => "Under appeal"})
       past = DateTime.add(DateTime.utc_now(), -86_400, :second)
       td = insert_takedown(owner, staff, group.id, past)
-      td |> Hybridsocial.Moderation.Takedown.status_changeset("appealed") |> Hybridsocial.Repo.update!()
+
+      td
+      |> Hybridsocial.Moderation.Takedown.status_changeset("appealed")
+      |> Hybridsocial.Repo.update!()
 
       assert Moderation.purge_expired_takedowns() == 0
       assert Hybridsocial.Repo.get(Hybridsocial.Groups.Group, group.id) != nil
@@ -508,6 +546,7 @@ defmodule Hybridsocial.ModerationTest do
     })
     |> Hybridsocial.Repo.insert!()
   end
+
   # ── Verified-badge revocation takedowns ──────────────────────────────
 
   describe "open_badge_takedown/5" do
@@ -538,7 +577,13 @@ defmodule Hybridsocial.ModerationTest do
     test "granting or upgrading a badge does not open a takedown",
          %{owner: owner, admin: admin} do
       assert {:ok, :noop} =
-               Moderation.open_badge_takedown(owner.id, admin.id, "free", "verified_pro", "granted")
+               Moderation.open_badge_takedown(
+                 owner.id,
+                 admin.id,
+                 "free",
+                 "verified_pro",
+                 "granted"
+               )
     end
 
     test "revoking without a reason does not open a takedown",

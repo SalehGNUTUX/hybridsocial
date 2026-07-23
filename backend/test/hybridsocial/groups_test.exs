@@ -448,9 +448,7 @@ defmodule Hybridsocial.GroupsTest do
       assert {:error, :owner_must_transfer} = Groups.ban_member(group.id, alice.id, owner.id)
       assert Groups.member_role(group.id, alice.id) == :owner
     end
-  end
 
-  describe "ban_member/3" do
     test "admin can ban member", %{alice: alice, bob: bob} do
       {:ok, group} = Groups.create_group(alice.id, %{"name" => "Group"})
       {:ok, member} = Groups.join_group(group.id, bob.id)
