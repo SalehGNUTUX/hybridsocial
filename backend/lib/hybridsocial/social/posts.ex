@@ -1633,6 +1633,11 @@ defmodule Hybridsocial.Social.Posts do
         post_identity_id: post.identity_id
       })
 
+      # A staff removal with a reason is a takedown: notify the author with the
+      # reason and open the appeal window. (Owner-initiated delete_post/2 is a
+      # separate path and never lands here.)
+      maybe_open_post_takedown(post, admin_id, reason)
+
       # Publish Delete activity for federated posts
       if post.ap_id do
         try do
@@ -1645,6 +1650,20 @@ defmodule Hybridsocial.Social.Posts do
 
       {:ok, post}
     end
+  end
+
+  defp maybe_open_post_takedown(post, moderator_id, reason) do
+    if is_binary(reason) and reason != "" and post.identity_id do
+      Hybridsocial.Moderation.create_takedown(%{
+        target_type: "post",
+        target_id: post.id,
+        owner_id: post.identity_id,
+        moderator_id: moderator_id,
+        reason: reason
+      })
+    end
+
+    :ok
   end
 
   defp do_admin_soft_delete(%Post{deleted_at: nil} = post) do
