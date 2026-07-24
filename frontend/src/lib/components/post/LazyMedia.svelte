@@ -3,6 +3,7 @@
   import { autoLoadRemoteMedia } from '$lib/utils/media-preferences.js';
   import { onMount } from 'svelte';
   import AudioPlayer from './AudioPlayer.svelte';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     media,
@@ -111,7 +112,7 @@
       controls
       preload="metadata"
       class="media-video"
-      aria-label={media.description || 'Video attachment'}
+      aria-label={media.description || $t('media.video_attachment')}
     >
       <track kind="captions" />
     </video>
@@ -124,12 +125,12 @@
     class="lazy-placeholder"
     onclick={reveal}
     onkeydown={handleKeydown}
-    aria-label={`Load ${media.type} from ${originDomain}`}
+    aria-label={$t('media.load_from', { type: media.type, domain: originDomain })}
   >
     <span class="material-symbols-outlined lazy-icon" aria-hidden="true">{typeIcon}</span>
-    <span class="lazy-cta">Tap to load {media.type}</span>
+    <span class="lazy-cta">{$t('media.tap_to_load', { type: media.type })}</span>
     {#if originDomain}
-      <span class="lazy-meta">from {originDomain}{dimensionsLabel ? ` · ${dimensionsLabel}` : ''}</span>
+      <span class="lazy-meta">{$t('media.from', { domain: originDomain })}{dimensionsLabel ? ` · ${dimensionsLabel}` : ''}</span>
     {/if}
     {#if media.description}
       <span class="lazy-desc">{media.description}</span>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl, type YouTubeRef } from '$lib/utils/youtube.js';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     ref,
@@ -88,7 +89,7 @@
       bind:this={iframeEl}
       class="yt-frame"
       src={youtubeEmbedUrl(ref)}
-      title={title || 'YouTube video'}
+      title={title || $t('youtube.video')}
       loading="lazy"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
       referrerpolicy="strict-origin-when-cross-origin"
@@ -100,7 +101,7 @@
       class="yt-poster"
       onclick={play}
       onkeydown={onKey}
-      aria-label={title ? `Play video: ${title}` : 'Play YouTube video'}
+      aria-label={title ? $t('youtube.play_titled', { title }) : $t('youtube.play')}
     >
       {#if ref.id && !thumbBroken}
         <img

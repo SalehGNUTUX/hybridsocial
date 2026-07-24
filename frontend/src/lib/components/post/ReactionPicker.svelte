@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { currentUser } from '$lib/stores/auth.js';
   import { getPremiumReactions, type PremiumReactionsResponse } from '$lib/api/conversations.js';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     selected = null,
@@ -14,15 +15,15 @@
   // The fixed 7 default reactions every user can pick. The user-asked
   // canonical set: thumbs-up Like, ❤ Love, 🤯 Wow, 🥰 Care, 😡 Angry,
   // 😢 Sad, 😂 LOL.
-  const defaultReactions = [
-    { emoji: '\u{1F44D}', type: 'like', label: 'Like' },
-    { emoji: '\u{2764}\u{FE0F}', type: 'love', label: 'Love' },
-    { emoji: '\u{1F92F}', type: 'wow', label: 'Wow' },
-    { emoji: '\u{1F970}', type: 'care', label: 'Care' },
-    { emoji: '\u{1F621}', type: 'angry', label: 'Angry' },
-    { emoji: '\u{1F622}', type: 'sad', label: 'Sad' },
-    { emoji: '\u{1F602}', type: 'lol', label: 'LOL' },
-  ];
+  let defaultReactions = $derived([
+    { emoji: '\u{1F44D}', type: 'like', label: $t('reaction.like') },
+    { emoji: '\u{2764}\u{FE0F}', type: 'love', label: $t('reaction.love') },
+    { emoji: '\u{1F92F}', type: 'wow', label: $t('reaction.wow') },
+    { emoji: '\u{1F970}', type: 'care', label: $t('reaction.care') },
+    { emoji: '\u{1F621}', type: 'angry', label: $t('reaction.angry') },
+    { emoji: '\u{1F622}', type: 'sad', label: $t('reaction.sad') },
+    { emoji: '\u{1F602}', type: 'lol', label: $t('reaction.lol') },
+  ]);
 
   // Premium reactions come from the admin-curated catalog
   // (/api/v1/premium_reactions). They render alongside the defaults
@@ -72,7 +73,7 @@
 <div
   class="reaction-picker"
   role="group"
-  aria-label="Reactions"
+  aria-label={$t('post.reactions')}
   onclick={(e) => e.stopPropagation()}
 >
   {#each reactions as reaction, i (reaction.type)}
@@ -84,9 +85,9 @@
       style="animation-delay: {80 + i * 40}ms"
       onclick={(e) => handleClick(e, reaction.type, reaction.premium)}
       onkeydown={(e) => handleKeydown(e, reaction.type, reaction.premium)}
-      aria-label={reaction.premium && !isPremiumUser ? `${reaction.label} (premium)` : reaction.label}
+      aria-label={reaction.premium && !isPremiumUser ? $t('reaction.premium_aria', { label: reaction.label }) : reaction.label}
       aria-pressed={selected === reaction.type}
-      title={reaction.premium && !isPremiumUser ? `${reaction.label} — premium tier only` : reaction.label}
+      title={reaction.premium && !isPremiumUser ? $t('reaction.premium_title', { label: reaction.label }) : reaction.label}
       disabled={reaction.premium && !isPremiumUser}
     >
       {#if reaction.image}

@@ -8,9 +8,10 @@
 
   import { currentUser } from '$lib/stores/auth.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
-    placeholder = 'Write something...',
+    placeholder = '',
     groupId = null,
     pageId = null,
     contextLabel = '',
@@ -20,6 +21,8 @@
     pageId?: string | null;
     contextLabel?: string;
   } = $props();
+
+  let effectivePlaceholder = $derived(placeholder || $t('composer.trigger_placeholder'));
 
   function open() {
     const detail: Record<string, unknown> = { contextLabel };
@@ -41,16 +44,16 @@
   class="composer-trigger"
   onclick={open}
   onkeydown={handleKey}
-  aria-label={contextLabel || placeholder}
+  aria-label={contextLabel || effectivePlaceholder}
 >
   <div class="composer-trigger-avatar">
     <Avatar
       src={$currentUser?.avatar_url ?? null}
-      name={$currentUser?.display_name || $currentUser?.handle || 'You'}
+      name={$currentUser?.display_name || $currentUser?.handle || $t('composer.you')}
       size="md"
     />
   </div>
-  <span class="composer-trigger-placeholder">{placeholder}</span>
+  <span class="composer-trigger-placeholder">{effectivePlaceholder}</span>
 </button>
 
 <style>
