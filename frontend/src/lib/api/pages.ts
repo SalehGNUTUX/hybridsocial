@@ -55,8 +55,12 @@ export function updatePage(id: string, data: any): Promise<any> {
   return api.patch(`/api/v1/pages/${id}`, data);
 }
 
-export function deletePage(id: string): Promise<void> {
-  return api.delete(`/api/v1/pages/${id}`);
+// As with groups: a staff deletion of someone else's page with a `reason`
+// opens a takedown + notifies the owner (appealable). An owner deleting
+// their own page passes none.
+export function deletePage(id: string, opts?: { reason?: string }): Promise<void> {
+  const body = opts?.reason ? { reason: opts.reason } : undefined;
+  return api.delete(`/api/v1/pages/${id}`, body);
 }
 
 // --- Roles ---

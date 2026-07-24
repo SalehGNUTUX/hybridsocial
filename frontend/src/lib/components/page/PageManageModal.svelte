@@ -66,6 +66,8 @@
   // Danger zone
   let deleteConfirmation = $state('');
   let deleting = $state(false);
+  // Staff-takedown reason — shown to the page owner, opens their appeal window.
+  let deleteReason = $state('');
 
   let pageId = $derived(
     typeof page?.id === 'string' ? (page!.id as string) : '',
@@ -85,6 +87,9 @@
   // moderation, not this modal.
   let isOwner = $derived(viewerRole === 'owner');
   let canDelete = $derived(isOwner || isStaff);
+  // A moderation takedown (staff, not the page's own owner) → require + send
+  // a reason so the owner is notified and can appeal before permanent deletion.
+  let isTakedown = $derived(isStaff && !isOwner);
 
   $effect(() => {
     if (!page) return;
@@ -259,9 +264,11 @@
 
   async function handleDelete() {
     if (deleteConfirmation !== pageDisplayName) return;
+    const reason = deleteReason.trim();
+    if (isTakedown && reason.length < 10) return;
     deleting = true;
     try {
-      await deletePage(pageId);
+      await deletePage(pageId, isTakedown && reason ? { reason } : undefined);
       open = false;
       ondeleted?.();
     } catch {
@@ -534,11 +541,30 @@
       {:else if section === 'danger'}
         <h3 class="section-title section-title-danger">Danger zone</h3>
         <p class="section-help">
-          Deleting the page removes its posts, manager assignments, and any pending invites.
-          This cannot be undone.
+          {#if isTakedown}
+            As an instance moderator, deleting this page notifies its owner with the
+            reason below and gives them a window to appeal for restoration before it is
+            permanently removed.
+          {:else}
+            Deleting the page removes its posts, manager assignments, and any pending invites.
+            This cannot be undone.
+          {/if}
         </p>
 
         <div class="danger-card">
+          {#if isTakedown}
+            <label class="danger-reason-label" for="page-takedown-reason">
+              Reason for the owner <span class="danger-required">required</span>
+            </label>
+            <textarea
+              id="page-takedown-reason"
+              class="input danger-reason"
+              rows="3"
+              maxlength="2000"
+              placeholder="Explain why this page is being removed — the owner sees this."
+              bind:value={deleteReason}
+            ></textarea>
+          {/if}
           <p class="danger-text">
             Type <strong>{pageDisplayName}</strong> to confirm.
           </p>
@@ -551,7 +577,9 @@
           <button
             class="btn btn-danger"
             type="button"
-            disabled={deleting || deleteConfirmation !== pageDisplayName}
+            disabled={deleting ||
+              deleteConfirmation !== pageDisplayName ||
+              (isTakedown && deleteReason.trim().length < 10)}
             onclick={handleDelete}
           >
             {deleting ? 'Deleting…' : 'Delete page'}
@@ -857,5 +885,28 @@
     margin: 0;
     color: var(--color-text);
     font-size: var(--text-sm);
+  }
+
+  .danger-reason-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .danger-required {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--color-danger);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .danger-reason {
+    resize: vertical;
+    min-height: 4.5rem;
+    font: inherit;
   }
 </style>

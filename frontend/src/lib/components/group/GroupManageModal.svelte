@@ -80,10 +80,15 @@
 
   // Danger Zone — typed-name confirmation prevents accidental deletes.
   let deleteConfirmation = $state('');
+  // Staff-takedown reason — shown to the owner and starts their appeal window.
+  let deleteReason = $state('');
   let deleting = $state(false);
 
   let isOwner = $derived(group?.role === 'owner');
   let canDelete = $derived(isOwner || isStaff);
+  // This deletion is a moderation takedown (not an owner tearing down their
+  // own group) → require + send a reason so the owner is notified and can appeal.
+  let isTakedown = $derived(isStaff && !isOwner);
   let groupId = $derived(group?.id ?? '');
   // Members across the conversation get tagged as "needs reviewing"
   // when applications exist; show the Applications section only if
@@ -309,9 +314,13 @@
 
   async function handleDelete() {
     if (deleteConfirmation !== group?.name) return;
+    // A staff takedown must carry a reason — it's shown to the owner and
+    // opens their appeal window. Owners deleting their own group don't.
+    const reason = deleteReason.trim();
+    if (isTakedown && reason.length < 10) return;
     deleting = true;
     try {
-      await deleteGroup(groupId);
+      await deleteGroup(groupId, isTakedown && reason ? { reason } : undefined);
       open = false;
       ondeleted?.();
     } catch {
@@ -644,10 +653,29 @@
       {:else if section === 'danger'}
         <h3 class="section-title section-title-danger">Danger zone</h3>
         <p class="section-help">
-          Deleting the group removes its posts and memberships. This cannot be undone.
+          {#if isTakedown}
+            As an instance moderator, deleting this group notifies its owner with the
+            reason below and gives them a window to appeal for restoration before it is
+            permanently removed.
+          {:else}
+            Deleting the group removes its posts and memberships. This cannot be undone.
+          {/if}
         </p>
 
         <div class="danger-card">
+          {#if isTakedown}
+            <label class="danger-reason-label" for="group-takedown-reason">
+              Reason for the owner <span class="danger-required">required</span>
+            </label>
+            <textarea
+              id="group-takedown-reason"
+              class="input danger-reason"
+              rows="3"
+              maxlength="2000"
+              placeholder="Explain why this group is being removed — the owner sees this."
+              bind:value={deleteReason}
+            ></textarea>
+          {/if}
           <p class="danger-text">
             Type <strong>{group?.name ?? ''}</strong> to confirm.
           </p>
@@ -660,7 +688,9 @@
           <button
             class="btn btn-danger"
             type="button"
-            disabled={deleting || deleteConfirmation !== group?.name}
+            disabled={deleting ||
+              deleteConfirmation !== group?.name ||
+              (isTakedown && deleteReason.trim().length < 10)}
             onclick={handleDelete}
           >
             {deleting ? 'Deleting…' : 'Delete group'}
@@ -998,5 +1028,28 @@
     margin: 0;
     color: var(--color-text);
     font-size: var(--text-sm);
+  }
+
+  .danger-reason-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .danger-required {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--color-danger);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .danger-reason {
+    resize: vertical;
+    min-height: 4.5rem;
+    font: inherit;
   }
 </style>
