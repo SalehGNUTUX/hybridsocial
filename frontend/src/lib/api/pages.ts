@@ -63,6 +63,16 @@ export function deletePage(id: string, opts?: { reason?: string }): Promise<void
   return api.delete(`/api/v1/pages/${id}`, body);
 }
 
+// Staff-only: soft-deleted pages and restoring one (moderator side of the
+// takedown appeal loop). Loosely typed to match the rest of this module.
+export function listDeletedPages(): Promise<any[]> {
+  return api.get<any[]>('/api/v1/pages/deleted');
+}
+
+export function restorePage(id: string): Promise<any> {
+  return api.post<any>(`/api/v1/pages/${id}/restore`);
+}
+
 // --- Roles ---
 
 export function getPageRoles(id: string): Promise<PageRole[]> {

@@ -103,6 +103,16 @@ export function deleteGroup(id: string, opts?: { reason?: string }): Promise<voi
   return api.delete(`/api/v1/groups/${id}`, body);
 }
 
+// Staff-only: soft-deleted groups (from a takedown or owner deletion) and
+// restoring one — the moderator side of the takedown appeal loop.
+export function listDeletedGroups(): Promise<Group[]> {
+  return api.get<Group[]>('/api/v1/groups/deleted');
+}
+
+export function restoreGroup(id: string): Promise<Group> {
+  return api.post<Group>(`/api/v1/groups/${id}/restore`);
+}
+
 export function joinGroup(id: string): Promise<{ status: 'joined' | 'pending' }> {
   return api.post(`/api/v1/groups/${id}/join`);
 }

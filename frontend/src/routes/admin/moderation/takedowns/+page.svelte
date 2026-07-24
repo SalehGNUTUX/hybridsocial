@@ -1,0 +1,397 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { getAdminSettings, updateAdminSettings } from '$lib/api/admin.js';
+  import { listDeletedGroups, restoreGroup } from '$lib/api/groups.js';
+  import { listDeletedPages, restorePage } from '$lib/api/pages.js';
+  import type { Group } from '$lib/api/types.js';
+  import { addToast } from '$lib/stores/toast.js';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
+
+  // ── Auto-purge safety settings ──────────────────────────────────────
+  // The 60-day permanent-deletion worker is opt-in: it only hard-deletes
+  // when `takedown_purge_enabled` is truthy (default off). Until an admin
+  // turns it on, appealed/un-appealed takedowns are kept indefinitely and
+  // only the pre-deletion reminder fires.
+  let settingsLoading = $state(true);
+  let savingSettings = $state(false);
+  let purgeEnabled = $state(false);
+  let retentionDays = $state(60);
+  let reminderLeadDays = $state(7);
+
+  function readBool(v: unknown): boolean {
+    return v === true || v === 'true' || v === '1';
+  }
+  function readInt(v: unknown, fallback: number): number {
+    const n = typeof v === 'number' ? v : parseInt(String(v ?? ''), 10);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  }
+
+  async function loadSettings() {
+    settingsLoading = true;
+    try {
+      const rows = await getAdminSettings();
+      const byKey = new Map(rows.map((r) => [r.key, r.value as unknown]));
+      if (byKey.has('takedown_purge_enabled')) purgeEnabled = readBool(byKey.get('takedown_purge_enabled'));
+      if (byKey.has('takedown_retention_days')) retentionDays = readInt(byKey.get('takedown_retention_days'), 60);
+      if (byKey.has('takedown_reminder_lead_days')) reminderLeadDays = readInt(byKey.get('takedown_reminder_lead_days'), 7);
+    } catch {
+      addToast('Failed to load takedown settings', 'error');
+    } finally {
+      settingsLoading = false;
+    }
+  }
+
+  async function saveSettings() {
+    if (savingSettings) return;
+    savingSettings = true;
+    try {
+      await updateAdminSettings([
+        { key: 'takedown_purge_enabled', value: purgeEnabled },
+        { key: 'takedown_retention_days', value: Math.max(1, Math.round(retentionDays)) },
+        { key: 'takedown_reminder_lead_days', value: Math.max(0, Math.round(reminderLeadDays)) },
+      ]);
+      addToast('Takedown settings saved', 'success');
+    } catch {
+      addToast('Failed to save settings', 'error');
+    } finally {
+      savingSettings = false;
+    }
+  }
+
+  // ── Deleted content — restore ───────────────────────────────────────
+  let groupsLoading = $state(true);
+  let pagesLoading = $state(true);
+  let deletedGroups = $state<Group[]>([]);
+  let deletedPages = $state<Array<{ id: string; display_name?: string; handle?: string }>>([]);
+  let restoringId = $state<string | null>(null);
+
+  async function loadDeleted() {
+    groupsLoading = true;
+    pagesLoading = true;
+    try {
+      deletedGroups = await listDeletedGroups();
+    } catch {
+      addToast('Failed to load deleted groups', 'error');
+    } finally {
+      groupsLoading = false;
+    }
+    try {
+      deletedPages = await listDeletedPages();
+    } catch {
+      addToast('Failed to load deleted pages', 'error');
+    } finally {
+      pagesLoading = false;
+    }
+  }
+
+  async function handleRestoreGroup(g: Group) {
+    if (restoringId) return;
+    restoringId = g.id;
+    try {
+      await restoreGroup(g.id);
+      deletedGroups = deletedGroups.filter((x) => x.id !== g.id);
+      addToast('Group restored', 'success');
+    } catch {
+      addToast('Could not restore group', 'error');
+    } finally {
+      restoringId = null;
+    }
+  }
+
+  async function handleRestorePage(p: { id: string }) {
+    if (restoringId) return;
+    restoringId = p.id;
+    try {
+      await restorePage(p.id);
+      deletedPages = deletedPages.filter((x) => x.id !== p.id);
+      addToast('Page restored', 'success');
+    } catch {
+      addToast('Could not restore page', 'error');
+    } finally {
+      restoringId = null;
+    }
+  }
+
+  function pageName(p: { display_name?: string; handle?: string }): string {
+    return p.display_name || p.handle || 'Untitled page';
+  }
+
+  onMount(() => {
+    loadSettings();
+    loadDeleted();
+  });
+</script>
+
+<div class="tk-page">
+  <header class="tk-header">
+    <h1 class="tk-title">Takedowns</h1>
+    <p class="tk-lead">
+      When staff remove a group or page, the owner is notified and can appeal. Restore appealed
+      or mistaken removals here, and control whether un-appealed takedowns are ever permanently
+      deleted.
+    </p>
+  </header>
+
+  <!-- Auto-purge safety controls -->
+  <section class="tk-card">
+    <h2 class="tk-card-title">Automatic permanent deletion</h2>
+    {#if settingsLoading}
+      <div class="tk-center"><Spinner /></div>
+    {:else}
+      <label class="tk-toggle">
+        <input type="checkbox" bind:checked={purgeEnabled} />
+        <span>
+          <strong>Permanently delete un-appealed takedowns</strong>
+          <span class="tk-toggle-hint">
+            When on, content still under a takedown past its window is <em>irreversibly</em> deleted
+            by the hourly worker. When off (the default), nothing is ever auto-deleted — owners
+            keep the ability to appeal indefinitely.
+          </span>
+        </span>
+      </label>
+
+      {#if purgeEnabled}
+        <p class="tk-warning" role="alert">
+          ⚠ Irreversible. Once enabled, groups and pages whose owners never appealed within the
+          retention window are permanently removed — their posts and memberships cannot be
+          recovered.
+        </p>
+      {/if}
+
+      <div class="tk-fields">
+        <label class="tk-field">
+          <span>Retention window (days)</span>
+          <input type="number" min="1" bind:value={retentionDays} />
+          <span class="tk-field-hint">Days an owner has to appeal before a takedown can be purged.</span>
+        </label>
+        <label class="tk-field">
+          <span>Reminder lead time (days)</span>
+          <input type="number" min="0" bind:value={reminderLeadDays} />
+          <span class="tk-field-hint">Send the owner a “final reminder” this many days before deletion.</span>
+        </label>
+      </div>
+
+      <div class="tk-actions">
+        <button type="button" class="btn btn-primary" onclick={saveSettings} disabled={savingSettings}>
+          {savingSettings ? 'Saving…' : 'Save settings'}
+        </button>
+      </div>
+    {/if}
+  </section>
+
+  <!-- Deleted groups -->
+  <section class="tk-card">
+    <h2 class="tk-card-title">Deleted groups</h2>
+    {#if groupsLoading}
+      <div class="tk-center"><Spinner /></div>
+    {:else if deletedGroups.length === 0}
+      <p class="tk-empty">No deleted groups.</p>
+    {:else}
+      <ul class="tk-list">
+        {#each deletedGroups as g (g.id)}
+          <li class="tk-item">
+            <span class="tk-item-name">{g.name}</span>
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              onclick={() => handleRestoreGroup(g)}
+              disabled={restoringId === g.id}
+            >
+              {restoringId === g.id ? 'Restoring…' : 'Restore'}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  <!-- Deleted pages -->
+  <section class="tk-card">
+    <h2 class="tk-card-title">Deleted pages</h2>
+    {#if pagesLoading}
+      <div class="tk-center"><Spinner /></div>
+    {:else if deletedPages.length === 0}
+      <p class="tk-empty">No deleted pages.</p>
+    {:else}
+      <ul class="tk-list">
+        {#each deletedPages as p (p.id)}
+          <li class="tk-item">
+            <span class="tk-item-name">{pageName(p)}</span>
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              onclick={() => handleRestorePage(p)}
+              disabled={restoringId === p.id}
+            >
+              {restoringId === p.id ? 'Restoring…' : 'Restore'}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  <p class="tk-footnote">
+    Reviewing an owner's appeal? Approving it on the <a href="/admin/user-management/appeals">Appeals</a>
+    page restores the content automatically.
+  </p>
+</div>
+
+<style>
+  .tk-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4, 16px);
+    max-width: 720px;
+  }
+
+  .tk-title {
+    font-size: var(--text-xl, 1.25rem);
+    font-weight: 700;
+    margin: 0 0 var(--space-1, 4px);
+  }
+
+  .tk-lead {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm, 0.875rem);
+    line-height: 1.5;
+  }
+
+  .tk-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 8px);
+    background: var(--color-surface);
+    padding: var(--space-4, 16px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 12px);
+  }
+
+  .tk-card-title {
+    font-size: var(--text-md, 1rem);
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .tk-center {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-4, 16px);
+  }
+
+  .tk-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3, 12px);
+    cursor: pointer;
+  }
+
+  .tk-toggle input {
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+
+  .tk-toggle > span {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1, 4px);
+  }
+
+  .tk-toggle-hint {
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+  }
+
+  .tk-warning {
+    margin: 0;
+    padding: var(--space-3, 12px);
+    border-radius: var(--radius-md, 8px);
+    background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+    color: var(--color-danger);
+    font-size: var(--text-sm, 0.875rem);
+    line-height: 1.5;
+  }
+
+  .tk-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4, 16px);
+  }
+
+  .tk-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1, 4px);
+    flex: 1 1 220px;
+  }
+
+  .tk-field > span:first-child {
+    font-size: var(--text-sm, 0.875rem);
+    font-weight: 600;
+  }
+
+  .tk-field input {
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 8px);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    max-width: 8rem;
+  }
+
+  .tk-field-hint {
+    font-size: var(--text-xs, 0.75rem);
+    color: var(--color-text-tertiary);
+    line-height: 1.4;
+  }
+
+  .tk-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .tk-empty {
+    margin: 0;
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm, 0.875rem);
+  }
+
+  .tk-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 8px);
+  }
+
+  .tk-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3, 12px);
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 8px);
+    background: var(--color-surface-alt, transparent);
+  }
+
+  .tk-item-name {
+    font-weight: 500;
+    word-break: break-word;
+  }
+
+  .tk-footnote {
+    margin: 0;
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--color-text-secondary);
+  }
+
+  .tk-footnote a {
+    color: var(--color-primary);
+  }
+</style>
