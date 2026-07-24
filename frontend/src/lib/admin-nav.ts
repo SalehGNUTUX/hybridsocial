@@ -47,6 +47,7 @@ export const adminSections: AdminSection[] = [
     items: [
       { href: '/admin/moderation', label: 'Reports & queue', description: 'Reports, verifications, auto-flags, blocklists', icon: 'M12 3l8 4v5c0 4.5-3.4 7.9-8 9-4.6-1.1-8-4.5-8-9V7zM9.5 12l1.8 1.8 3.5-3.6', permission: 'reports.view' },
       { href: '/admin/user-management/appeals', label: 'Appeals', description: 'Suspended members asking for review', icon: 'M3 6l3 1m0 0l-3 9a5 5 0 006 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5 5 0 006 0M18 7l3 9m-9-14v18', permission: 'users.view', badge: 'appeals' },
+      { href: '/admin/moderation/takedowns', label: 'Takedowns', description: 'Restore removed groups and pages, and control auto-deletion', icon: 'M12 3l8 4v5c0 4.5-3.4 7.9-8 9-4.6-1.1-8-4.5-8-9V7zM9 12l2 2 4-4', permission: 'reports.view' },
     ],
   },
   {
