@@ -337,6 +337,14 @@
   // owner is always the post's author. Defaults to 4 if limits aren't
   // populated yet (matches the composer's fallback).
   let editMediaMax = $derived($currentUser?.limits?.media_per_post ?? 4);
+  // Markdown opt-down — same tier gate as the composer. Free-tier users
+  // post plaintext by server policy and never see the toggle; markdown
+  // tiers may opt a specific edit down to plain text via `markdown: false`,
+  // which the backend honors in resolve_markdown_level. Defaults ON (parity
+  // with the composer), so an editor must deliberately opt down.
+  let editMarkdownLevel = $derived(($currentUser?.limits as { markdown?: string } | undefined)?.markdown ?? 'basic');
+  let editCanMarkdown = $derived(!!editMarkdownLevel && editMarkdownLevel !== 'none');
+  let editMarkdownEnabled = $state(true);
 
   function startEditing() {
     editContent = post.content || '';
@@ -344,6 +352,7 @@
     editShowCW = !!(post.spoiler_text && post.spoiler_text.length > 0);
     editSensitive = !!post.sensitive;
     editMedia = [...(post.media_attachments || [])];
+    editMarkdownEnabled = true;
     editError = '';
     editing = true;
   }
@@ -414,6 +423,9 @@
         sensitive: editSensitive || (editShowCW && !!editSpoilerText.trim()),
         spoiler_text: editShowCW ? editSpoilerText : '',
         media_ids: editMedia.map((m) => m.id),
+        // Opt this edit down to plain text (tier default is otherwise applied
+        // server-side, which would re-interpret ** / # on every edit).
+        ...(editCanMarkdown && !editMarkdownEnabled ? { markdown: false } : {}),
       });
       post.content = updated.content;
       post.content_html = updated.content_html;
@@ -1215,6 +1227,25 @@
         >
           NSFW
         </button>
+
+        {#if editCanMarkdown}
+          <!-- Markdown opt-down, tier-gated (mirrors the composer). When
+               off, this edit is stored and rendered as plain text even if
+               the body contains ** or # characters. -->
+          <button
+            type="button"
+            class="edit-tool"
+            class:edit-tool-active={editMarkdownEnabled}
+            onclick={() => (editMarkdownEnabled = !editMarkdownEnabled)}
+            aria-pressed={editMarkdownEnabled}
+            aria-label="Toggle markdown formatting"
+            title={editMarkdownEnabled
+              ? 'Markdown on — click to save as plain text'
+              : 'Markdown off — click to enable'}
+          >
+            MD
+          </button>
+        {/if}
 
         {#if editMediaUploading}
           <span class="edit-uploading">Uploading…</span>
