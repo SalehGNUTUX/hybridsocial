@@ -19,6 +19,8 @@
   import { renderCustomEmojis } from '$lib/utils/custom-emoji.js';
   import DisplayName from '$lib/components/DisplayName.svelte';
   import { filterBadges, type Badge } from '$lib/utils/badges.js';
+  import { t } from '$lib/stores/i18n.js';
+  import { t as translate } from '$lib/utils/i18n.js';
 
   // Seeded PRNG from post ID for deterministic wave patterns
   function seededRng(seed: string) {
@@ -370,7 +372,7 @@
         } else {
           if (!firstErr) {
             const body = (r.reason as { body?: { error?: string } })?.body;
-            firstErr = body?.error || 'Upload failed';
+            firstErr = body?.error || translate('post.upload_failed');
           }
         }
       }
@@ -423,7 +425,7 @@
       post.media_attachments = updated.media_attachments;
       editing = false;
     } catch {
-      editError = 'Failed to save edit. Please try again.';
+      editError = translate('post.edit_save_failed');
     } finally {
       editSaving = false;
     }
@@ -569,7 +571,7 @@
       window.dispatchEvent(
         new CustomEvent('toast', {
           detail: {
-            message: 'Cancel your pending vote or wait for it to submit.',
+            message: translate('poll.pending_vote_warning'),
             type: 'warning',
           },
         }),
@@ -664,7 +666,7 @@
 <article class="post-card post-tombstone" role="article">
   <div class="tombstone-content">
     <span class="material-symbols-outlined tombstone-icon">delete</span>
-    <p class="tombstone-text">This post has been deleted</p>
+    <p class="tombstone-text">{$t('post.deleted')}</p>
   </div>
 </article>
 {:else}
@@ -679,7 +681,7 @@
   tabindex={detail ? -1 : 0}
   onclick={handleCardClick}
   onkeydown={handleCardKeydown}
-  aria-label="Post by {displayName}"
+  aria-label={$t('post.post_by_aria', { name: displayName })}
 >
   <div class="post-layout">
     <!-- Avatar column -->
@@ -691,13 +693,13 @@
     <div class="post-content-col">
       {#if pinnedHere}
         {@const pinTitle = post.group
-          ? `Pinned in ${post.group.name}`
+          ? $t('post.pinned_in_named', { name: post.group.name })
           : post.page
-            ? `Pinned on ${post.page.name}`
-            : 'Pinned to profile'}
+            ? $t('post.pinned_on_named', { name: post.page.name })
+            : $t('post.pinned_profile')}
         <div class="post-pinned-indicator" title={pinTitle}>
           <span class="material-symbols-outlined pinned-icon" aria-hidden="true">push_pin</span>
-          <span>Pinned</span>
+          <span>{$t('post.pinned_badge')}</span>
         </div>
       {/if}
       <div class="post-author-line">
@@ -731,12 +733,12 @@
               <time class="post-time" datetime={post.created_at} title={fullDate}>{timeAgo}</time>
             </a>
             {#if post.edited_at}
-              <span class="post-edited" title="Edited {fullDateTime(post.edited_at)}">(edited)</span>
+              <span class="post-edited" title={$t('post.edited_at_title', { date: fullDateTime(post.edited_at) })}>{$t('post.edited_marker')}</span>
             {/if}
             {#if post.pending}
               <span class="post-pending-badge" aria-live="polite">
                 <span class="spinner" aria-hidden="true"></span>
-                Posting…
+                {$t('post.posting')}
               </span>
             {/if}
           </div>
@@ -750,13 +752,13 @@
         {@const g = (post as any).group}
         <a class="post-scope-chip" href={`/groups/${g.id}`} onclick={(e) => e.stopPropagation()}>
           <span class="material-symbols-outlined" aria-hidden="true">groups</span>
-          <span class="post-scope-label">Posted in <strong>{g.name}</strong></span>
+          <span class="post-scope-label">{$t('post.posted_in')} <strong>{g.name}</strong></span>
         </a>
       {:else if (post as any).page}
         {@const p = (post as any).page}
         <a class="post-scope-chip" href={`/pages/${p.id}`} onclick={(e) => e.stopPropagation()}>
           <span class="material-symbols-outlined" aria-hidden="true">description</span>
-          <span class="post-scope-label">Posted on <strong>{p.name}</strong></span>
+          <span class="post-scope-label">{$t('post.posted_on')} <strong>{p.name}</strong></span>
         </a>
       {/if}
 
@@ -770,20 +772,22 @@
               onclick={(e) => { e.stopPropagation(); openParentLightbox(); }}
               disabled={parentLightboxLoading}
               aria-label={post.target_media_index
-                ? `Open image #${post.target_media_index}`
-                : 'Open the targeted image'}
+                ? $t('post.open_image_n', { n: post.target_media_index })
+                : $t('post.open_targeted_image')}
             >
               {#if post.target_media_preview_url}
                 <img class="reply-target-thumb" src={post.target_media_preview_url} alt="" />
               {/if}
               <span>
-                Replying to {post.target_media_index ? `image #${post.target_media_index}` : 'a specific image'}
+                {post.target_media_index
+                  ? $t('post.replying_to_image_n', { n: post.target_media_index })
+                  : $t('post.replying_to_specific_image')}
               </span>
             </button>
           {:else if post.in_reply_to_account_id}
-            <span>Replying to <a href="/post/{post.parent_id}" class="reply-to-link">a post</a></span>
+            <span>{$t('post.replying_to')} <a href="/post/{post.parent_id}" class="reply-to-link">{$t('post.a_post')}</a></span>
           {:else}
-            <span>Replying to a post</span>
+            <span>{$t('post.replying_to_post')}</span>
           {/if}
         </div>
       {/if}
@@ -792,8 +796,8 @@
       {#if filterMatch?.action === 'warn' && !filterRevealed}
         <div class="filter-warning">
           <span class="material-symbols-outlined filter-icon">filter_alt</span>
-          <span class="filter-text">Filtered: <strong>{filterMatch.filter.phrase}</strong></span>
-          <button class="filter-reveal-btn" type="button" onclick={() => filterRevealed = true}>Show anyway</button>
+          <span class="filter-text">{$t('post.filtered')} <strong>{filterMatch.filter.phrase}</strong></span>
+          <button class="filter-reveal-btn" type="button" onclick={() => filterRevealed = true}>{$t('post.show_anyway')}</button>
         </div>
       {/if}
 
@@ -825,18 +829,18 @@
           {#if contentOverflows && contentCollapsed}
             <button type="button" class="content-toggle-btn" onclick={(e) => { e.stopPropagation(); contentCollapsed = false; }}>
               <span class="material-symbols-outlined content-toggle-icon">expand_more</span>
-              Show more
+              {$t('post.show_more')}
             </button>
           {/if}
           {#if contentOverflows && !contentCollapsed && !detail}
             <button type="button" class="content-toggle-btn content-toggle-collapse" onclick={(e) => { e.stopPropagation(); contentCollapsed = true; }}>
               <span class="material-symbols-outlined content-toggle-icon">expand_less</span>
-              Show less
+              {$t('post.show_less')}
             </button>
           {/if}
 
           {#if post.tags && post.tags.length > 0}
-            <div class="hashtag-footer" onclick={(e) => e.stopPropagation()} role="group" aria-label="Hashtags in this post">
+            <div class="hashtag-footer" onclick={(e) => e.stopPropagation()} role="group" aria-label={$t('post.hashtags_aria')}>
               {#each post.tags as tag (tag.name)}
                 <a
                   href="/tags/{encodeURIComponent(tag.name)}"
@@ -860,7 +864,7 @@
                   tabindex={clickable ? 0 : undefined}
                   onclick={(e) => handleMediaClick(e, media)}
                   onkeydown={(e) => handleMediaKey(e, media)}
-                  aria-label={clickable ? (media.description || 'Open image') : undefined}
+                  aria-label={clickable ? (media.description || $t('post.open_image')) : undefined}
                 >
                   <LazyMedia {media} isRemote={!!media.remote_url} author={post.account} />
                 </div>
@@ -878,7 +882,7 @@
                     <div class="poll-result-header">
                       <span class="poll-result-title">
                         {#if displayOwnVotes.includes(i)}
-                          <span class="poll-voted-check" aria-label="Your vote">&#10003;</span>
+                          <span class="poll-voted-check" aria-label={$t('poll.your_vote')}>&#10003;</span>
                         {/if}
                         {option.title}
                       </span>
@@ -913,7 +917,7 @@
                   onclick={cancelPendingVote}
                 >
                   <span class="material-symbols-outlined poll-cancel-icon">undo</span>
-                  Cancel vote ({countdownRemaining}s)
+                  {$t('poll.cancel_vote', { seconds: countdownRemaining })}
                 </button>
               {/if}
 
@@ -923,28 +927,28 @@
                     type="button"
                     class="poll-voters-link"
                     onclick={openVoters}
-                    aria-label="View voters"
+                    aria-label={$t('poll.view_voters')}
                   >
-                    {displayVotesTotal} {displayVotesTotal === 1 ? 'vote' : 'votes'}
+                    {$t('poll.votes', { count: displayVotesTotal })}
                   </button>
                 {:else}
-                  {displayVotesTotal} {displayVotesTotal === 1 ? 'vote' : 'votes'}
+                  {$t('poll.votes', { count: displayVotesTotal })}
                 {/if}
                 {#if pollExpired}
-                  &middot; Ended
+                  &middot; {$t('poll.ended')}
                 {:else if post.poll.expires_at}
-                  &middot; ends {relativeTimeFuture(post.poll.expires_at)}
+                  &middot; {$t('poll.ends', { time: relativeTimeFuture(post.poll.expires_at) })}
                 {/if}
               </div>
             </div>
           {/if}
 
           {#if votersOpen}
-            <Modal bind:open={votersOpen} title="Voters">
+            <Modal bind:open={votersOpen} title={$t('poll.voters')}>
               {#if votersLoading}
-                <div class="voters-loading">Loading…</div>
+                <div class="voters-loading">{$t('common.loading')}</div>
               {:else if !voters || voters.length === 0}
-                <div class="voters-empty">No voters yet.</div>
+                <div class="voters-empty">{$t('poll.no_voters')}</div>
               {:else}
                 <ul class="voters-list">
                   {#each voters as v (v.id)}
@@ -1046,14 +1050,14 @@
               <p class="nsfw-warning">
                 {post.spoiler_text && post.spoiler_text !== 'true'
                   ? post.spoiler_text
-                  : 'Warning: this content might not be suitable for everyone.'}
+                  : $t('post.nsfw_warning')}
               </p>
               <button
                 type="button"
                 class="nsfw-reveal-btn"
                 onclick={(e) => { e.stopPropagation(); showSensitive = true; }}
               >
-                Show content
+                {$t('post.show_content')}
               </button>
             </div>
             <button
@@ -1061,7 +1065,7 @@
               class="nsfw-hide-btn"
               onclick={(e) => { e.stopPropagation(); showSensitive = false; contentCollapsed = true; }}
             >
-              Hide content
+              {$t('post.hide_content')}
             </button>
           {/if}
         </div>
@@ -1108,11 +1112,11 @@
 {/if}
 
 {#if editing}
-  <div class="edit-overlay" onclick={cancelEdit} role="dialog" aria-modal="true" aria-label="Edit post">
+  <div class="edit-overlay" onclick={cancelEdit} role="dialog" aria-modal="true" aria-label={$t('post.edit_post')}>
     <div class="edit-dialog" onclick={(e) => e.stopPropagation()} ondragover={handleEditDragOver} ondrop={handleEditDrop}>
       <div class="edit-dialog-header">
-        <h3 class="edit-dialog-title">Edit post</h3>
-        <button type="button" class="edit-dialog-close" onclick={cancelEdit} aria-label="Close">
+        <h3 class="edit-dialog-title">{$t('post.edit_post')}</h3>
+        <button type="button" class="edit-dialog-close" onclick={cancelEdit} aria-label={$t('common.close')}>
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -1122,8 +1126,8 @@
           type="text"
           class="edit-cw-input"
           bind:value={editSpoilerText}
-          placeholder="Content warning (e.g. spoilers, NSFW)"
-          aria-label="Content warning"
+          placeholder={$t('post.cw_placeholder')}
+          aria-label={$t('post.content_warning')}
           dir="auto"
         />
       {/if}
@@ -1132,7 +1136,7 @@
         class="edit-textarea"
         bind:value={editContent}
         rows="6"
-        aria-label="Edit post content"
+        aria-label={$t('post.edit_content_aria')}
         dir="auto"
         autofocus
       ></textarea>
@@ -1148,17 +1152,17 @@
               {:else if m.type === 'audio'}
                 <div class="edit-media-audio">
                   <span class="material-symbols-outlined">music_note</span>
-                  Audio
+                  {$t('media.audio')}
                 </div>
               {:else}
-                <div class="edit-media-other">{m.type || 'file'}</div>
+                <div class="edit-media-other">{m.type || $t('media.file')}</div>
               {/if}
               <button
                 type="button"
                 class="edit-media-remove"
                 onclick={() => removeEditMedia(m.id)}
-                aria-label="Remove attachment"
-                title="Remove attachment"
+                aria-label={$t('post.remove_attachment')}
+                title={$t('post.remove_attachment')}
               >
                 <span class="material-symbols-outlined">close</span>
               </button>
@@ -1182,10 +1186,10 @@
           class="edit-tool"
           onclick={() => editFileInputEl?.click()}
           disabled={editMedia.length >= editMediaMax || editMediaUploading}
-          aria-label="Attach media"
+          aria-label={$t('post.attach_media')}
           title={editMedia.length >= editMediaMax
-            ? `Maximum ${editMediaMax} attachments`
-            : `Attach photo, video, or audio (up to ${editMediaMax})`}
+            ? $t('post.max_attachments', { max: editMediaMax })
+            : $t('post.attach_hint', { max: editMediaMax })}
         >
           <span class="material-symbols-outlined">image</span>
         </button>
@@ -1196,8 +1200,8 @@
           class:edit-tool-active={editShowCW}
           onclick={() => (editShowCW = !editShowCW)}
           aria-pressed={editShowCW}
-          aria-label="Toggle content warning"
-          title={editShowCW ? 'Remove content warning' : 'Add content warning'}
+          aria-label={$t('post.toggle_cw')}
+          title={editShowCW ? $t('post.remove_cw') : $t('post.add_cw')}
         >
           CW
         </button>
@@ -1208,16 +1212,16 @@
           class:edit-tool-active={editSensitive}
           onclick={() => (editSensitive = !editSensitive)}
           aria-pressed={editSensitive}
-          aria-label="Mark media as sensitive"
+          aria-label={$t('post.mark_sensitive_aria')}
           title={editSensitive
-            ? 'Remove sensitive flag — media shows immediately'
-            : 'Mark media as sensitive — readers tap to reveal'}
+            ? $t('post.unmark_sensitive_title')
+            : $t('post.mark_sensitive_title')}
         >
           NSFW
         </button>
 
         {#if editMediaUploading}
-          <span class="edit-uploading">Uploading…</span>
+          <span class="edit-uploading">{$t('post.uploading')}</span>
         {/if}
       </div>
 
@@ -1226,14 +1230,14 @@
       {/if}
 
       <div class="edit-dialog-actions">
-        <button type="button" class="edit-cancel" onclick={cancelEdit}>Cancel</button>
+        <button type="button" class="edit-cancel" onclick={cancelEdit}>{$t('common.cancel')}</button>
         <button
           type="button"
           class="edit-save"
           onclick={saveEdit}
           disabled={editSaving || (!editContent.trim() && editMedia.length === 0)}
         >
-          {editSaving ? 'Saving...' : 'Save'}
+          {editSaving ? $t('post.saving') : $t('common.save')}
         </button>
       </div>
     </div>

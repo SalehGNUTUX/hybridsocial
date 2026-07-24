@@ -1,7 +1,6 @@
 {
   "app.name": "HybridSocial",
   "app.tagline": "Decentralized social networking",
-
   "nav.home": "Home",
   "nav.explore": "Explore",
   "nav.notifications": "Notifications",
@@ -26,7 +25,6 @@
   "nav.more_label": "More navigation",
   "nav.unread.one": "{label}, {count} unread",
   "nav.unread.other": "{label}, {count} unread",
-
   "auth.login": "Log in",
   "auth.register": "Sign up",
   "auth.logout": "Log out",
@@ -43,7 +41,6 @@
   "auth.login_error": "Invalid email or password",
   "auth.register_error": "Could not create account",
   "auth.welcome": "Welcome to {instance}",
-
   "post.compose": "What's on your mind?",
   "post.publish": "Publish",
   "post.reply": "Reply",
@@ -125,7 +122,6 @@
   "post.block_user_msg": "They will not be able to see your posts or interact with you. You can unblock them at any time.",
   "post.unblock_user_title": "Unblock this user?",
   "post.unblock_user_msg": "They will be able to see your posts and interact with you again.",
-
   "reaction.like": "Like",
   "reaction.love": "Love",
   "reaction.wow": "Wow",
@@ -133,7 +129,6 @@
   "reaction.angry": "Angry",
   "reaction.sad": "Sad",
   "reaction.lol": "LOL",
-
   "report.modal_label": "Report post",
   "report.close": "Close without reporting",
   "report.step1_title": "Report post — step 1 of 2",
@@ -157,20 +152,16 @@
   "report.illegal": "Illegal content",
   "report.misinformation": "Misinformation",
   "report.other": "Other",
-
-
   "timeline.home": "Home",
   "timeline.public": "Public",
   "timeline.local": "Local",
   "timeline.federated": "Federated",
-
   "notification.mention": "{name} mentioned you",
   "notification.boost": "{name} boosted your post",
   "notification.favourite": "{name} reacted to your post",
   "notification.follow": "{name} followed you",
   "notification.follow_request": "{name} requested to follow you",
   "notification.poll_ended": "A poll you voted in has ended",
-
   "profile.followers": "Followers",
   "profile.following": "Following",
   "profile.posts": "Posts",
@@ -181,7 +172,6 @@
   "profile.mute": "Mute",
   "profile.unmute": "Unmute",
   "profile.edit": "Edit profile",
-
   "common.loading": "Loading...",
   "common.error": "Something went wrong",
   "common.retry": "Try again",
@@ -195,7 +185,6 @@
   "common.search": "Search",
   "common.no_results": "No results found",
   "common.load_more": "Load more",
-
   "settings.title": "Settings",
   "settings.appearance": "Appearance",
   "settings.notifications": "Notifications",
@@ -204,20 +193,17 @@
   "settings.language": "Language",
   "settings.compact_mode": "Compact mode",
   "settings.feed_algorithm": "Feed algorithm",
-
   "theme.title": "Theme",
   "theme.light": "Light",
   "theme.dark": "Dark",
   "theme.system": "System",
   "theme.mode_aria": "{mode} theme",
-
   "header.logo_home": "{instance} home",
   "header.search_placeholder": "Search...",
   "header.account_menu": "Account menu",
   "header.remove_account": "Remove from this list",
   "header.remove_account_aria": "Remove @{handle} from this list",
   "header.add_account": "Add another account",
-
   "discover.title": "Discover",
   "discover.trending": "Trending",
   "discover.people_talking.one": "{num} person talking",
@@ -241,7 +227,6 @@
   "discover.following_toast": "Following {name}",
   "discover.follow_failed": "Could not update follow",
   "discover.footer_label": "Footer",
-
   "feed.post_feed": "Post feed",
   "feed.empty_title": "Nothing here yet",
   "feed.no_posts": "No posts yet",
@@ -254,15 +239,12 @@
   "feed.new_posts_aria.other": "{display} new posts. Scroll to top to view.",
   "feed.show_new_posts.one": "{count} new post",
   "feed.show_new_posts.other": "{count} new posts",
-
   "announcement.dismiss": "Dismiss announcement",
-
   "footer.about": "About",
   "footer.privacy": "Privacy",
   "footer.terms": "Terms",
   "footer.shortcuts": "Shortcuts",
   "footer.shortcuts_title": "Show keyboard shortcuts (?)",
-
   "promo.cta_title": "Promote your profile",
   "promo.cta_text": "Get featured in Recommended Accounts for {days} days.",
   "promo.cta_button": "Promote for {price}",
@@ -278,7 +260,6 @@
   "promo.activated": "Profile promotion activated!",
   "promo.already_active": "You already have an active promotion",
   "promo.purchase_failed": "Failed to purchase promotion",
-
   "error.auth.invalid_credentials": "Invalid email or password",
   "error.auth.unauthorized": "You need to sign in to continue",
   "error.auth.invalid_refresh_token": "Your session has expired. Please sign in again.",
@@ -300,21 +281,69 @@
   "error.sudo.password_required": "Password is required",
   "error.sudo.otp_required": "Two-factor code is required",
   "error.sudo.failed": "Could not unlock admin access. Please try again.",
-
   "error.2fa.invalid_code": "Invalid two-factor code. Please check and try again.",
   "error.2fa.setup_failed": "Failed to set up two-factor authentication",
   "error.2fa.verify_failed": "Failed to verify two-factor code",
   "error.2fa.disable_failed": "Failed to disable two-factor authentication",
-
   "error.validation.failed": "Please check your input and try again",
   "error.account.confirmation_required": "Please check your email to confirm your account",
-
   "error.promotions.disabled": "Profile promotions are not available at this time",
   "error.promotions.already_active": "You already have an active promotion",
-
   "error.media.upload_failed": "Failed to upload file. Please try again.",
-
   "error.page.not_found": "This page could not be found",
   "error.rate_limit.exceeded": "Slow down — too many requests. Please wait a moment.",
-  "error.unknown": "Something went wrong. Please try again."
+  "error.unknown": "Something went wrong. Please try again.",
+  "post.post_by_aria": "Post by {name}",
+  "post.pinned_in_named": "Pinned in {name}",
+  "post.pinned_on_named": "Pinned on {name}",
+  "post.pinned_badge": "Pinned",
+  "post.edited_marker": "(edited)",
+  "post.edited_at_title": "Edited {date}",
+  "post.posting": "Posting…",
+  "post.posted_in": "Posted in",
+  "post.posted_on": "Posted on",
+  "post.open_image_n": "Open image #{n}",
+  "post.open_targeted_image": "Open the targeted image",
+  "post.replying_to_image_n": "Replying to image #{n}",
+  "post.replying_to_specific_image": "Replying to a specific image",
+  "post.replying_to": "Replying to",
+  "post.a_post": "a post",
+  "post.replying_to_post": "Replying to a post",
+  "post.filtered": "Filtered:",
+  "post.show_anyway": "Show anyway",
+  "post.hashtags_aria": "Hashtags in this post",
+  "post.open_image": "Open image",
+  "post.nsfw_warning": "Warning: this content might not be suitable for everyone.",
+  "post.show_content": "Show content",
+  "post.hide_content": "Hide content",
+  "post.edit_post": "Edit post",
+  "post.cw_placeholder": "Content warning (e.g. spoilers, NSFW)",
+  "post.content_warning": "Content warning",
+  "post.edit_content_aria": "Edit post content",
+  "post.remove_attachment": "Remove attachment",
+  "post.attach_media": "Attach media",
+  "post.max_attachments": "Maximum {max} attachments",
+  "post.attach_hint": "Attach photo, video, or audio (up to {max})",
+  "post.toggle_cw": "Toggle content warning",
+  "post.remove_cw": "Remove content warning",
+  "post.add_cw": "Add content warning",
+  "post.mark_sensitive_aria": "Mark media as sensitive",
+  "post.unmark_sensitive_title": "Remove sensitive flag — media shows immediately",
+  "post.mark_sensitive_title": "Mark media as sensitive — readers tap to reveal",
+  "post.uploading": "Uploading…",
+  "post.saving": "Saving...",
+  "post.upload_failed": "Upload failed",
+  "post.edit_save_failed": "Failed to save edit. Please try again.",
+  "media.audio": "Audio",
+  "media.file": "file",
+  "poll.your_vote": "Your vote",
+  "poll.cancel_vote": "Cancel vote ({seconds}s)",
+  "poll.view_voters": "View voters",
+  "poll.votes.one": "{count} vote",
+  "poll.votes.other": "{count} votes",
+  "poll.ended": "Ended",
+  "poll.ends": "ends {time}",
+  "poll.voters": "Voters",
+  "poll.no_voters": "No voters yet.",
+  "poll.pending_vote_warning": "Cancel your pending vote or wait for it to submit."
 }
