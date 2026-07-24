@@ -107,7 +107,8 @@
   {:else if media.type === 'video'}
     <video
       bind:this={videoEl}
-      src={media.url}
+      src={media.url.includes('#') ? media.url : `${media.url}#t=0.001`}
+      poster={media.preview_url && media.preview_url !== media.url ? media.preview_url : undefined}
       controls
       preload="metadata"
       class="media-video"
