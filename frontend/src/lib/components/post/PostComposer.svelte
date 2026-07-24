@@ -12,6 +12,8 @@
   import EmojiPicker from './EmojiPicker.svelte';
   import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
   import { markSeen } from '$lib/utils/seen-posts.js';
+  import { t } from '$lib/stores/i18n.js';
+  import { t as translate } from '$lib/utils/i18n.js';
 
   type ComposerVisibility = 'public' | 'followers' | 'direct';
 
@@ -131,13 +133,13 @@
   let pollDuration = $state('86400'); // 1 day in seconds
   let pollMultiple = $state(false);
 
-  const pollDurations = [
-    { value: '3600', label: '1 hour' },
-    { value: '21600', label: '6 hours' },
-    { value: '86400', label: '1 day' },
-    { value: '259200', label: '3 days' },
-    { value: '604800', label: '7 days' },
-  ];
+  let pollDurations = $derived([
+    { value: '3600', label: $t('composer.duration_1_hour') },
+    { value: '21600', label: $t('composer.duration_6_hours') },
+    { value: '86400', label: $t('composer.duration_1_day') },
+    { value: '259200', label: $t('composer.duration_3_days') },
+    { value: '604800', label: $t('composer.duration_7_days') },
+  ]);
 
   let charCount = $derived(content.length);
   let charsRemaining = $derived(charLimit - charCount);
@@ -204,12 +206,12 @@
       if (detail?.groupId) {
         groupId = detail.groupId;
         pageId = null;
-        contextLabel = detail.contextLabel ?? 'Posting to group';
+        contextLabel = detail.contextLabel ?? translate('composer.posting_to_group');
       }
       if (detail?.pageId) {
         pageId = detail.pageId;
         groupId = null;
-        contextLabel = detail.contextLabel ?? 'Posting to page';
+        contextLabel = detail.contextLabel ?? translate('composer.posting_to_page');
       }
       if (detail?.draftId) {
         loadDraftById(detail.draftId);
@@ -324,9 +326,9 @@
     groupId = draft.group_id ?? null;
     pageId = draft.page_id ?? null;
     if (groupId && draft.group) {
-      contextLabel = `Posting to ${draft.group.name}`;
+      contextLabel = translate('composer.posting_to_named', { name: draft.group.name });
     } else if (pageId && draft.page) {
-      contextLabel = `Posting to ${draft.page.name}`;
+      contextLabel = translate('composer.posting_to_named', { name: draft.page.name });
     } else {
       contextLabel = null;
     }
@@ -347,14 +349,14 @@
       applyServerDraft(draft);
       openComposer();
     } catch {
-      error = 'Failed to load draft.';
+      error = translate('composer.draft_load_failed');
     }
   }
 
   async function saveAsServerDraft() {
     if (savingServerDraft) return;
     if (!content.trim() && uploadedMedia.length === 0) {
-      error = 'Draft needs content or media.';
+      error = translate('composer.draft_needs_content');
       return;
     }
     savingServerDraft = true;
@@ -391,7 +393,7 @@
       hasDraft = false;
       resetComposer();
     } catch {
-      error = 'Failed to save draft. Please try again.';
+      error = translate('composer.draft_save_failed');
     } finally {
       savingServerDraft = false;
     }
@@ -571,15 +573,15 @@
     if (accepted.length === 0) {
       error =
         unsupported === 1
-          ? 'That file type isn’t supported. Use an image, video, or audio file.'
-          : `${unsupported} files weren’t supported. Use images, video, or audio.`;
+          ? translate('composer.file_unsupported_one')
+          : translate('composer.files_unsupported_many', { count: unsupported });
       return;
     }
     files = accepted;
 
     const remaining = maxMedia - uploadedMedia.length;
     if (remaining <= 0) {
-      error = `Maximum ${maxMedia} media attachments allowed`;
+      error = translate('composer.max_media', { max: maxMedia });
       return;
     }
 
@@ -649,12 +651,12 @@
       if (firstErrorMsg) {
         parts.push(firstErrorMsg);
       } else if (failures > 0) {
-        parts.push(`${failures} upload${failures === 1 ? '' : 's'} failed`);
+        parts.push(translate('composer.uploads_failed', { count: failures }));
       }
       if (unsupported > 0) {
-        parts.push(`${unsupported} unsupported file${unsupported === 1 ? '' : 's'}`);
+        parts.push(translate('composer.unsupported_files', { count: unsupported }));
       }
-      if (dropped > 0) parts.push(`${dropped} skipped (max ${maxMedia})`);
+      if (dropped > 0) parts.push(translate('composer.dropped_skipped', { count: dropped, max: maxMedia }));
       error = parts.join(' · ');
     }
   }
@@ -673,21 +675,21 @@
     const err = body?.error;
     switch (err) {
       case 'media.audio_not_allowed':
-        return 'Your tier does not allow audio uploads';
+        return translate('composer.err_audio_not_allowed');
       case 'media.audio_too_large':
-        return `Audio exceeds ${body?.max_mb ?? '?'} MB limit`;
+        return translate('composer.err_audio_too_large', { mb: body?.max_mb ?? '?' });
       case 'media.audio_too_long':
-        return `Audio exceeds ${body?.max_seconds ?? '?'}s limit`;
+        return translate('composer.err_audio_too_long', { seconds: body?.max_seconds ?? '?' });
       case 'media.audio_invalid':
-        return 'Audio file could not be decoded';
+        return translate('composer.err_audio_invalid');
       case 'media.audio_scanner_unavailable':
-        return 'Audio validation is temporarily unavailable';
+        return translate('composer.err_audio_scanner_unavailable');
       case 'media.file_too_large':
-        return `File exceeds ${body?.max_mb ?? '?'} MB limit`;
+        return translate('composer.err_file_too_large', { mb: body?.max_mb ?? '?' });
       case 'media.invalid_content_type':
-        return 'Unsupported file type';
+        return translate('composer.err_invalid_type');
       case 'media.infected':
-        return 'File rejected — flagged as infected';
+        return translate('composer.err_infected');
       default:
         return '';
     }
@@ -719,7 +721,7 @@
       );
       altEditorOpen = false;
     } catch {
-      error = 'Failed to save alt text. Please try again.';
+      error = translate('composer.alt_save_failed');
     } finally {
       altEditorSaving = false;
     }
@@ -1383,17 +1385,17 @@
       // "View post" link for a real, immediately-visible one.
       const newPostId = (newPost as { id?: string } | null)?.id;
       if (body.scheduled_at) {
-        addToast('Post scheduled', 'success');
+        addToast(translate('composer.post_scheduled'), 'success');
       } else if (newPostId) {
-        addToast('Post published', 'success', 5000, undefined, {
-          label: 'View post',
+        addToast(translate('composer.post_published'), 'success', 5000, undefined, {
+          label: translate('composer.view_post'),
           href: `/post/${newPostId}`,
         });
       } else {
-        addToast('Post published', 'success');
+        addToast(translate('composer.post_published'), 'success');
       }
     } catch {
-      error = 'Failed to publish post. Please try again.';
+      error = translate('composer.publish_failed');
     } finally {
       loading = false;
     }
@@ -1411,11 +1413,11 @@
     }
   }
 
-  const visibilityOptions = [
-    { value: 'public' as const, label: 'Public', icon: 'public' },
-    { value: 'followers' as const, label: 'Followers only', icon: 'lock' },
-    { value: 'direct' as const, label: 'Direct message', icon: 'mail' },
-  ];
+  let visibilityOptions = $derived([
+    { value: 'public' as const, label: $t('post.visibility.public'), icon: 'public' },
+    { value: 'followers' as const, label: $t('post.visibility.followers'), icon: 'lock' },
+    { value: 'direct' as const, label: $t('post.visibility.direct'), icon: 'mail' },
+  ]);
 
   let visibilityMenuOpen = $state(false);
   let visibilityCurrent = $derived(
@@ -1434,7 +1436,7 @@
     type="button"
     class="fab"
     onclick={openComposer}
-    aria-label="Compose new post"
+    aria-label={$t('composer.compose_new')}
   >
     <span class="material-symbols-outlined fab-icon">edit</span>
   </button>
@@ -1444,8 +1446,8 @@
 {#if hasDraft && !isOpen}
   <div class="draft-banner">
     <span class="material-symbols-outlined draft-icon">edit_note</span>
-    <span class="draft-text">You have an unsaved draft</span>
-    <button type="button" class="draft-resume" onclick={resumeDraft}>Resume</button>
+    <span class="draft-text">{$t('composer.unsaved_draft')}</span>
+    <button type="button" class="draft-resume" onclick={resumeDraft}>{$t('composer.resume')}</button>
     <button type="button" class="draft-discard" onclick={discardDraft}>
       <span class="material-symbols-outlined" style="font-size: 16px">close</span>
     </button>
@@ -1462,7 +1464,7 @@
     class:composer-nudge={isNudging}
     class:composer-drag-over={isDragOver}
     role="dialog"
-    aria-label="Compose post"
+    aria-label={$t('composer.compose_post')}
     aria-modal="true"
     onkeydown={handleKeydown}
     onclick={handleEmojiClickOutside}
@@ -1474,26 +1476,26 @@
     {#if isDragOver}
       <div class="composer-drop-overlay" aria-hidden="true">
         <span class="material-symbols-outlined composer-drop-icon">upload_file</span>
-        <span class="composer-drop-text">Drop files to upload</span>
+        <span class="composer-drop-text">{$t('composer.drop_files')}</span>
       </div>
     {/if}
     <button
       type="button"
       class="composer-close"
       onclick={closeComposer}
-      aria-label="Close composer"
-      title="Close (your draft is saved)"
+      aria-label={$t('composer.close_composer')}
+      title={$t('composer.close_draft_saved')}
     >
       <span class="material-symbols-outlined">close</span>
     </button>
 
     {#if replyTo}
       <div class="composer-reply-context">
-        Replying to <strong>@{replyTo.account.acct || replyTo.account.handle}</strong>
+        {$t('post.replying_to')} <strong>@{replyTo.account.acct || replyTo.account.handle}</strong>
         {#if parentEdited}
-          <span class="composer-parent-edited" title="The post you're replying to was edited">
+          <span class="composer-parent-edited" title={$t('composer.parent_edited_title')}>
             <span class="material-symbols-outlined" aria-hidden="true">edit</span>
-            edited
+            {$t('composer.edited')}
           </span>
         {/if}
         {#if targetMediaId}
@@ -1507,7 +1509,7 @@
                   alt=""
                 />
               {/if}
-              on image {targetMediaIndex ?? '?'}
+              {$t('composer.on_image', { n: targetMediaIndex ?? '?' })}
             </span>
           {/if}
         {/if}
@@ -1529,7 +1531,7 @@
             <strong>{quotePost.account.display_name || quotePost.account.handle}</strong>
             <p>{(quotePost.content || '').slice(0, 100)}{(quotePost.content || '').length > 100 ? '...' : ''}</p>
           </div>
-          <button type="button" class="quote-remove" onclick={() => quotePost = null} aria-label="Remove quote">
+          <button type="button" class="quote-remove" onclick={() => quotePost = null} aria-label={$t('composer.remove_quote')}>
             <span class="material-symbols-outlined" style="font-size: 16px">close</span>
           </button>
         </div>
@@ -1552,9 +1554,9 @@
           <input
             type="text"
             class="composer-cw-input"
-            placeholder="NSFW warning (optional description)"
+            placeholder={$t('composer.cw_placeholder')}
             bind:value={spoilerText}
-            aria-label="NSFW warning text"
+            aria-label={$t('composer.cw_aria')}
             dir="auto"
           />
         {/if}
@@ -1567,14 +1569,14 @@
             onkeydown={handleComposerKeydown}
             onpaste={handlePaste}
             class="composer-textarea"
-            placeholder={replyTo ? `Reply to @${replyTo.account?.handle ?? replyTo.account?.acct ?? ''}…` : quotePost ? 'Add a comment…' : "What's on your mind?"}
-            aria-label="Post content"
+            placeholder={replyTo ? $t('composer.reply_placeholder', { handle: replyTo.account?.handle ?? replyTo.account?.acct ?? '' }) : quotePost ? $t('composer.quote_placeholder') : $t('composer.placeholder')}
+            aria-label={$t('composer.content_aria')}
             rows={3}
             dir="auto"
           ></textarea>
 
           {#if mentionActive && mentionSuggestions.length > 0}
-            <div class="mention-dropdown" role="listbox" aria-label="Mention suggestions" style="top: {acTop}px; left: {acLeft}px;">
+            <div class="mention-dropdown" role="listbox" aria-label={$t('composer.mention_suggestions')} style="top: {acTop}px; left: {acLeft}px;">
               {#each mentionSuggestions as account, i (account.id)}
                 <button
                   type="button"
@@ -1600,7 +1602,7 @@
           {/if}
 
           {#if hashtagActive && hashtagSuggestions.length > 0}
-            <div class="mention-dropdown" role="listbox" aria-label="Hashtag suggestions" style="top: {acTop}px; left: {acLeft}px;">
+            <div class="mention-dropdown" role="listbox" aria-label={$t('composer.hashtag_suggestions')} style="top: {acTop}px; left: {acLeft}px;">
               {#each hashtagSuggestions as tag, i (tag.name)}
                 <button
                   type="button"
@@ -1642,7 +1644,7 @@
               <button
                 type="button"
                 class="media-preview-trigger"
-                aria-label="Preview image"
+                aria-label={$t('composer.preview_image')}
                 onclick={(e) => openMediaPreview(media, e)}
               >
                 <img src={src} alt={media.description || ''} class="media-preview-img" />
@@ -1651,7 +1653,7 @@
               <button
                 type="button"
                 class="media-preview-trigger"
-                aria-label="Preview video"
+                aria-label={$t('composer.preview_video')}
                 onclick={(e) => openMediaPreview(media, e)}
               >
                 <video src={src} class="media-preview-img" muted preload="metadata"></video>
@@ -1666,7 +1668,7 @@
               type="button"
               class="media-preview-remove"
               onclick={() => removeMedia(media.id)}
-              aria-label="Remove attachment"
+              aria-label={$t('post.remove_attachment')}
             >
               <span class="material-symbols-outlined remove-icon">close</span>
             </button>
@@ -1675,8 +1677,8 @@
               class="media-preview-alt"
               class:media-preview-alt-set={!!media.description}
               onclick={() => openAltEditor(media)}
-              aria-label={media.description ? 'Edit alt text' : 'Add alt text for screen readers'}
-              title={media.description || 'Add alt text for screen readers'}
+              aria-label={media.description ? $t('composer.edit_alt') : $t('composer.add_alt')}
+              title={media.description || $t('composer.add_alt')}
             >
               ALT
             </button>
@@ -1685,10 +1687,10 @@
         {#each uploadingProgress as up (up.id)}
           {@const pct = Math.round(up.fraction * 100)}
           <div class="media-preview-item media-preview-uploading" title={up.name}>
-            <div class="upload-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct} aria-label="Uploading {up.name}">
+            <div class="upload-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct} aria-label={$t('composer.uploading_named', { name: up.name })}>
               <div class="upload-progress-meta">
                 <span class="upload-progress-name">{up.name}</span>
-                <span class="upload-progress-pct">{pct === 100 ? 'Processing…' : pct + '%'}</span>
+                <span class="upload-progress-pct">{pct === 100 ? $t('composer.processing') : pct + '%'}</span>
               </div>
               <div class="upload-progress-track">
                 <div
@@ -1713,17 +1715,17 @@
               <input
                 type="text"
                 class="poll-option-input"
-                placeholder="Option {i + 1}"
+                placeholder={$t('composer.poll_option', { n: i + 1 })}
                 value={option}
                 oninput={(e) => updatePollOption(i, (e.target as HTMLInputElement).value)}
-                aria-label="Poll option {i + 1}"
+                aria-label={$t('composer.poll_option_aria', { n: i + 1 })}
               />
               {#if pollOptions.length > 2}
                 <button
                   type="button"
                   class="poll-option-remove"
                   onclick={() => removePollOption(i)}
-                  aria-label="Remove option {i + 1}"
+                  aria-label={$t('composer.remove_option', { n: i + 1 })}
                 >
                   <span class="material-symbols-outlined remove-icon">close</span>
                 </button>
@@ -1734,13 +1736,13 @@
 
         {#if pollOptions.length < maxPollOptions}
           <button type="button" class="poll-add-option" onclick={addPollOption}>
-            + Add option
+            + {$t('composer.add_option')}
           </button>
         {/if}
 
         <div class="poll-settings">
           <div class="poll-setting-row">
-            <label class="poll-setting-label" for="poll-duration">Duration</label>
+            <label class="poll-setting-label" for="poll-duration">{$t('composer.duration')}</label>
             <select id="poll-duration" class="poll-setting-select" bind:value={pollDuration}>
               {#each pollDurations as dur (dur.value)}
                 <option value={dur.value}>{dur.label}</option>
@@ -1750,7 +1752,7 @@
 
           <label class="poll-setting-toggle">
             <input type="checkbox" bind:checked={pollMultiple} />
-            <span>Multiple choice</span>
+            <span>{$t('composer.multiple_choice')}</span>
           </label>
         </div>
       </div>
@@ -1760,7 +1762,7 @@
       <div class="schedule-picker">
         <div class="schedule-header">
           <span class="material-symbols-outlined schedule-icon">schedule_send</span>
-          <span class="schedule-label">Schedule post</span>
+          <span class="schedule-label">{$t('composer.schedule_post')}</span>
         </div>
         <input
           type="datetime-local"
@@ -1770,7 +1772,7 @@
         />
         {#if scheduledAt}
           <p class="schedule-preview">
-            Will be published on {new Date(scheduledAt).toLocaleString()}
+            {$t('composer.will_publish', { date: new Date(scheduledAt).toLocaleString() })}
           </p>
         {/if}
       </div>
@@ -1795,10 +1797,10 @@
           class="tool-btn"
           class:tool-active={uploadedMedia.length > 0}
           onclick={triggerFileInput}
-          aria-label="Attach media"
+          aria-label={$t('post.attach_media')}
           title={showPoll
-            ? 'Polls and media can\'t be combined'
-            : `Attach photo, video, or audio (up to ${maxMedia})`}
+            ? $t('composer.polls_media_exclusive')
+            : $t('post.attach_hint', { max: maxMedia })}
           disabled={showPoll || mediaUploading}
         >
           <span class="material-symbols-outlined tool-icon">image</span>
@@ -1810,13 +1812,13 @@
           class="tool-btn"
           class:tool-active={showPoll}
           onclick={togglePoll}
-          aria-label="Add poll"
+          aria-label={$t('composer.add_poll')}
           aria-pressed={showPoll}
           title={uploadedMedia.length > 0
-            ? 'Polls and media can\'t be combined'
+            ? $t('composer.polls_media_exclusive')
             : showPoll
-              ? 'Remove poll'
-              : 'Add a poll'}
+              ? $t('composer.remove_poll')
+              : $t('composer.add_poll_title')}
           disabled={uploadedMedia.length > 0}
         >
           <span class="tool-icon-svg tool-icon-poll" aria-hidden="true"></span>
@@ -1829,9 +1831,9 @@
             class="tool-btn"
             class:tool-active={showSchedule}
             onclick={() => showSchedule = !showSchedule}
-            aria-label="Schedule post"
+            aria-label={$t('composer.schedule_post')}
             aria-pressed={showSchedule}
-            title={showSchedule ? 'Cancel scheduling — post immediately' : 'Schedule for later'}
+            title={showSchedule ? $t('composer.cancel_schedule') : $t('composer.schedule_later')}
           >
             <span class="tool-icon-svg tool-icon-schedule" aria-hidden="true"></span>
           </button>
@@ -1845,9 +1847,9 @@
             class="tool-btn"
             class:tool-active={showEmojiPicker}
             onclick={() => { showEmojiPicker = !showEmojiPicker; showGifPicker = false; }}
-            aria-label="Insert emoji"
+            aria-label={$t('composer.insert_emoji')}
             aria-expanded={showEmojiPicker}
-            title={showEmojiPicker ? 'Close emoji picker' : 'Insert emoji'}
+            title={showEmojiPicker ? $t('composer.close_emoji') : $t('composer.insert_emoji')}
           >
             <span class="material-symbols-outlined tool-icon">mood</span>
           </button>
@@ -1868,7 +1870,7 @@
             class:tool-active={markdownEnabled}
             onclick={() => (markdownEnabled = !markdownEnabled)}
             aria-pressed={markdownEnabled}
-            title={markdownEnabled ? 'Markdown on — click to post as plain text' : 'Markdown off — click to enable'}
+            title={markdownEnabled ? $t('composer.markdown_on') : $t('composer.markdown_off')}
           >
             MD
           </button>
@@ -1881,7 +1883,7 @@
             class="tool-btn"
             class:tool-active={visibilityMenuOpen}
             onclick={() => (visibilityMenuOpen = !visibilityMenuOpen)}
-            aria-label="Post visibility — {visibilityCurrent.label}"
+            aria-label={$t('composer.visibility_aria', { label: visibilityCurrent.label })}
             aria-haspopup="menu"
             aria-expanded={visibilityMenuOpen}
             title={visibilityCurrent.label}
@@ -1923,11 +1925,11 @@
           class="tool-btn tool-btn-text"
           class:tool-active={showCW}
           onclick={() => { showCW = !showCW; }}
-          aria-label="Toggle NSFW warning"
+          aria-label={$t('composer.toggle_nsfw')}
           aria-pressed={showCW}
           title={showCW
-            ? 'Remove NSFW warning'
-            : 'Add a content warning — readers tap to reveal'}
+            ? $t('composer.remove_nsfw')
+            : $t('composer.add_nsfw')}
         >
           NSFW
         </button>
@@ -1940,17 +1942,17 @@
           class="composer-save-draft"
           disabled={savingServerDraft || loading || (!content.trim() && uploadedMedia.length === 0)}
           onclick={saveAsServerDraft}
-          title="Save as draft"
+          title={$t('composer.save_as_draft')}
         >
           {#if savingServerDraft}
-            Saving...
+            {$t('post.saving')}
           {:else}
-            {activeServerDraftId ? 'Update draft' : 'Save draft'}
+            {activeServerDraftId ? $t('composer.update_draft') : $t('composer.save_draft')}
           {/if}
         </button>
         {#if directNeedsAudience}
           <span class="composer-hint" role="status">
-            Add a @mention to address this direct post.
+            {$t('composer.direct_needs_mention')}
           </span>
         {/if}
         <button
@@ -1961,9 +1963,9 @@
         >
           {#if loading}
             <span class="spinner" aria-hidden="true"></span>
-            Posting...
+            {$t('post.posting')}
           {:else}
-            Post
+            {$t('composer.post_action')}
           {/if}
         </button>
       </div>
@@ -1972,17 +1974,16 @@
 {/if}
 
 {#if altEditorOpen && altEditorMedia}
-  <div class="alt-overlay" role="dialog" aria-modal="true" aria-label="Edit alt text" onclick={(e) => { if (e.target === e.currentTarget) altEditorOpen = false; }}>
+  <div class="alt-overlay" role="dialog" aria-modal="true" aria-label={$t('composer.edit_alt')} onclick={(e) => { if (e.target === e.currentTarget) altEditorOpen = false; }}>
     <div class="alt-dialog">
-      <h3 class="alt-title">Describe the image</h3>
+      <h3 class="alt-title">{$t('composer.describe_image')}</h3>
       <p class="alt-hint">
-        Alt text helps people using screen readers understand what's
-        in the image. Keep it short and specific.
+        {$t('composer.alt_hint')}
       </p>
       <textarea
         class="alt-textarea"
         bind:value={altEditorValue}
-        placeholder="A person sitting at a desk, looking at a monitor that shows a social-media feed."
+        placeholder={$t('composer.alt_example')}
         rows="4"
         maxlength="1500"
         dir="auto"
@@ -1990,9 +1991,9 @@
       ></textarea>
       <div class="alt-char-count">{altEditorValue.length} / 1500</div>
       <div class="alt-actions">
-        <button type="button" class="btn btn-ghost" onclick={() => (altEditorOpen = false)}>Cancel</button>
+        <button type="button" class="btn btn-ghost" onclick={() => (altEditorOpen = false)}>{$t('common.cancel')}</button>
         <button type="button" class="btn btn-primary" disabled={altEditorSaving} onclick={saveAltText}>
-          {altEditorSaving ? 'Saving…' : 'Save'}
+          {altEditorSaving ? $t('post.saving') : $t('common.save')}
         </button>
       </div>
     </div>
@@ -2000,16 +2001,15 @@
 {/if}
 
 {#if discardConfirmOpen}
-  <div class="alt-overlay" role="dialog" aria-modal="true" aria-label="Discard draft?">
+  <div class="alt-overlay" role="dialog" aria-modal="true" aria-label={$t('composer.discard_aria')}>
     <div class="alt-dialog discard-dialog">
-      <h3 class="alt-title">Discard this post?</h3>
+      <h3 class="alt-title">{$t('composer.discard_title')}</h3>
       <p class="alt-hint">
-        You have unsaved text{uploadedMedia.length > 0 ? ' and attached media' : ''}.
-        Closing now will clear it.
+        {uploadedMedia.length > 0 ? $t('composer.discard_body_media') : $t('composer.discard_body')}
       </p>
       <div class="alt-actions">
-        <button type="button" class="btn btn-ghost" onclick={cancelDiscard}>Keep writing</button>
-        <button type="button" class="btn btn-danger" onclick={confirmDiscard}>Discard &amp; close</button>
+        <button type="button" class="btn btn-ghost" onclick={cancelDiscard}>{$t('composer.keep_writing')}</button>
+        <button type="button" class="btn btn-danger" onclick={confirmDiscard}>{$t('composer.discard_close')}</button>
       </div>
     </div>
   </div>
@@ -2032,7 +2032,7 @@
     class="video-preview-overlay"
     role="dialog"
     aria-modal="true"
-    aria-label="Video preview"
+    aria-label={$t('composer.video_preview')}
     onclick={(e) => {
       if (e.target === e.currentTarget) {
         videoPreviewOpen = false;
@@ -2050,7 +2050,7 @@
     <button
       type="button"
       class="video-preview-close"
-      aria-label="Close preview"
+      aria-label={$t('composer.close_preview')}
       onclick={() => {
         videoPreviewOpen = false;
         videoPreviewSrc = '';
