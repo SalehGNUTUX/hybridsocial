@@ -19,6 +19,7 @@
   import { renderCustomEmojis } from '$lib/utils/custom-emoji.js';
   import DisplayName from '$lib/components/DisplayName.svelte';
   import { filterBadges, type Badge } from '$lib/utils/badges.js';
+  import { t } from '$lib/stores/i18n.js';
 
   // Seeded PRNG from post ID for deterministic wave patterns
   function seededRng(seed: string) {
@@ -1238,10 +1239,10 @@
             class:edit-tool-active={editMarkdownEnabled}
             onclick={() => (editMarkdownEnabled = !editMarkdownEnabled)}
             aria-pressed={editMarkdownEnabled}
-            aria-label="Toggle markdown formatting"
+            aria-label={$t('post.edit_markdown_label')}
             title={editMarkdownEnabled
-              ? 'Markdown on — click to save as plain text'
-              : 'Markdown off — click to enable'}
+              ? $t('post.edit_markdown_on')
+              : $t('post.edit_markdown_off')}
           >
             MD
           </button>
