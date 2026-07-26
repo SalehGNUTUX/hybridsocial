@@ -91,22 +91,26 @@ defmodule Hybridsocial.Social.Streams do
     limit = parse_limit(opts)
     min_duration = Keyword.get(opts, :min_duration_seconds, 15.0)
     search = normalize_search(Keyword.get(opts, :q))
+    # :portrait (default) keeps the strictly-vertical Reels feed; :all lets the
+    # Streams page surface clips of any orientation/size (issue: a 640x360
+    # horizontal upload never appeared because only height > width qualified).
+    orientation = Keyword.get(opts, :orientation, :portrait)
 
     # Streams surfaces public video to everyone, including signed-out
     # viewers. Membership is defined by "a LOCAL author posted a public
-    # post carrying a qualifying VERTICAL video". Excludes:
+    # post carrying a qualifying video". Excludes:
     #   - remote/federated authors — streams is our own local video feed
     #     (join Identity + is_local == true). See issue #22.
     #   - sensitive (NSFW) posts
     #   - posts with a content warning (spoiler_text)
-    #   - non-portrait video: only height > width (strictly vertical) is
-    #     eligible; horizontal AND square clips are excluded. Videos whose
-    #     dimensions weren't captured (NULL width/height) are excluded too,
-    #     since we can't prove they're vertical.
+    #   - by orientation (see `filter_by_qualifying_video`): the default
+    #     `:portrait` keeps the Reels feed strictly vertical (height > width,
+    #     known dimensions); `:all` — what the Streams page requests — accepts
+    #     any clip: horizontal, square, portrait, or unknown dimensions.
     #   - posts whose video attachment is shorter than `min_duration`
     #     seconds (default 15) — the format is meant for short *clips*,
     #     not micro-bursts that flash by before the page can render the
-    #     next one.
+    #     next one. This still applies in both orientation modes.
     # The video predicate joins the media table (duration + dimensions
     # live there per-attachment); the EXISTS form keeps the join from
     # multiplying rows on posts with multiple media.
@@ -118,14 +122,7 @@ defmodule Hybridsocial.Social.Streams do
       |> where([p], p.sensitive == false)
       |> where([p], is_nil(p.spoiler_text) or p.spoiler_text == "")
       |> where([_p, i], i.is_local == true)
-      |> where(
-        [p],
-        fragment(
-          "EXISTS (SELECT 1 FROM media m WHERE m.post_id = ? AND m.deleted_at IS NULL AND m.content_type LIKE 'video/%' AND m.width IS NOT NULL AND m.height IS NOT NULL AND m.height > m.width AND (m.duration IS NULL OR m.duration >= ?))",
-          p.id,
-          ^min_duration
-        )
-      )
+      |> filter_by_qualifying_video(orientation, min_duration)
       |> apply_search(search)
       |> apply_cursor_filters(opts)
       |> apply_sort(Keyword.get(opts, :sort))
@@ -136,6 +133,33 @@ defmodule Hybridsocial.Social.Streams do
   end
 
   # --- Private helpers ---
+
+  # Portrait (Reels): strictly vertical clips with known dimensions.
+  defp filter_by_qualifying_video(query, :portrait, min_duration) do
+    where(
+      query,
+      [p],
+      fragment(
+        "EXISTS (SELECT 1 FROM media m WHERE m.post_id = ? AND m.deleted_at IS NULL AND m.content_type LIKE 'video/%' AND m.width IS NOT NULL AND m.height IS NOT NULL AND m.height > m.width AND (m.duration IS NULL OR m.duration >= ?))",
+        p.id,
+        ^min_duration
+      )
+    )
+  end
+
+  # All orientations (Streams): any video clip, regardless of dimensions —
+  # horizontal, square, portrait, or dimensions we never captured.
+  defp filter_by_qualifying_video(query, _all, min_duration) do
+    where(
+      query,
+      [p],
+      fragment(
+        "EXISTS (SELECT 1 FROM media m WHERE m.post_id = ? AND m.deleted_at IS NULL AND m.content_type LIKE 'video/%' AND (m.duration IS NULL OR m.duration >= ?))",
+        p.id,
+        ^min_duration
+      )
+    )
+  end
 
   defp parse_limit(opts) do
     opts

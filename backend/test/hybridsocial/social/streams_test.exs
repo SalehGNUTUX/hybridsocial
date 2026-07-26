@@ -216,6 +216,39 @@ defmodule Hybridsocial.Social.StreamsTest do
       refute square.id in ids
     end
 
+    test "orientation: :all includes horizontal, square, and unknown-dimension videos" do
+      alice = create_user("sfeed_all", "sfeed_all@example.com")
+
+      vertical = create_post(alice, %{content: "Portrait"}) |> attach_video(alice)
+
+      landscape =
+        create_post(alice, %{content: "Landscape 640x360"})
+        |> attach_video(alice, width: 640, height: 360)
+
+      square =
+        create_post(alice, %{content: "Square"}) |> attach_video(alice, width: 1080, height: 1080)
+
+      nodim =
+        create_post(alice, %{content: "No dims"}) |> attach_video(alice, width: nil, height: nil)
+
+      ids = Streams.streams_feed(nil, orientation: :all) |> Enum.map(& &1.id)
+      assert vertical.id in ids
+      assert landscape.id in ids
+      assert square.id in ids
+      assert nodim.id in ids
+    end
+
+    test "orientation: :all still enforces the minimum duration" do
+      alice = create_user("sfeed_all_dur", "sfeed_all_dur@example.com")
+
+      short =
+        create_post(alice, %{content: "Short landscape"})
+        |> attach_video(alice, width: 640, height: 360, duration: 5.0)
+
+      ids = Streams.streams_feed(nil, orientation: :all) |> Enum.map(& &1.id)
+      refute short.id in ids
+    end
+
     test "excludes videos with unknown (NULL) dimensions" do
       alice = create_user("sfeed_nodim", "sfeed_nodim@example.com")
 

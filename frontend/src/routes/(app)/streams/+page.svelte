@@ -173,7 +173,9 @@
     loading = true;
     error = '';
     try {
-      const params: Record<string, string> = {};
+      // Streams shows clips of every orientation/size (Reels stays vertical-only,
+      // so it omits this and gets the portrait default).
+      const params: Record<string, string> = { orientation: 'all' };
       if (sort !== 'trending') params.sort = sort;
       const q = search.trim();
       if (q) params.q = q;
