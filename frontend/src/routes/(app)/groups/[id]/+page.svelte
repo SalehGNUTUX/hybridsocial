@@ -181,7 +181,11 @@
       {/snippet}
       {#snippet adminActions()}
         {#if $isStaffMember && !isOwner && group?.identity}
-          <AdminProfileActions account={group.identity} />
+          <AdminProfileActions
+            account={group.identity}
+            entity={{ kind: 'group', id: group.id, name: group.name }}
+            ondeleted={() => goto('/groups')}
+          />
         {/if}
         {#if canManage}
           <button type="button" class="btn btn-ghost icon-btn" onclick={openSettings} aria-label="Group settings" title="Group settings">

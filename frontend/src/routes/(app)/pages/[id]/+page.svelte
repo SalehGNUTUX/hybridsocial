@@ -154,7 +154,11 @@
 
       {#snippet adminActions()}
         {#if $isStaffMember && !isOwner && pageData}
-          <AdminProfileActions account={pageData} />
+          <AdminProfileActions
+            account={pageData}
+            entity={{ kind: 'page', id: pageData.id, name: pageData.display_name || pageData.handle }}
+            ondeleted={() => goto('/pages')}
+          />
         {/if}
         {#if canManage}
           <!-- One settings icon → PageManageModal (all admin actions). -->
