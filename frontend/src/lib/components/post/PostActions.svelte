@@ -144,6 +144,19 @@
   let bounceReaction = $state(false);
   let floatingEmoji = $state<string | null>(null);
   let showReactionDetail = $state(false);
+
+  // Move an overlay to <body> so `position: fixed` is relative to the
+  // viewport, not a transformed ancestor. In Reels the reel frame is
+  // transformed (and clips overflow), which otherwise trapped this modal
+  // inside the clip — you couldn't see or scroll the full reactor list.
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
   let reactionDetailData = $state<{type: string; count: number; accounts: {id: string; handle: string; acct?: string; display_name: string | null; avatar_url: string | null}[]}[]>([]);
   let reactionDetailLoading = $state(false);
   let reactionDetailTab = $state('all');
@@ -1556,7 +1569,7 @@
 {/if}
 
 {#if showReactionDetail}
-  <div class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label="Reactions">
+  <div use:portal class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label="Reactions">
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
         <h3 class="reactions-modal-title">Reactions</h3>
@@ -1622,7 +1635,7 @@
 {/if}
 
 {#if showHistoryModal}
-  <div class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label="Edit history">
+  <div use:portal class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label="Edit history">
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
         <h3 class="reactions-modal-title">Edit History</h3>
@@ -2063,8 +2076,13 @@
   /* User list */
   .reactions-modal-list {
     flex: 1;
+    /* Without min-height:0 a flex child won't shrink below its content, so
+       the list grew past the modal's max-height and got clipped instead of
+       scrolling — you couldn't reach the reactors past the first screenful. */
+    min-height: 0;
     overflow-y: auto;
     padding: 8px 12px 16px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .reactions-user {
