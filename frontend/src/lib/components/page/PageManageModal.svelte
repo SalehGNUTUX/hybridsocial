@@ -24,15 +24,11 @@
   let {
     open = $bindable(false),
     page = $bindable(),
-    isStaff = false,
     onclose,
     ondeleted,
   }: {
     open?: boolean;
     page: Record<string, unknown> | null;
-    // Instance moderators/admins also unlock Danger Zone via this flag
-    // since they aren't usually the page's owner.
-    isStaff?: boolean;
     onclose?: () => void;
     ondeleted?: () => void;
   } = $props();
@@ -80,11 +76,10 @@
   let viewerRole = $derived(
     typeof page?.viewer_role === 'string' ? (page!.viewer_role as string) : '',
   );
-  // Only the org owner (or instance staff via a different surface)
-  // sees Danger Zone — staff use AdminProfileActions for cross-page
-  // moderation, not this modal.
+  // Only the page's own owner sees Danger Zone. Instance-staff takedowns go
+  // through AdminProfileActions on the page header, not this settings modal.
   let isOwner = $derived(viewerRole === 'owner');
-  let canDelete = $derived(isOwner || isStaff);
+  let canDelete = $derived(isOwner);
 
   $effect(() => {
     if (!page) return;

@@ -53,13 +53,13 @@
   // and the delete confirmation live inside the modal now.
   let manageModalOpen = $state(false);
 
-  // Anyone with at least a manager-tier role (owner / admin) on the
-  // page — plus instance staff — can pull up the management modal.
-  // The modal itself further gates Danger Zone (delete) to owners
-  // and staff.
+  // Page *settings* are governance — only the page's own manager-tier roles
+  // (owner / admin / editor / moderator). Instance staff do NOT get the
+  // settings gear here: their powers (takedown, suspend, silence) live in the
+  // separate AdminProfileActions panel above, per the "admin controls, not
+  // entity settings" rule.
   let canManage = $derived(
     isOwner ||
-      $isStaffMember ||
       (typeof pageData?.viewer_role === 'string' &&
         ['admin', 'editor', 'moderator'].includes(pageData.viewer_role)),
   );
@@ -321,7 +321,6 @@
 <PageManageModal
   bind:open={manageModalOpen}
   bind:page={pageData}
-  isStaff={$isStaffMember}
   ondeleted={() => goto('/pages')}
 />
 

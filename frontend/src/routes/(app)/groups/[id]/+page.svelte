@@ -45,11 +45,11 @@
   let currentUserId = $derived(get(authStore)?.user?.id);
   let isAdmin = $derived(group?.role === 'owner' || group?.role === 'admin');
   let isOwner = $derived(group?.role === 'owner');
-  // Mirror the Pages header: in-group owners/admins OR instance staff can
-  // manage. Staff aren't usually group members, so without the staff check
-  // a site admin could never open the manage modal — even though the modal
-  // and backend (`Groups.can_manage?/2`) already grant them the rights.
-  let canManage = $derived(isAdmin || $isStaffMember);
+  // Group *settings* are governance — only in-group owners/admins. Instance
+  // staff do NOT get the settings gear here: their powers (takedown, suspend,
+  // silence) live in the separate AdminProfileActions panel above, per the
+  // "admin controls, not entity settings" rule.
+  let canManage = $derived(isAdmin);
 
   const tabs = [
     { id: 'posts', label: 'Posts' },
@@ -347,7 +347,6 @@
 <GroupManageModal
   bind:open={manageModalOpen}
   bind:group
-  isStaff={$isStaffMember}
   ondeleted={() => goto('/groups')}
 />
 

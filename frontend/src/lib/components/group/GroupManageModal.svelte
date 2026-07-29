@@ -27,16 +27,11 @@
   let {
     open = $bindable(false),
     group = $bindable(),
-    isStaff = false,
     onclose,
     ondeleted,
   }: {
     open?: boolean;
     group: GroupDetail | null;
-    // Instance moderators/admins get the same delete affordance the
-    // group owner does — overrides the role-based gate below since
-    // staff aren't usually members of the groups they moderate.
-    isStaff?: boolean;
     onclose?: () => void;
     // Fired after the group is deleted — the parent page typically
     // navigates away (back to /groups) so the now-stale URL doesn't
@@ -83,7 +78,9 @@
   let deleting = $state(false);
 
   let isOwner = $derived(group?.role === 'owner');
-  let canDelete = $derived(isOwner || isStaff);
+  // Only the group's own owner can delete it here. Instance-staff takedowns
+  // go through AdminProfileActions on the group header, not these settings.
+  let canDelete = $derived(isOwner);
   let groupId = $derived(group?.id ?? '');
   // Members across the conversation get tagged as "needs reviewing"
   // when applications exist; show the Applications section only if
