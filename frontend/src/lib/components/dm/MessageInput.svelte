@@ -33,6 +33,7 @@
     'image/png',
     'image/gif',
     'image/webp',
+    'image/avif',
     'video/mp4',
     'video/webm',
     'audio/mpeg',
@@ -45,7 +46,7 @@
     'audio/webm',
   ]);
   const ACCEPTED_EXTENSIONS = new Set([
-    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif',
     '.mp4', '.webm',
     '.mp3', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.m4a', '.weba',
   ]);

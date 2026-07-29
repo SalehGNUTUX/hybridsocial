@@ -26,8 +26,23 @@ defmodule Hybridsocial.Media.ValidatorTest do
       assert {:ok, "image/webp"} = Validator.validate_content_type(data)
     end
 
+    test "detects AVIF (still image, avif brand)" do
+      data = <<0x00, 0x00, 0x00, 0x1C, "ftyp", "avif", 0::size(64)>>
+      assert {:ok, "image/avif"} = Validator.validate_content_type(data)
+    end
+
+    test "detects AVIF image sequence (avis brand)" do
+      data = <<0x00, 0x00, 0x00, 0x1C, "ftyp", "avis", 0::size(64)>>
+      assert {:ok, "image/avif"} = Validator.validate_content_type(data)
+    end
+
     test "detects MP4" do
       data = <<0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70, 0::size(80)>>
+      assert {:ok, "video/mp4"} = Validator.validate_content_type(data)
+    end
+
+    test "an ftyp box with a non-AVIF brand is still classified as mp4, not avif" do
+      data = <<0x00, 0x00, 0x00, 0x1C, "ftyp", "isom", 0::size(64)>>
       assert {:ok, "video/mp4"} = Validator.validate_content_type(data)
     end
 

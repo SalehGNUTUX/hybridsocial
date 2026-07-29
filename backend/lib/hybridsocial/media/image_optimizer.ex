@@ -44,6 +44,10 @@ defmodule Hybridsocial.Media.ImageOptimizer do
       not vips_available?() -> {:skip, path, content_type, file_size(path)}
       gif?(content_type) -> {:skip, path, content_type, file_size(path)}
       svg?(content_type) -> {:skip, path, content_type, file_size(path)}
+      # AVIF is already highly compressed and the pass-through avoids both a
+      # dependency on libvips' AVIF *save* support and an accidental transcode
+      # to JPEG (the default output extension), which would drop the format.
+      avif?(content_type) -> {:skip, path, content_type, file_size(path)}
       file_size(path) < @passthrough_bytes -> {:skip, path, content_type, file_size(path)}
       true -> run(path, content_type, opts)
     end
@@ -120,6 +124,9 @@ defmodule Hybridsocial.Media.ImageOptimizer do
 
   defp gif?("image/gif"), do: true
   defp gif?(_), do: false
+
+  defp avif?("image/avif"), do: true
+  defp avif?(_), do: false
 
   defp svg?("image/svg+xml"), do: true
   defp svg?(_), do: false
