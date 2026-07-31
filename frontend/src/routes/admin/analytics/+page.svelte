@@ -4,13 +4,17 @@
   import Spinner from '$lib/components/ui/Spinner.svelte';
 
   interface ChartPoint { date: string; count: number; }
-  interface Summary { total_users: number; total_posts: number; total_reactions: number; posts_today: number; registrations_today: number; storage: { media_count: number; total_bytes: number }; federation: { remote_actors: number; remote_identities: number }; }
+  interface Summary { total_users: number; total_posts: number; federated_posts: number; total_reactions: number; posts_today: number; registrations_today: number; storage: { media_count: number; total_bytes: number }; federation: { remote_actors: number; remote_identities: number }; }
   interface QueueStats { nats: { connected: boolean }; tasks: { active: number }; workers: { name: string; alive: boolean }[]; system: { uptime_seconds: number; memory_total_mb: number; process_count: number; scheduler_count: number }; }
 
   let summary = $state<Summary | null>(null);
   let userGrowth = $state<ChartPoint[]>([]);
   let postVolume = $state<ChartPoint[]>([]);
+  let federatedVolume = $state<ChartPoint[]>([]);
   let activeUsers = $state<ChartPoint[]>([]);
+  // Distinct accounts across the whole window, computed server-side.
+  // Summing the daily buckets would count a user once per active day.
+  let activeUsersTotal = $state(0);
   let queueStats = $state<QueueStats | null>(null);
   let loading = $state(true);
   let days = $state(30);
@@ -23,17 +27,20 @@
   async function loadData() {
     loading = true;
     try {
-      const [s, ug, pv, au, qs] = await Promise.all([
+      const [s, ug, pv, fv, au, qs] = await Promise.all([
         api.get<Summary>('/api/v1/admin/analytics/summary'),
         api.get<{ data: ChartPoint[] }>(`/api/v1/admin/analytics/user_growth?days=${days}`),
         api.get<{ data: ChartPoint[] }>(`/api/v1/admin/analytics/post_volume?days=${days}`),
-        api.get<{ data: ChartPoint[] }>(`/api/v1/admin/analytics/active_users?days=${days}`),
+        api.get<{ data: ChartPoint[] }>(`/api/v1/admin/analytics/federated_post_volume?days=${days}`),
+        api.get<{ data: ChartPoint[]; total: number }>(`/api/v1/admin/analytics/active_users?days=${days}`),
         api.get<QueueStats>('/api/v1/admin/queue_stats'),
       ]);
       summary = s;
       userGrowth = ug.data || [];
       postVolume = pv.data || [];
+      federatedVolume = fv.data || [];
       activeUsers = au.data || [];
+      activeUsersTotal = au.total ?? 0;
       queueStats = qs;
     } catch { /* */ }
     finally { loading = false; }
@@ -114,7 +121,7 @@
         <div class="stat-card">
           <span class="stat-value">{summary.total_posts.toLocaleString()}</span>
           <span class="stat-label">Total Posts</span>
-          <span class="stat-sub">+{summary.posts_today} today</span>
+          <span class="stat-sub">+{summary.posts_today} today · local</span>
         </div>
         <div class="stat-card">
           <span class="stat-value">{summary.total_reactions.toLocaleString()}</span>
@@ -126,18 +133,19 @@
           <span class="stat-sub">{summary.storage.media_count} files</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">{summary.federation.remote_identities}</span>
+          <span class="stat-value">{summary.federation.remote_identities.toLocaleString()}</span>
           <span class="stat-label">Remote Users</span>
+          <span class="stat-sub">{summary.federated_posts.toLocaleString()} posts ingested</span>
         </div>
       </div>
     {/if}
 
-    {#snippet chart(title: string, data: ChartPoint[], unit: string, colorClass: string)}
+    {#snippet chart(title: string, data: ChartPoint[], unit: string, colorClass: string, headline?: number)}
       <div class="chart-card">
         <div class="chart-header">
           <h3 class="chart-title">{title}</h3>
           <span class="chart-total">
-            {total(data).toLocaleString()}
+            {(headline ?? total(data)).toLocaleString()}
             <span class="chart-total-label">{unit} · last {days} days</span>
           </span>
         </div>
@@ -185,7 +193,8 @@
     <div class="charts-grid">
       {@render chart('New user registrations per day', userGrowth, 'users', 'bar-primary')}
       {@render chart('Posts per day', postVolume, 'posts', 'bar-blue')}
-      {@render chart('Users active per day', activeUsers, 'active users', 'bar-green')}
+      {@render chart('Users active per day', activeUsers, 'distinct users', 'bar-green', activeUsersTotal)}
+      {@render chart('Federated posts ingested per day', federatedVolume, 'posts', 'bar-amber')}
     </div>
 
     <!-- System / Queue Stats -->
@@ -303,6 +312,9 @@
   .bar-primary { background: var(--color-primary); }
   .bar-blue { background: #3b82f6; }
   .bar-green { background: #22c55e; }
+  /* Inbound federation — deliberately a different hue from the local
+     series so the two post charts don't read as the same measure. */
+  .bar-amber { background: #f59e0b; }
   .bar-col:hover .bar,
   .bar-col:focus-visible .bar { opacity: 0.75; outline: 2px solid var(--color-primary); outline-offset: 2px; }
 

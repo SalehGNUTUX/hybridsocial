@@ -796,6 +796,11 @@ defmodule HybridsocialWeb.Router do
     get "/analytics/summary", AdminController, :analytics_summary
     get "/analytics/user_growth", AdminController, :analytics_user_growth
     get "/analytics/post_volume", AdminController, :analytics_post_volume
+
+    get "/analytics/federated_post_volume",
+        AdminController,
+        :analytics_federated_post_volume
+
     get "/analytics/active_users", AdminController, :analytics_active_users
     get "/analytics/reactions", AdminController, :analytics_reactions
     get "/analytics/follows", AdminController, :analytics_follows
