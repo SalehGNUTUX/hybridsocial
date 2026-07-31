@@ -94,8 +94,23 @@ export function updateGroup(id: string, data: GroupSettings): Promise<GroupDetai
   return api.patch(`/api/v1/groups/${id}`, data);
 }
 
-export function deleteGroup(id: string): Promise<void> {
-  return api.delete(`/api/v1/groups/${id}`);
+// `reason` is only meaningful for a staff (instance-moderator) takedown of a
+// group they don't own: the backend opens a takedown + notifies the owner
+// (who can then appeal) when a staff actor deletes with a reason. An owner
+// deleting their own group passes none.
+export function deleteGroup(id: string, opts?: { reason?: string }): Promise<void> {
+  const body = opts?.reason ? { reason: opts.reason } : undefined;
+  return api.delete(`/api/v1/groups/${id}`, body);
+}
+
+// Staff-only: soft-deleted groups (from a takedown or owner deletion) and
+// restoring one — the moderator side of the takedown appeal loop.
+export function listDeletedGroups(): Promise<Group[]> {
+  return api.get<Group[]>('/api/v1/groups/deleted');
+}
+
+export function restoreGroup(id: string): Promise<Group> {
+  return api.post<Group>(`/api/v1/groups/${id}/restore`);
 }
 
 export function joinGroup(id: string): Promise<{ status: 'joined' | 'pending' }> {

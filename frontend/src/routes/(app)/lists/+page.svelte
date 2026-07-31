@@ -156,7 +156,7 @@
         timeline, like <strong>Friends</strong> or <strong>News</strong>. Open a
         list to read only its members' posts, away from your Home feed. Use
         <strong>New List</strong> to create one, and each list's <strong>⋯</strong>
-        menu to rename it, manage members, or delete it.
+        menu to rename or delete it. Open a list to manage who's in it.
       </p>
     </div>
     <ul class="list-items">

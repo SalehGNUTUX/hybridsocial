@@ -275,6 +275,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
       |> parse_pagination_params()
       |> maybe_put_streams_sort(params["sort"])
       |> maybe_put_streams_query(params["q"])
+      |> maybe_put_streams_orientation(params["orientation"])
 
     posts = Hybridsocial.Social.Streams.streams_feed(viewer_id, opts)
     serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
@@ -323,6 +324,14 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
     do: Keyword.put(opts, :sort, sort)
 
   defp maybe_put_streams_sort(opts, _), do: opts
+
+  # Streams passes `orientation=all` to surface clips of every size; Reels
+  # (and any other caller) omits it and keeps the vertical-only default.
+  # Only the explicit "all" opts in — anything else falls through to portrait.
+  defp maybe_put_streams_orientation(opts, "all"),
+    do: Keyword.put(opts, :orientation, :all)
+
+  defp maybe_put_streams_orientation(opts, _), do: opts
 
   defp maybe_put_streams_query(opts, q) when is_binary(q) and q != "",
     do: Keyword.put(opts, :q, q)

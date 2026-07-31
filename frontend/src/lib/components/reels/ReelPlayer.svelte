@@ -9,6 +9,9 @@
     muted,
     autoplay,
     onmutetoggle,
+    onautoplaytoggle,
+    onsearch,
+    onsort,
     oncomment,
     onview,
   }: {
@@ -18,6 +21,10 @@
     muted: boolean;
     autoplay: boolean;
     onmutetoggle: () => void;
+    /** Feed-level controls, overlaid on the clip (top-right). */
+    onautoplaytoggle: () => void;
+    onsearch: () => void;
+    onsort: () => void;
     oncomment?: () => void;
     /** Report a view. Called once at start (impression) and once at end. */
     onview: (
@@ -222,6 +229,10 @@
 </script>
 
 <section class="reel">
+ <!-- The frame is sized to the actual clip (9:16); every overlay anchors to
+      it, not to the full-width section — so the ring sits on the clip's
+      corner and the action bar matches the clip width on every screen. -->
+ <div class="reel-frame">
   <!-- Tapping the video area toggles play/pause. Overlays above stop their
        own taps from reaching it. -->
   <button
@@ -258,6 +269,36 @@
       {/if}
     </div>
   {/if}
+
+  <!-- Feed controls overlaid on the clip, top-right: autoplay, search, sort. -->
+  <div class="reel-topbar">
+    <button
+      type="button"
+      class="reel-icon-btn"
+      class:on={autoplay}
+      aria-pressed={autoplay}
+      aria-label={autoplay ? 'Autoplay on' : 'Autoplay off'}
+      onclick={(e) => { e.stopPropagation(); onautoplaytoggle(); }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+    </button>
+    <button
+      type="button"
+      class="reel-icon-btn"
+      aria-label="Search reels"
+      onclick={(e) => { e.stopPropagation(); onsearch(); }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+    </button>
+    <button
+      type="button"
+      class="reel-icon-btn"
+      aria-label="Sort reels"
+      onclick={(e) => { e.stopPropagation(); onsort(); }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M6 12h12M10 18h4" /></svg>
+    </button>
+  </div>
 
   <!-- Mute button + circular scrubber, top-left. -->
   <div class="reel-ring-wrap">
@@ -341,6 +382,7 @@
       {/if}
     </div>
   </div>
+ </div>
 </section>
 
 <style>
@@ -354,7 +396,21 @@
     justify-content: center;
   }
 
-  /* The tap surface fills the reel; it carries no visual style of its own. */
+  /* The actual clip box (9:16). Every overlay is positioned relative to THIS,
+     not the full-width .reel section, so controls anchor to the clip on every
+     screen. overflow:hidden clips overlays to the rounded corners. */
+  .reel-frame {
+    position: relative;
+    height: 100%;
+    max-height: 100%;
+    aspect-ratio: 9 / 16;
+    max-width: 100%;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: #000;
+  }
+
+  /* The tap surface fills the frame; it carries no visual style of its own. */
   .reel-stage {
     position: absolute;
     inset: 0;
@@ -367,15 +423,45 @@
     cursor: pointer;
   }
 
-  /* 9:16 frame filled edge-to-edge so a portrait reel shows with no bars. */
   .reel-video {
+    width: 100%;
     height: 100%;
-    max-height: 100%;
-    aspect-ratio: 9 / 16;
-    max-width: 100%;
     object-fit: cover;
     background: #000;
-    border-radius: var(--radius-lg);
+  }
+
+  /* Feed controls overlaid on the clip's top-right (autoplay / search / sort). */
+  .reel-topbar {
+    position: absolute;
+    inset-block-start: var(--space-3);
+    inset-inline-end: var(--space-3);
+    display: flex;
+    gap: var(--space-2);
+    z-index: 2;
+  }
+
+  .reel-icon-btn {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: background 150ms ease, color 150ms ease;
+  }
+
+  .reel-icon-btn:hover {
+    background: rgba(0, 0, 0, 0.65);
+  }
+
+  .reel-icon-btn.on {
+    background: var(--color-primary, #6c3edd);
   }
 
   .tap-glyph {
@@ -478,17 +564,13 @@
   /* --- Bottom overlay --- */
   .reel-overlay {
     position: absolute;
-    inset-inline: 50%;
+    inset-inline: 0;
     bottom: 0;
-    transform: translateX(-50%);
-    width: min(100%, calc(100% * 9 / 16));
-    max-width: 100%;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-8) var(--space-3) var(--space-3);
     background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     pointer-events: none;
   }
 
@@ -529,7 +611,15 @@
     background: var(--color-surface-raised);
     border-radius: var(--radius-full);
     padding-inline: var(--space-1);
-    width: fit-content;
+    /* Never wider than the clip — if the action row is long, scroll it inside
+       the pill rather than spilling past the clip's right edge. */
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .reel-actions::-webkit-scrollbar {
+    display: none;
   }
 
   .caption-toggle {

@@ -130,6 +130,26 @@ defmodule Hybridsocial.PagesTest do
       assert {:error, :forbidden} =
                Pages.update_page(page.id, rando.id, %{"display_name" => "Hacked"})
     end
+
+    test "an editor can change content but not the org settings (website/category)" do
+      owner = create_user("pg_upd6", "pg_upd6@example.com")
+      editor = create_user("pg_upd7", "pg_upd7@example.com")
+      page = create_test_page(owner, "upd_page4")
+      {:ok, _} = Pages.add_role(page.id, owner.id, editor.id, "editor")
+
+      {:ok, updated} =
+        Pages.update_page(page.id, editor.id, %{
+          "display_name" => "Editor Name",
+          "website" => "https://editor-tried.example",
+          "category" => "spam"
+        })
+
+      # Content change applies…
+      assert updated.display_name == "Editor Name"
+      # …but the settings are left untouched (still the create-time values).
+      assert updated.organization.website == "https://example.com"
+      assert updated.organization.category == "tech"
+    end
   end
 
   describe "delete_page/2" do

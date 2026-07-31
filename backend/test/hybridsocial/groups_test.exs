@@ -28,6 +28,13 @@ defmodule Hybridsocial.GroupsTest do
     identity
   end
 
+  defp membership_id(group_id, identity_id) do
+    Hybridsocial.Groups.GroupMember
+    |> where([m], m.group_id == ^group_id and m.identity_id == ^identity_id)
+    |> Repo.one()
+    |> Map.get(:id)
+  end
+
   defp last_audit(action) do
     AuditLog
     |> where([a], a.action == ^action)
@@ -630,6 +637,48 @@ defmodule Hybridsocial.GroupsTest do
 
       invites = Groups.get_invites(bob.id)
       assert length(invites) == 2
+    end
+  end
+
+  describe "update_member_role/4 — role management is governance, not moderation" do
+    test "instance staff CANNOT promote themselves in a group they only joined",
+         %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Community"})
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+      make_staff(bob)
+
+      bob_membership = membership_id(group.id, bob.id)
+
+      assert {:error, :forbidden} =
+               Groups.update_member_role(group.id, bob.id, bob_membership, "moderator")
+
+      # Role is unchanged — the staff override does not reach role management.
+      assert Repo.get(Hybridsocial.Groups.GroupMember, bob_membership).role == :member
+    end
+
+    test "instance staff who aren't members cannot change anyone's role",
+         %{alice: alice, bob: bob, carol: carol} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Community"})
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+      make_staff(carol)
+
+      bob_membership = membership_id(group.id, bob.id)
+
+      assert {:error, :forbidden} =
+               Groups.update_member_role(group.id, carol.id, bob_membership, "admin")
+    end
+
+    test "a genuine group owner/admin can still change roles",
+         %{alice: alice, bob: bob} do
+      {:ok, group} = Groups.create_group(alice.id, %{"name" => "Community"})
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+
+      bob_membership = membership_id(group.id, bob.id)
+
+      assert {:ok, updated} =
+               Groups.update_member_role(group.id, alice.id, bob_membership, "moderator")
+
+      assert updated.role == :moderator
     end
   end
 end
