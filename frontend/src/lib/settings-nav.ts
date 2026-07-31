@@ -37,6 +37,7 @@ export const settingsGroups: SettingsGroup[] = [
       { href: '/settings/blocks', label: 'Blocked & muted', description: "Accounts and domains you've blocked, and accounts you've muted", icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM4.93 4.93l14.14 14.14' },
       { href: '/settings/filters', label: 'Content Filters', description: 'Hide posts that match keywords', icon: 'M22 3H2l8 9.46V19l4 2v-8.54L22 3z' },
       { href: '/settings/follow-requests', label: 'Follow Requests', description: 'Approve or decline requests to follow you', icon: 'M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM17 11l2 2 4-4' },
+      { href: '/settings/moderation', label: 'Moderation status', description: 'Content moderators removed, and how to appeal before it is permanently deleted', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4' },
     ],
   },
   {
