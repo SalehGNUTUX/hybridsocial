@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import Tabs from '$lib/components/ui/Tabs.svelte';
   import DataTable from '$lib/components/admin/DataTable.svelte';
+  import Pagination from '$lib/components/admin/Pagination.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import { addToast } from '$lib/stores/toast.js';
   import {
@@ -29,8 +30,49 @@
   let instanceSortKey = $state('last_activity_at');
   let instanceSortDir = $state<'asc' | 'desc'>('desc');
 
+  // Client-side pagination: both federation endpoints return their full
+  // set (no server-side limit), and we slice locally so sorting stays
+  // instant without a round-trip per click. ~1.9k known instances is a
+  // lot of DOM to paint at once.
+  const INSTANCES_PAGE_SIZE = 50;
+  let instancePage = $state(1);
+
+  // DataTable reports sort state but does NOT reorder rows — it renders
+  // `rows` exactly as passed. Sorting therefore has to happen here;
+  // without it the header arrow moved but the table never re-sorted.
+  let sortedInstances = $derived.by(() => {
+    const key = instanceSortKey;
+    const dir = instanceSortDir === 'asc' ? 1 : -1;
+    return [...instances].sort((a, b) => {
+      const av = (a as unknown as Record<string, unknown>)[key];
+      const bv = (b as unknown as Record<string, unknown>)[key];
+      // Nulls (an instance we've never seen activity from, unknown
+      // software) sort last regardless of direction, so they never
+      // crowd out the rows an admin is actually looking for.
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      if (key.endsWith('_at')) {
+        return (new Date(av as string).getTime() - new Date(bv as string).getTime()) * dir;
+      }
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  });
+
+  // A re-sort or a reload can leave you on a page that no longer exists;
+  // snap back to the first page rather than showing an empty table.
+  $effect(() => {
+    void instanceSortKey;
+    void instanceSortDir;
+    void instances.length;
+    instancePage = 1;
+  });
+
   let instanceRows = $derived(
-    instances.map((i) => ({ ...i } as Record<string, unknown>))
+    sortedInstances
+      .slice((instancePage - 1) * INSTANCES_PAGE_SIZE, instancePage * INSTANCES_PAGE_SIZE)
+      .map((i) => ({ ...i } as Record<string, unknown>))
   );
 
   const instanceColumns = [
@@ -44,6 +86,22 @@
   // Policies
   let policies: FederationPolicy[] = $state([]);
   let policiesLoading = $state(false);
+
+  const POLICIES_PAGE_SIZE = 25;
+  let policyPage = $state(1);
+  let pagedPolicies = $derived(
+    policies.slice((policyPage - 1) * POLICIES_PAGE_SIZE, policyPage * POLICIES_PAGE_SIZE)
+  );
+
+  // Removing a policy can shrink the list past the current page
+  // (deleting the only entry on the last page, say). Clamp instead of
+  // resetting to 1 so an admin pruning entries keeps their place.
+  // `policyPage` is read untracked — a plain read here would make the
+  // effect depend on what it writes and re-run itself.
+  $effect(() => {
+    const maxPage = Math.max(1, Math.ceil(policies.length / POLICIES_PAGE_SIZE));
+    if (untrack(() => policyPage) > maxPage) policyPage = maxPage;
+  });
   let newPolicyDomain = $state('');
   let newPolicyType = $state<'allow' | 'silence' | 'suspend' | 'force_nsfw' | 'block_media'>('silence');
   let newPolicyReason = $state('');
@@ -320,6 +378,10 @@
         reason: newPolicyReason || null
       });
       policies = [...policies, policy];
+      // The new policy is appended, so once the list spills past one
+      // page it would land on the last one and look like nothing
+      // happened. Follow it there.
+      policyPage = Math.max(1, Math.ceil(policies.length / POLICIES_PAGE_SIZE));
       newPolicyDomain = '';
       newPolicyReason = '';
       addToast('Federation policy created', 'success');
@@ -437,6 +499,16 @@
         {/snippet}
       </DataTable>
 
+      {#if !instancesLoading}
+        <Pagination
+          bind:currentPage={instancePage}
+          totalItems={instances.length}
+          pageSize={INSTANCES_PAGE_SIZE}
+          itemLabel="instances"
+          ariaLabel="Known instances pagination"
+        />
+      {/if}
+
     {:else if activeTab === 'policies'}
       <form class="add-form" onsubmit={(e) => { e.preventDefault(); handleAddPolicy(); }}>
         <input class="input" type="text" bind:value={newPolicyDomain} placeholder="domain.example" required />
@@ -475,7 +547,7 @@
       </div>
 
       <div class="list-items">
-        {#each policies as policy (policy.domain)}
+        {#each pagedPolicies as policy (policy.domain)}
           <div class="list-item card">
             <div class="list-item-info">
               <strong>{policy.domain}</strong>
@@ -503,6 +575,14 @@
           <p class="empty-text">No federation policies configured</p>
         {/each}
       </div>
+
+      <Pagination
+        bind:currentPage={policyPage}
+        totalItems={policies.length}
+        pageSize={POLICIES_PAGE_SIZE}
+        itemLabel="policies"
+        ariaLabel="Federation policies pagination"
+      />
 
     {:else if activeTab === 'delivery'}
       {#if deliveryLoading}
