@@ -163,6 +163,51 @@
   let search = $state('');
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Tap the clip body (not the native controls strip) to play/pause.
+  function toggleStreamPlay(e: MouseEvent) {
+    const wrapper = (e.currentTarget as HTMLElement).closest('.stream-video-wrapper');
+    const video = wrapper?.querySelector('video');
+    if (!video) return;
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  }
+
+  // The sound + autoplay controls scroll out of reach on a long feed. Reveal a
+  // floating copy whenever the scroll DIRECTION changes, then hide it again
+  // once the user keeps going the same way for about one clip — so they're
+  // always a flick away without scrolling back to the top.
+  let controlsRevealed = $state(false);
+  let lastScrollTop = 0;
+  let lastDir = 0; // -1 up, 1 down
+  let revealAnchor = 0;
+  const REVEAL_MIN = 120; // don't bother while the header row is still on screen
+  const HIDE_AFTER = 320; // px of continued same-direction scroll (~one clip)
+
+  // The page (window) scrolls — the feed has no internal overflow — so the
+  // header scrolls away. Watch window scroll to reveal the floating controls.
+  function onWindowScroll() {
+    const top = window.scrollY;
+    const delta = top - lastScrollTop;
+    lastScrollTop = top;
+    if (Math.abs(delta) < 2) return;
+
+    const dir = delta > 0 ? 1 : -1;
+
+    if (top <= REVEAL_MIN) {
+      // Near the top the real header is visible; no floating copy needed.
+      controlsRevealed = false;
+    } else if (dir !== lastDir) {
+      // Direction just reversed — flash the controls in.
+      controlsRevealed = true;
+      revealAnchor = top;
+    } else if (controlsRevealed && Math.abs(top - revealAnchor) > HIDE_AFTER) {
+      // Kept scrolling the same way past ~one clip — hide again.
+      controlsRevealed = false;
+    }
+
+    lastDir = dir;
+  }
+
   const SORTS: { value: 'trending' | 'newest' | 'oldest'; label: string }[] = [
     { value: 'trending', label: 'Trending' },
     { value: 'newest', label: 'Newest' },
@@ -334,7 +379,38 @@
   <title>Streams - {$instanceName}</title>
 </svelte:head>
 
+<svelte:window onscroll={onWindowScroll} />
+
 <div class="streams-page">
+  <!-- Floating copy of the sound + autoplay controls, revealed on scroll
+       direction change (see onFeedScroll) so they're reachable mid-feed. -->
+  <div class="streams-floating-controls" class:revealed={controlsRevealed} aria-hidden={!controlsRevealed}>
+    <button
+      type="button"
+      class="float-btn"
+      class:on={!muted}
+      aria-label={muted ? 'Unmute all streams' : 'Mute all streams'}
+      tabindex={controlsRevealed ? 0 : -1}
+      onclick={toggleMuted}
+    >
+      {#if muted}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.63 3.63a.996.996 0 0 0 0 1.41L7.29 8.7 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71v-4.17l4.18 4.18c-.49.37-1.02.68-1.6.91v2.06a8.9 8.9 0 0 0 3.02-1.32l1.65 1.65a.996.996 0 1 0 1.41-1.41L5.05 3.63a.996.996 0 0 0-1.42 0zM19 12c0 .82-.15 1.61-.41 2.34l1.53 1.53A8.9 8.9 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71z" /></svg>
+      {:else}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71V6.41c0-.89-1.08-1.34-1.71-.71L7 9H4a1 1 0 0 0-1 1zm13.5 2A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+      {/if}
+    </button>
+    <button
+      type="button"
+      class="float-btn"
+      class:on={autoplay}
+      aria-label={autoplay ? 'Autoplay on' : 'Autoplay off'}
+      tabindex={controlsRevealed ? 0 : -1}
+      onclick={toggleAutoplay}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+    </button>
+  </div>
+
   <div class="page-header">
     <h1 class="page-title">Streams</h1>
     <div class="header-controls">
@@ -448,6 +524,14 @@
               >
                 <track kind="captions" />
               </video>
+              <!-- Tap the clip (above the native controls strip) to play/pause,
+                   without disturbing the scrubber or the display style. -->
+              <button
+                type="button"
+                class="stream-tap"
+                aria-label="Play or pause"
+                onclick={toggleStreamPlay}
+              ></button>
               <div class="stream-overlay">
                 <a href="/@{post.account.handle}" class="stream-author">
                   <Avatar src={post.account.avatar_url} name={post.account.display_name || post.account.handle} size="sm" />
@@ -521,6 +605,63 @@
   .streams-page {
     max-width: var(--feed-max-width);
     margin: 0 auto;
+  }
+
+  /* Floating sound + autoplay controls, revealed on scroll-direction change.
+     Fixed (the window scrolls), just under the app header. */
+  .streams-floating-controls {
+    position: fixed;
+    inset-block-start: calc(var(--header-height, 60px) + var(--space-2));
+    inset-inline-end: var(--space-4);
+    z-index: 50;
+    display: flex;
+    gap: var(--space-2);
+    opacity: 0;
+    transform: translateY(-10px);
+    pointer-events: none;
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+
+  .streams-floating-controls.revealed {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .float-btn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--color-surface-base, #fff) 80%, transparent);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    backdrop-filter: saturate(1.4) blur(10px);
+    -webkit-backdrop-filter: saturate(1.4) blur(10px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    transition: color 150ms ease, background 150ms ease;
+  }
+
+  .float-btn:hover {
+    color: var(--color-text);
+  }
+
+  .float-btn.on {
+    color: var(--color-primary);
+  }
+
+  /* Center-tap play/pause surface — covers the clip but clears the bottom
+     native-controls strip so the scrubber/volume stay usable. */
+  .stream-tap {
+    position: absolute;
+    inset: 0 0 44px 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
   }
 
   .page-header {
