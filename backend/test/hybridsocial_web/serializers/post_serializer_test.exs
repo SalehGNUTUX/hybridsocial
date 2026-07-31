@@ -109,4 +109,54 @@ defmodule HybridsocialWeb.Serializers.PostSerializerTest do
       assert {_, _} = changeset.errors[:identity_id]
     end
   end
+
+  describe "last_activity_at" do
+    alias Hybridsocial.Social.Posts
+
+    test "is exposed so the client can explain an activity-ordered bump" do
+      author = create_user("bumpauthor")
+      replier = create_user("bumpreplier")
+
+      {:ok, post} =
+        Posts.create_post(author.id, %{
+          "content" => "Root post",
+          "post_type" => "text",
+          "visibility" => "public"
+        })
+
+      {:ok, _reply} =
+        Posts.create_post(replier.id, %{
+          "content" => "A reply",
+          "post_type" => "text",
+          "visibility" => "public",
+          "parent_id" => post.id
+        })
+
+      bumped = Repo.get!(Hybridsocial.Social.Post, post.id) |> Repo.preload(:identity)
+      serialized = PostSerializer.serialize(bumped)
+
+      assert serialized.last_activity_at == bumped.last_activity_at
+      # The reply moved it past publication — that gap is what the feed
+      # sorts on and what the client renders as "Last reply …".
+      assert DateTime.compare(serialized.last_activity_at, bumped.published_at) == :gt
+    end
+
+    test "serialize_many exposes it too" do
+      author = create_user("bumpauthor2")
+
+      {:ok, post} =
+        Posts.create_post(author.id, %{
+          "content" => "Unbumped post",
+          "post_type" => "text",
+          "visibility" => "public"
+        })
+
+      reloaded = Repo.get!(Hybridsocial.Social.Post, post.id) |> Repo.preload(:identity)
+      [serialized] = PostSerializer.serialize_many([reloaded])
+
+      # Never replied to: last_activity_at is stamped at publication, so the
+      # client sees no gap and shows no bump line.
+      assert serialized.last_activity_at == post.published_at
+    end
+  end
 end

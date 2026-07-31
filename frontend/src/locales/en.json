@@ -40,6 +40,8 @@
   "post.edit_markdown_label": "Toggle markdown formatting",
   "post.edit_markdown_on": "Markdown on — click to save as plain text",
   "post.edit_markdown_off": "Markdown off — click to enable",
+  "post.last_reply": "Last reply {time} ago",
+  "post.last_reply_now": "Last reply just now",
   "post.pin": "Pin to profile",
   "post.unpin": "Unpin from profile",
   "post.show_more": "Show more",

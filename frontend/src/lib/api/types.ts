@@ -148,6 +148,13 @@ export interface Post {
   // comes back via the post-replace event.
   pending?: boolean;
   created_at: string;
+  /**
+   * Timestamp of the newest reply anywhere in this post's thread, which is
+   * what activity-ordered feeds sort on. Equal to `created_at` until the
+   * first reply lands, so `last_activity_at > created_at` means "a reply
+   * bumped this back up".
+   */
+  last_activity_at?: string | null;
   edited_at: string | null;
   edit_expires_at: string | null;
   account: Identity;
