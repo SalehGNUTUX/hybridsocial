@@ -100,6 +100,7 @@ defmodule Hybridsocial.Media.Backends.Local do
   defp extension_from_content_type("image/png"), do: "png"
   defp extension_from_content_type("image/gif"), do: "gif"
   defp extension_from_content_type("image/webp"), do: "webp"
+  defp extension_from_content_type("image/avif"), do: "avif"
   defp extension_from_content_type("video/mp4"), do: "mp4"
   defp extension_from_content_type("video/webm"), do: "webm"
   defp extension_from_content_type(_), do: "bin"

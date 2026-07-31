@@ -25,6 +25,7 @@
     'image/png',
     'image/gif',
     'image/webp',
+    'image/avif',
     'video/mp4',
     'video/webm',
     'audio/mpeg',
@@ -39,7 +40,7 @@
   // Extension fallback for browsers / drag sources that hand us a blank
   // or wrong MIME type (common with copy-from-Finder on macOS).
   const ACCEPTED_EXTENSIONS = new Set([
-    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif',
     '.mp4', '.webm',
     '.mp3', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.m4a', '.weba',
   ]);

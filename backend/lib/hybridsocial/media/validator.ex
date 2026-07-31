@@ -23,6 +23,10 @@ defmodule Hybridsocial.Media.Validator do
       png?(binary_data) -> {:ok, "image/png"}
       gif?(binary_data) -> {:ok, "image/gif"}
       webp?(binary_data) -> {:ok, "image/webp"}
+      # AVIF before mp4?: AVIF is an ISOBMFF container and shares the `ftyp`
+      # box at offset 4, so mp4? would otherwise claim it and route the image
+      # into the video pipeline. avif? disambiguates on the brand at offset 8.
+      avif?(binary_data) -> {:ok, "image/avif"}
       # mp4-family magic bytes — needs ffprobe to distinguish
       # video/mp4 from audio/mp4 (m4a). Default-classify as video
       # here; `refine_mp4_family/2` downgrades to audio/mp4 when
@@ -128,6 +132,15 @@ defmodule Hybridsocial.Media.Validator do
   end
 
   defp svg?(_), do: false
+
+  # AVIF: ISOBMFF with `ftyp` at offset 4 and an AVIF brand at offset 8
+  # ("avif" for a still image, "avis" for an image sequence). Checking the
+  # major brand keeps HEIC ("heic"/"heix") and plain mp4 out of this bucket.
+  defp avif?(<<_size::binary-size(4), "ftyp", brand::binary-size(4), _rest::binary>>)
+       when brand in ["avif", "avis"],
+       do: true
+
+  defp avif?(_), do: false
 
   # MP4: ftyp at offset 4
   defp mp4?(<<_size::binary-size(4), 0x66, 0x74, 0x79, 0x70, _rest::binary>>), do: true
