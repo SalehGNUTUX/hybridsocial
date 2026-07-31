@@ -163,6 +163,30 @@
   let timeAgo = $derived(relativeTime(post.created_at));
   let fullDate = $derived(fullDateTime(post.created_at));
 
+  // Why an old post is sitting at the top of the feed: activity-ordered
+  // timelines sort on `last_activity_at`, which only a reply bumps. Show
+  // the bump's age so the ordering explains itself. Not on the detail
+  // page — the replies themselves are right there. The one-minute floor
+  // keeps it off posts whose own first-reply bump lands in the same
+  // breath as publication.
+  const BUMP_MIN_MS = 60_000;
+  let bumpedAt = $derived.by(() => {
+    if (detail || !post.last_activity_at || !post.reply_count) return null;
+    const activity = new Date(post.last_activity_at).getTime();
+    const created = new Date(post.created_at).getTime();
+    if (!Number.isFinite(activity) || !Number.isFinite(created)) return null;
+    return activity - created >= BUMP_MIN_MS ? post.last_activity_at : null;
+  });
+
+  // `relativeTime` is compact ("5m", "3h") and returns "now" under a
+  // minute, which would read as "Last reply now ago" — so that case gets
+  // its own phrase rather than an interpolation.
+  let bumpLabel = $derived.by(() => {
+    if (!bumpedAt) return null;
+    const rel = relativeTime(bumpedAt);
+    return rel === 'now' ? $t('post.last_reply_now') : $t('post.last_reply', { time: rel });
+  });
+
   let avatarUrl = $derived(post.account.avatar_url || '');
   let displayName = $derived(post.account.display_name || post.account.acct || post.account.handle);
   let accountBadgeView = $derived(
@@ -753,6 +777,11 @@
               </span>
             {/if}
           </div>
+          {#if bumpedAt && bumpLabel}
+            <div class="post-bump-row">
+              <span class="post-bump" title={fullDateTime(bumpedAt)}>{bumpLabel}</span>
+            </div>
+          {/if}
         </div>
         {#if $isStaffMember}
           <AdminPostActions {post} />
@@ -1539,6 +1568,22 @@
     align-items: center;
     gap: 4px;
     margin-top: 1px;
+  }
+
+  /* Explains an activity-ordered feed's placement, so it stays quieter
+     than the handle/timestamp row above it. */
+  .post-bump-row {
+    display: flex;
+    align-items: center;
+    margin-top: 1px;
+  }
+
+  .post-bump {
+    font-size: 0.75rem;
+    color: var(--color-text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .post-handle {

@@ -138,6 +138,9 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
       is_muted: is_muted,
       current_user_reaction: current_reaction,
       created_at: post.inserted_at,
+      # Feeds order by `last_activity_at` (a reply bumps every ancestor),
+      # so without it the client can't explain why an old post resurfaced.
+      last_activity_at: post.last_activity_at,
       edited_at: post.edited_at,
       edit_expires_at: Map.get(post, :edit_expires_at),
       account: account,
@@ -270,6 +273,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
         is_muted: MapSet.member?(mutes_set, post.id),
         current_user_reaction: Map.get(reactions_map, post.id),
         created_at: post.inserted_at,
+        last_activity_at: post.last_activity_at,
         edited_at: post.edited_at,
         edit_expires_at: Map.get(post, :edit_expires_at),
         account: account,
