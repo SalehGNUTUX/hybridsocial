@@ -47,6 +47,10 @@
   let sort = $state<'trending' | 'newest' | 'oldest'>('trending');
   let search = $state('');
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  // The immersive layout keeps the clip full-bleed; search + sort open as
+  // overlays on demand instead of stacking rows above the feed.
+  let searchOpen = $state(false);
+  let sortOpen = $state(false);
 
   const SORTS: { value: 'trending' | 'newest' | 'oldest'; label: string }[] = [
     { value: 'trending', label: 'Trending' },
@@ -184,67 +188,46 @@
 </svelte:head>
 
 <div class="reels-page">
-  <div class="page-header">
-    <h1 class="page-title">Reels</h1>
-    <div class="header-controls">
-      <button
-        type="button"
-        class="pill-toggle"
-        class:on={!muted}
-        role="switch"
-        aria-checked={!muted}
-        aria-label={muted ? 'Unmute all reels' : 'Mute all reels'}
-        onclick={toggleMuted}
-      >
-        {#if muted}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.63 3.63a.996.996 0 0 0 0 1.41L7.29 8.7 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71v-4.17l4.18 4.18c-.49.37-1.02.68-1.6.91v2.06a8.9 8.9 0 0 0 3.02-1.32l1.65 1.65a.996.996 0 1 0 1.41-1.41L5.05 3.63a.996.996 0 0 0-1.42 0zM19 12c0 .82-.15 1.61-.41 2.34l1.53 1.53A8.9 8.9 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71z" /></svg>
-        {:else}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71V6.41c0-.89-1.08-1.34-1.71-.71L7 9H4a1 1 0 0 0-1 1zm13.5 2A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
-        {/if}
-        {muted ? 'Sound off' : 'Sound on'}
-      </button>
-      <button
-        type="button"
-        class="pill-toggle"
-        class:on={autoplay}
-        role="switch"
-        aria-checked={autoplay}
-        onclick={toggleAutoplay}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-        Autoplay
+  <!-- On-demand overlays (opened from the controls on the clip), so the feed
+       stays immersive and full-bleed instead of stacking rows above it. -->
+  {#if searchOpen}
+    <div class="reels-overlay-bar">
+      <div class="reels-search">
+        <svg class="reels-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          type="search"
+          class="reels-search-input"
+          placeholder="Search clips or #tags…"
+          aria-label="Search reels"
+          autofocus
+          bind:value={search}
+          oninput={onSearchInput}
+        />
+      </div>
+      <button type="button" class="reels-overlay-close" aria-label="Close search" onclick={() => (searchOpen = false)}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
       </button>
     </div>
-  </div>
+  {/if}
 
-  <div class="reels-controls">
-    <div class="reels-search">
-      <svg class="reels-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-      <input
-        type="search"
-        class="reels-search-input"
-        placeholder="Search clips or #tags…"
-        aria-label="Search reels"
-        bind:value={search}
-        oninput={onSearchInput}
-      />
-    </div>
-    <div class="reels-sort" role="group" aria-label="Sort clips by">
+  {#if sortOpen}
+    <div class="reels-sort-menu" role="group" aria-label="Sort clips by">
       {#each SORTS as s (s.value)}
         <button
           type="button"
           class="sort-chip"
           class:on={sort === s.value}
           aria-pressed={sort === s.value}
-          onclick={() => changeSort(s.value)}
+          onclick={() => { changeSort(s.value); sortOpen = false; }}
         >
           {s.label}
         </button>
       {/each}
     </div>
-  </div>
+  {/if}
 
   {#if loading}
     <div class="reels-feed" aria-hidden="true">
@@ -274,6 +257,9 @@
             {muted}
             {autoplay}
             onmutetoggle={toggleMuted}
+            onautoplaytoggle={toggleAutoplay}
+            onsearch={() => { sortOpen = false; searchOpen = !searchOpen; }}
+            onsort={() => { searchOpen = false; sortOpen = !sortOpen; }}
             oncomment={() => openComments(post)}
             onview={(w, t, c, r) => reportView(post.id, w, t, c, r)}
           />
@@ -312,6 +298,7 @@
      scroll-snaps INTERNALLY, one reel at a time, with the nav always visible.
      Desktop <main>: top = header-height + space-8, bottom = space-12. */
   .reels-page {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: calc(
@@ -332,65 +319,60 @@
     }
   }
 
-  .page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding-block: var(--space-3);
-  }
-
-  .page-title {
-    font-size: var(--text-xl);
-    font-weight: 700;
-    color: var(--color-text);
-    margin: 0;
-  }
-
-  .header-controls {
+  /* --- On-demand overlays (opened from the on-clip controls) --- */
+  .reels-overlay-bar {
+    position: absolute;
+    inset-block-start: var(--space-2);
+    inset-inline: var(--space-2);
+    z-index: 5;
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-full);
+    background: color-mix(in oklab, var(--color-surface-base, #fff) 82%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px);
+    -webkit-backdrop-filter: saturate(1.4) blur(10px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
   }
 
-  .pill-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-full);
+  .reels-overlay-close {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
     background: transparent;
     color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-    font-weight: 500;
     cursor: pointer;
-    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
   }
 
-  .pill-toggle:hover {
+  .reels-overlay-close:hover {
     color: var(--color-text);
-    border-color: var(--color-text-tertiary);
+    background: var(--color-surface-container-high);
   }
 
-  .pill-toggle.on {
-    background: var(--color-primary-soft, rgba(var(--color-primary-rgb), 0.12));
-    color: var(--color-primary);
-    border-color: transparent;
-  }
-
-  /* --- Search + sort controls (mirrors Streams) --- */
-  .reels-controls {
+  .reels-sort-menu {
+    position: absolute;
+    inset-block-start: var(--space-2);
+    inset-inline-end: var(--space-2);
+    z-index: 5;
     display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    padding-block-end: var(--space-3);
+    gap: var(--space-1);
+    padding: var(--space-2);
+    border-radius: var(--radius-full);
+    background: color-mix(in oklab, var(--color-surface-base, #fff) 82%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px);
+    -webkit-backdrop-filter: saturate(1.4) blur(10px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
   }
 
   .reels-search {
     position: relative;
-    flex: 1 1 200px;
+    flex: 1 1 auto;
     min-width: 0;
   }
 
@@ -416,11 +398,6 @@
   .reels-search-input:focus {
     outline: none;
     border-color: var(--color-primary);
-  }
-
-  .reels-sort {
-    display: inline-flex;
-    gap: var(--space-1);
   }
 
   .sort-chip {
