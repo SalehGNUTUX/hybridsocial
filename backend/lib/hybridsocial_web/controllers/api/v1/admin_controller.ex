@@ -3845,10 +3845,26 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     end
   end
 
+  def analytics_federated_post_volume(conn, params) do
+    with :ok <- require_permission(conn, "settings.view") do
+      days = parse_int(params["days"], 30)
+      json(conn, %{data: Hybridsocial.Analytics.federated_post_volume(days)})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   def analytics_active_users(conn, params) do
     with :ok <- require_permission(conn, "settings.view") do
       days = parse_int(params["days"], 30)
-      json(conn, %{data: Hybridsocial.Analytics.active_users(days)})
+
+      # `total` is a distinct count across the whole window. The daily
+      # buckets can't be summed to get it — a user active on ten days is
+      # in ten buckets — and the chart header used to do exactly that.
+      json(conn, %{
+        data: Hybridsocial.Analytics.active_users(days),
+        total: Hybridsocial.Analytics.active_users_distinct(days)
+      })
     else
       {:error, perm} -> deny(conn, perm)
     end
