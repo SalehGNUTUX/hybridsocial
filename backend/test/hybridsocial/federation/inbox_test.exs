@@ -375,8 +375,11 @@ defmodule Hybridsocial.Federation.InboxTest do
         }
       }
 
-      assert {:ok, _post} = Inbox.process(activity)
-      assert_receive %{event: "update", payload: _payload}, 1000
+      assert {:ok, post} = Inbox.process(activity)
+      # Match on this post's id: "timeline:public" is a global topic, so any
+      # other async test publishing a post also lands in this mailbox.
+      post_id = post.id
+      assert_receive %{event: "update", payload: %{id: ^post_id}}, 1000
     end
 
     test "does NOT stream a remote reply to the public timeline" do
@@ -401,8 +404,11 @@ defmodule Hybridsocial.Federation.InboxTest do
         }
       }
 
-      assert {:ok, _reply} = Inbox.process(activity)
-      refute_receive %{event: "update"}, 300
+      assert {:ok, reply} = Inbox.process(activity)
+      # Same global-topic caveat as above: refuse only *this* reply, otherwise a
+      # post broadcast by a concurrent async test fails the refutation.
+      reply_id = reply.id
+      refute_receive %{event: "update", payload: %{id: ^reply_id}}, 300
     end
   end
 
