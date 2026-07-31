@@ -475,7 +475,12 @@ defmodule Hybridsocial.Groups do
   end
 
   def update_member_role(group_id, admin_id, member_id, role) do
-    with {:ok, actor_role} <- require_role(group_id, admin_id, @manage_roles),
+    # Granting/changing roles is in-group GOVERNANCE, not moderation, so it
+    # deliberately does NOT honor the instance-staff override (unlike
+    # ban/remove/delete-takedown). Only a genuine group admin/owner may do it —
+    # otherwise a site admin could self-promote into, or seize, any community's
+    # leadership. `require_group_manage_role/2` excludes the :staff fallback.
+    with {:ok, actor_role} <- require_group_manage_role(group_id, admin_id),
          member when not is_nil(member) <- get_member_by_id(member_id, group_id),
          :ok <- authorize_role_change(actor_role, member.role, role) do
       member
@@ -524,13 +529,13 @@ defmodule Hybridsocial.Groups do
 
   defp ensure_not_sole_owner(_group_id, _member), do: :ok
 
-  # Only an owner (or instance staff) may change an existing owner's role or
-  # hand out the `:owner` role. Without this, an admin could demote the owner
-  # or promote themselves/a puppet to owner and seize the group — the owner
-  # role must stay with its creator, transferable only by an owner.
-  defp authorize_role_change(actor_role, _target_role, _new_role)
-       when actor_role in [:owner, :staff],
-       do: :ok
+  # Only an owner may change an existing owner's role or hand out the `:owner`
+  # role. Without this, an admin could demote the owner or promote
+  # themselves/a puppet to owner and seize the group — the owner role must stay
+  # with its creator, transferable only by an owner. (Instance staff never
+  # reach here: role management requires a genuine group admin/owner, so the
+  # actor_role is only ever :owner or :admin.)
+  defp authorize_role_change(:owner, _target_role, _new_role), do: :ok
 
   defp authorize_role_change(_actor_role, :owner, _new_role), do: {:error, :forbidden}
 
@@ -910,6 +915,18 @@ defmodule Hybridsocial.Groups do
           staff_member?(identity_id) -> {:ok, :staff}
           true -> {:error, :forbidden}
         end
+    end
+  end
+
+  # Genuine in-group management authority (admin/owner) WITHOUT the
+  # instance-staff override that `require_role/3` grants. Role management is
+  # in-group governance, not moderation — instance staff act on groups through
+  # the admin panel, never by granting themselves an in-group role. Used only
+  # by `update_member_role/4`.
+  defp require_group_manage_role(group_id, identity_id) do
+    case member_role(group_id, identity_id) do
+      role when role in @manage_roles -> {:ok, role}
+      _ -> {:error, :forbidden}
     end
   end
 

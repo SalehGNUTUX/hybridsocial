@@ -94,8 +94,13 @@ export function updateGroup(id: string, data: GroupSettings): Promise<GroupDetai
   return api.patch(`/api/v1/groups/${id}`, data);
 }
 
-export function deleteGroup(id: string): Promise<void> {
-  return api.delete(`/api/v1/groups/${id}`);
+// `reason` is only meaningful for a staff (instance-moderator) takedown of a
+// group they don't own: the backend opens a takedown + notifies the owner
+// (who can then appeal) when a staff actor deletes with a reason. An owner
+// deleting their own group passes none.
+export function deleteGroup(id: string, opts?: { reason?: string }): Promise<void> {
+  const body = opts?.reason ? { reason: opts.reason } : undefined;
+  return api.delete(`/api/v1/groups/${id}`, body);
 }
 
 export function joinGroup(id: string): Promise<{ status: 'joined' | 'pending' }> {

@@ -15,16 +15,59 @@
     getModerationNotes,
     createModerationNote,
   } from '$lib/api/admin.js';
+  import { deleteGroup } from '$lib/api/groups.js';
+  import { deletePage } from '$lib/api/pages.js';
 
   // The component only needs the identity row's id + handle. Accept
   // a loose shape so the same panel can target a user, a page (which
   // is already an identity), or a group's federated actor identity
   // without forcing every caller to construct a full Identity.
+  //
+  // `entity` is the moderation target when it's a group or page: its OWN id
+  // (a group's id differs from its actor-identity id) and kind, so the staff
+  // takedown action deletes the right thing. Omitted for plain user accounts.
+  // `ondeleted` lets the host page navigate away after a takedown.
   let {
     account,
+    entity = null,
+    ondeleted,
   }: {
     account: { id: string; handle: string };
+    entity?: { kind: 'group' | 'page'; id: string; name: string } | null;
+    ondeleted?: () => void;
   } = $props();
+
+  // Takedown (group/page) state.
+  let showTakedownDialog = $state(false);
+  let takedownReason = $state('');
+  const TAKEDOWN_MIN_REASON = 10;
+
+  function openTakedownDialog() {
+    clearMessages();
+    takedownReason = '';
+    showTakedownDialog = true;
+  }
+
+  async function confirmTakedown() {
+    if (!entity) return;
+    const reason = takedownReason.trim();
+    if (reason.length < TAKEDOWN_MIN_REASON) return;
+    actionLoading = true;
+    clearMessages();
+    try {
+      if (entity.kind === 'group') {
+        await deleteGroup(entity.id, { reason });
+      } else {
+        await deletePage(entity.id, { reason });
+      }
+      showTakedownDialog = false;
+      ondeleted?.();
+    } catch {
+      actionError = `Failed to take down this ${entity.kind}.`;
+    } finally {
+      actionLoading = false;
+    }
+  }
 
   let expanded = $state(false);
   let adminUser: AdminUser | null = $state(null);
@@ -380,6 +423,17 @@
             {adminUser.is_suspended ? 'Unsuspend' : 'Suspend'}
           </button>
 
+          {#if entity}
+            <button
+              type="button"
+              class="admin-action-button admin-action-danger"
+              onclick={openTakedownDialog}
+              disabled={actionLoading}
+            >
+              Take down {entity.kind}
+            </button>
+          {/if}
+
           <button
             type="button"
             class="admin-action-button admin-action-danger"
@@ -553,6 +607,42 @@
         <button type="button" class="admin-dialog-cancel" onclick={() => { showSuspendDialog = false; }}>Cancel</button>
         <button type="button" class="admin-dialog-confirm-danger" onclick={confirmSuspend} disabled={actionLoading}>
           {actionLoading ? 'Processing...' : (adminUser?.is_suspended ? 'Unsuspend' : 'Suspend User')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Takedown dialog (group / page) -->
+{#if showTakedownDialog && entity}
+  <div class="admin-overlay" onclick={() => { showTakedownDialog = false; }} role="dialog" aria-modal="true" aria-label="Take down">
+    <div class="admin-dialog" onclick={(e) => e.stopPropagation()}>
+      <h3 class="admin-dialog-title">Take down {entity.name}</h3>
+      <p class="admin-dialog-message">
+        This removes the {entity.kind}. Its owner is notified with the reason below and can appeal
+        for restoration before it is permanently deleted.
+      </p>
+
+      <div class="admin-dialog-form">
+        <label class="admin-dialog-label" for="takedown-reason">Reason for the owner (required)</label>
+        <textarea
+          id="takedown-reason"
+          class="admin-dialog-textarea"
+          bind:value={takedownReason}
+          placeholder={`Explain why this ${entity.kind} is being removed…`}
+          rows="3"
+        ></textarea>
+      </div>
+
+      <div class="admin-dialog-actions">
+        <button type="button" class="admin-dialog-cancel" onclick={() => { showTakedownDialog = false; }}>Cancel</button>
+        <button
+          type="button"
+          class="admin-dialog-confirm-danger"
+          onclick={confirmTakedown}
+          disabled={actionLoading || takedownReason.trim().length < TAKEDOWN_MIN_REASON}
+        >
+          {actionLoading ? 'Processing...' : `Take down ${entity.kind}`}
         </button>
       </div>
     </div>
