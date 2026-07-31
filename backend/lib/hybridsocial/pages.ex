@@ -53,11 +53,16 @@ defmodule Hybridsocial.Pages do
   def update_page(page_identity_id, editor_id, attrs) do
     with {:ok, identity, _org} <- get_page_with_auth(page_identity_id),
          true <- can_edit?(page_identity_id, editor_id) or staff_member?(editor_id) do
+      # Editors may change the page's *content* (name/bio/images), but the
+      # org-level *settings* (website/category) are manage-tier (owner/admin/
+      # staff) per the Pages ladder — so drop those for a mere editor.
+      manages? = can_manage?(page_identity_id, editor_id) or staff_member?(editor_id)
+
       identity_attrs =
         Map.take(attrs, ["display_name", "bio", "avatar_url", "header_url"])
 
       org_attrs =
-        Map.take(attrs, ["website", "category"])
+        if manages?, do: Map.take(attrs, ["website", "category"]), else: %{}
 
       Ecto.Multi.new()
       |> Ecto.Multi.update(:identity, Identity.update_changeset(identity, identity_attrs))
