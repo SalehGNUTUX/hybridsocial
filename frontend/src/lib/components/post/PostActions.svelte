@@ -8,6 +8,7 @@
   import { on } from 'svelte/events';
   import ReactionPicker from './ReactionPicker.svelte';
   import RadialReactionPicker from './RadialReactionPicker.svelte';
+  import ShareToGroupModal from './ShareToGroupModal.svelte';
   import { markSeen } from '$lib/utils/seen-posts.js';
 
   let {
@@ -1005,6 +1006,17 @@
     window.dispatchEvent(new CustomEvent('open-composer', { detail: { quotePost: post } }));
   }
 
+  // Share into one of the viewer's groups: opens a picker that lists the
+  // groups they've joined, then hands off to the composer (quote + group
+  // scope). Kept as a separate menu entry from plain Quote so "share to a
+  // group" is a first-class action rather than a hidden composer option.
+  let showShareToGroup = $state(false);
+  function handleShareToGroup(e: MouseEvent) {
+    e.stopPropagation();
+    showMoreMenu = false;
+    showShareToGroup = true;
+  }
+
   // Edit history
   let showHistoryModal = $state(false);
   let historyData = $state<{id: string; content: string; content_html: string; edited_at: string; revision_number: number}[]>([]);
@@ -1368,6 +1380,10 @@
           <span class="material-symbols-outlined menu-icon">format_quote</span>
           Quote post
         </button>
+        <button type="button" class="more-menu-item" role="menuitem" onclick={handleShareToGroup}>
+          <span class="material-symbols-outlined menu-icon">group_add</span>
+          Share to group
+        </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShare}>
           <span class="material-symbols-outlined menu-icon">share</span>
           Share
@@ -1458,6 +1474,8 @@
     </div>
   </div>
 {/if}
+
+<ShareToGroupModal bind:open={showShareToGroup} {post} />
 
 {#if showReportModal}
   <div class="dialog-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label="Report post">
