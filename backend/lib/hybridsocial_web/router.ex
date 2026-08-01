@@ -819,7 +819,23 @@ defmodule HybridsocialWeb.Router do
          AdminController,
          :federation_retry_dead_letters_for_domain
 
+    post "/federation/dead_letters/drop_domain",
+         AdminController,
+         :federation_drop_dead_letters_for_domain
+
     delete "/federation/dead_letters/:id", AdminController, :federation_drop_dead_letter
+
+    # Dead remote followers: preview (dry run) and sweep.
+    get "/federation/dead_actors", AdminController, :federation_dead_actors
+    post "/federation/dead_actors/sweep", AdminController, :federation_sweep_dead_actors
+
+    # Outbound delivery kill switch for peers that are gone for good.
+    get "/federation/delivery_disabled", AdminController, :federation_list_delivery_disabled
+    post "/federation/delivery_disabled", AdminController, :federation_disable_delivery
+
+    delete "/federation/delivery_disabled/:domain",
+           AdminController,
+           :federation_enable_delivery
 
     # Promotions management
     get "/promotions", AdminController, :list_promotions
