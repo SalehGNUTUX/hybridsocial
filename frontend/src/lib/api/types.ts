@@ -197,7 +197,7 @@ export interface Post {
    * Like `group`, but for organization pages. The `id` is the page's
    * Identity row id; pages don't have a separate Page schema.
    */
-  page?: { id: string; name: string; avatar_url?: string | null } | null;
+  page?: { id: string; name: string; avatar_url?: string | null; can_edit?: boolean } | null;
   tombstone?: { reason: string };
 }
 
@@ -217,7 +217,7 @@ export interface PostDraft {
   /** Group summary for displaying the "Posting to <group>" chip. */
   group?: { id: string; name: string; avatar_url?: string | null; visibility?: string } | null;
   /** Page summary for the "Posting to <page>" chip. */
-  page?: { id: string; name: string; avatar_url?: string | null } | null;
+  page?: { id: string; name: string; avatar_url?: string | null; can_edit?: boolean } | null;
   scheduled_at: string | null;
   poll_options: string[] | null;
   poll_multiple: boolean;

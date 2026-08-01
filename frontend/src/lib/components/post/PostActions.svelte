@@ -207,7 +207,11 @@
 
   let isOwnPost = $derived(() => {
     const state = get(authStore);
-    return state.user?.id === post.account.id;
+    // A post authored *as a page* has the page (not you) as its account, so a
+    // strict author match fails even though you can edit/delete it. The
+    // serializer sets page.can_edit for viewers the backend's Pages.can_edit?
+    // accepts (owner/admin/editor) — trust it here so Edit/Delete show.
+    return state.user?.id === post.account.id || post.page?.can_edit === true;
   });
 
   let isRemotePost = $derived(() => {
