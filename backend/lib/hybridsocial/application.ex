@@ -43,6 +43,9 @@ defmodule Hybridsocial.Application do
             Hybridsocial.Feeds.PrewarmWorker,
             # Activity expiration cleanup
             Hybridsocial.Federation.ActivityExpirationWorker,
+            # Prunes terminal federation_deliveries rows older than
+            # federation_delivery_retention_days (default 30)
+            Hybridsocial.Federation.DeliveryRetentionWorker,
             # Story expiry (hard-deletes expired ephemeral stories)
             Hybridsocial.Social.StoryExpiryWorker,
             # Media proxy cache TTL + LRU eviction

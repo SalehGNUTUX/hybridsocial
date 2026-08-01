@@ -268,6 +268,14 @@ settings = [
     category: "federation",
     description: "Whether federation with other instances is enabled"
   },
+  %{
+    key: "federation_delivery_retention_days",
+    value: %{"value" => 30},
+    type: "integer",
+    category: "federation",
+    description:
+      "Days to keep delivered/failed federation delivery rows before pruning them (0 = keep forever)"
+  },
 
   # Media / Storage
   %{

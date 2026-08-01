@@ -1671,7 +1671,8 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
             last_activity_at: row.last_activity_at,
             status: if(policy, do: policy.policy, else: "none"),
             software: ri && ri.software,
-            software_version: ri && ri.version
+            software_version: ri && ri.version,
+            delivery_disabled: not is_nil(ri && ri.delivery_disabled_at)
           }
         end)
 
@@ -3931,7 +3932,13 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
       json(conn, %{
         data: Hybridsocial.Federation.DeadLetters.list(limit: limit, offset: offset),
-        total: Hybridsocial.Federation.DeadLetters.count()
+        total: Hybridsocial.Federation.DeadLetters.count(),
+        # Whole-queue counts per domain, so a bulk drop can state how
+        # many rows it will actually remove rather than how many the
+        # current page happens to show.
+        by_domain: Hybridsocial.Federation.DeadLetters.counts_by_domain(),
+        disabled_domains:
+          Enum.map(Hybridsocial.Federation.CircuitBreaker.list_disabled(), & &1.domain)
       })
     else
       {:error, perm} -> deny(conn, perm)
@@ -3987,11 +3994,104 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     end
   end
 
+  @doc """
+  Permanently drop every failed delivery for a destination domain.
+
+  The dead-letter list is paginated, so clearing a peer that has been
+  down for weeks used to mean clicking Drop once per row across
+  hundreds of pages. Audit-logged with the row count.
+  """
+  def federation_drop_dead_letters_for_domain(conn, %{"domain" => domain}) do
+    with :ok <- require_permission(conn, "federation.manage") do
+      admin_id = conn.assigns.current_identity.id
+      dropped = Hybridsocial.Federation.DeadLetters.drop_domain(domain)
+
+      Moderation.log(admin_id, "federation.dead_letters_dropped", "domain", domain, %{
+        domain: domain,
+        dropped: dropped
+      })
+
+      json(conn, %{dropped: dropped})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc """
+  List peers with outbound delivery switched off.
+  """
+  def federation_list_delivery_disabled(conn, _params) do
+    with :ok <- require_permission(conn, "federation.view") do
+      json(conn, %{data: Hybridsocial.Federation.CircuitBreaker.list_disabled()})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc """
+  Stop delivering to a domain permanently — for peers that no longer
+  exist. The circuit breaker always re-probes a dead host on an
+  escalating backoff; this doesn't. Optionally clears the domain's
+  dead letters in the same call (`drop_dead_letters`), which is the
+  normal case: switching a peer off and leaving its failure backlog
+  behind is never what an admin means.
+
+  Outbound only. Inbound content decisions stay with instance policies.
+  """
+  def federation_disable_delivery(conn, %{"domain" => domain} = params) do
+    with :ok <- require_permission(conn, "federation.manage") do
+      admin_id = conn.assigns.current_identity.id
+      reason = params["reason"]
+
+      :ok =
+        Hybridsocial.Federation.CircuitBreaker.disable_delivery(domain,
+          reason: reason,
+          admin_id: admin_id
+        )
+
+      dropped =
+        if params["drop_dead_letters"] in [true, "true"] do
+          Hybridsocial.Federation.DeadLetters.drop_domain(domain)
+        else
+          0
+        end
+
+      Moderation.log(admin_id, "federation.delivery_disabled", "domain", domain, %{
+        domain: domain,
+        reason: reason,
+        dropped: dropped
+      })
+
+      json(conn, %{domain: domain, delivery_disabled: true, dropped: dropped})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc "Resume delivering to a domain, clearing its breaker state too."
+  def federation_enable_delivery(conn, %{"domain" => domain}) do
+    with :ok <- require_permission(conn, "federation.manage") do
+      admin_id = conn.assigns.current_identity.id
+
+      :ok = Hybridsocial.Federation.CircuitBreaker.enable_delivery(domain)
+
+      Moderation.log(admin_id, "federation.delivery_enabled", "domain", domain, %{domain: domain})
+
+      json(conn, %{domain: domain, delivery_disabled: false})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   @doc "Permanently drop a dead-letter row without retrying."
   def federation_drop_dead_letter(conn, %{"id" => id}) do
     with :ok <- require_permission(conn, "federation.manage") do
+      admin_id = conn.assigns.current_identity.id
+
       case Hybridsocial.Federation.DeadLetters.drop(id) do
         {:ok, _} ->
+          Moderation.log(admin_id, "federation.dead_letter_dropped", "delivery", id, %{})
+
           json(conn, %{status: "dropped"})
 
         {:error, :not_found} ->

@@ -603,6 +603,9 @@ export interface KnownInstance {
   last_activity_at: string | null;
   first_seen_at: string;
   status: 'up' | 'down' | 'unknown';
+  // Outbound delivery kill switch (admin-set, for peers that are gone).
+  // Independent of `status`, which reflects the instance policy.
+  delivery_disabled?: boolean;
 }
 
 export interface FederationPolicy {
