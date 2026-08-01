@@ -244,8 +244,11 @@ defmodule HybridsocialWeb.Api.V1.PageController do
 
   @doc "GET /api/v1/pages/:id/roles"
   def roles(conn, %{"id" => id}) do
-    roles = Pages.get_roles(id)
-    json(conn, Enum.map(roles, &serialize_role/1))
+    # The owner isn't a row in the roles table (it's organization.owner_id), so
+    # prepend it as a synthetic, non-removable entry — otherwise a page with an
+    # owner but no granted managers reads as "No managers yet".
+    granted = Enum.map(Pages.get_roles(id), &serialize_role/1)
+    json(conn, Enum.reject([owner_role_entry(id) | granted], &is_nil/1))
   end
 
   @doc "POST /api/v1/pages/:id/roles"
@@ -579,6 +582,27 @@ defmodule HybridsocialWeb.Api.V1.PageController do
       website: org.website,
       category: org.category
     }
+  end
+
+  # The page's owner as a synthetic "owner" role row for the managers list.
+  # Returns nil if the page or owner can't be resolved so the caller reject/1s
+  # it out.
+  defp owner_role_entry(page_identity_id) do
+    with %{organization: %{owner_id: owner_id}} when is_binary(owner_id) <-
+           Pages.get_page(page_identity_id),
+         owner when not is_nil(owner) <- Hybridsocial.Accounts.get_identity(owner_id) do
+      %{
+        id: "owner:" <> owner_id,
+        organization_id: page_identity_id,
+        identity_id: owner_id,
+        role: "owner",
+        granted_by: nil,
+        created_at: owner.inserted_at,
+        identity: serialize_role_identity(owner)
+      }
+    else
+      _ -> nil
+    end
   end
 
   defp serialize_role(role) do

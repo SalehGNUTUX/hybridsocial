@@ -267,6 +267,7 @@
 
   function roleLabel(role: string): string {
     switch (role) {
+      case 'owner': return 'Owner';
       case 'admin': return 'Admin';
       case 'editor': return 'Editor';
       case 'moderator': return 'Moderator';
@@ -431,28 +432,30 @@
                   {/if}
                 </div>
                 <span class="role-badge role-{r.role}">{roleLabel(r.role)}</span>
-                <div class="row-actions">
-                  <select
-                    class="input input-compact"
-                    value={r.role}
-                    onchange={(e) =>
-                      handleRoleChange(
-                        r,
-                        (e.currentTarget as HTMLSelectElement).value as AssignableRole,
-                      )}
-                  >
-                    <option value="admin">Admin</option>
-                    <option value="editor">Editor</option>
-                    <option value="moderator">Moderator</option>
-                  </select>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-danger-outline"
-                    onclick={() => handleRemoveManager(r)}
-                  >
-                    Remove
-                  </button>
-                </div>
+                {#if r.role !== 'owner'}
+                  <div class="row-actions">
+                    <select
+                      class="input input-compact"
+                      value={r.role}
+                      onchange={(e) =>
+                        handleRoleChange(
+                          r,
+                          (e.currentTarget as HTMLSelectElement).value as AssignableRole,
+                        )}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="editor">Editor</option>
+                      <option value="moderator">Moderator</option>
+                    </select>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-danger-outline"
+                      onclick={() => handleRemoveManager(r)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -810,6 +813,11 @@
     font-weight: 600;
     background: var(--color-bg);
     color: var(--color-text-secondary);
+  }
+
+  .role-owner {
+    background: var(--color-success-soft, color-mix(in srgb, var(--color-success) 18%, transparent));
+    color: var(--color-success);
   }
 
   .role-admin {
