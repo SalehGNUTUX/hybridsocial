@@ -1055,12 +1055,51 @@ POST   /admin/backups/:id/restore         Restore from backup (requires encrypti
 ### 5.19 OAuth2
 
 ```
-GET    /oauth/authorize                   Authorization page
-POST   /oauth/token                       Exchange code for token
+GET    /oauth/authorize                   Redirects to the web consent screen (/authorize)
+POST   /oauth/authorize                   Issues an authorization code (session-authenticated)
+POST   /oauth/token                       authorization_code or refresh_token grant
 POST   /oauth/revoke                      Revoke token
+POST   /api/v1/apps                       Register new app (PUBLIC — a client has no user yet)
+GET    /api/v1/apps/info                  Public app metadata for the consent screen
+GET    /api/v1/apps/verify_credentials    The app behind the current token
 GET    /api/v1/apps                       List registered apps
-POST   /api/v1/apps                       Register new app
 ```
+
+PKCE is supported but optional: a client that sends no `code_challenge` must
+authenticate with its `client_secret` at the token endpoint (body or HTTP
+Basic). One of the two is always required.
+
+Tokens issued to third-party applications live for
+`oauth_app_token_ttl_days` (default 60) rather than the 15 minutes a
+first-party session token gets, because Mastodon clients never call the
+refresh grant. They remain revocable through their `oauth_tokens` row, and
+`Plugs.RequireScope` holds them to the scopes the user approved: read for
+safe methods, write for the rest, `admin:*` for the admin API. First-party
+session tokens carry no `application_id` and are unrestricted.
+
+### 5.19.1 Mastodon client compatibility
+
+ActivityPub is our federation transport; the Mastodon REST API is, in the
+same spirit, a **projection** of the internal API for third-party clients.
+The internal model and its serializers keep their own names
+(`reply_count`, `handle`, `bio`); `HybridsocialWeb.Serializers.Mastodon`
+remaps them, and `HybridsocialWeb.Compat` picks the shape per request.
+
+Selection is by token: one minted through the OAuth authorization-code flow
+belongs to a third-party app and receives Mastodon's shape, while first-party
+session tokens keep the native one. `X-API-Compat: mastodon | native`
+overrides the inference.
+
+Route aliases exist where Mastodon's spelling differs — `/favourite`,
+`/unfavourite`, `/reblog`, `/unreblog`, `/unbookmark`, `/unpin`,
+`/accounts/verify_credentials`, top-level `/favourites`, `/blocks`, `/mutes`,
+`/follow_requests`, and `/api/v2/{instance,search,media}`. Status creation
+accepts Mastodon's parameter names (`status`, `in_reply_to_id`,
+`visibility: private`, nested `poll[...]`) for every caller.
+
+Not yet projected: lists, conversations, markers, filters, announcements,
+scheduled statuses, and `/api/v1/streaming` (ours is SSE, Mastodon's is a
+WebSocket). Clients degrade rather than fail on these.
 
 ### 5.20 Subscriptions & Verification
 

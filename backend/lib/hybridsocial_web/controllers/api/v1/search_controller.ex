@@ -50,13 +50,16 @@ defmodule HybridsocialWeb.Api.V1.SearchController do
 
     conn
     |> put_status(:ok)
-    |> json(%{
-      accounts: Enum.map(accounts, &serialize_account/1),
-      posts: serialized_posts,
-      statuses: serialized_posts,
-      hashtags: Enum.map(results.hashtags, &serialize_hashtag/1),
-      groups: Enum.map(results.groups, &serialize_group/1)
-    })
+    |> HybridsocialWeb.Compat.json(
+      %{
+        accounts: Enum.map(accounts, &serialize_account/1),
+        posts: serialized_posts,
+        statuses: serialized_posts,
+        hashtags: Enum.map(results.hashtags, &serialize_hashtag/1),
+        groups: Enum.map(results.groups, &serialize_group/1)
+      },
+      :search
+    )
   end
 
   # Check if query looks like @user@domain or user@domain

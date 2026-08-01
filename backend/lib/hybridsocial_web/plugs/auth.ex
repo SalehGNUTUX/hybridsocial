@@ -16,7 +16,7 @@ defmodule HybridsocialWeb.Plugs.Auth do
 
     with {:ok, token} <- extract_token(conn),
          {:ok, claims} <- Token.verify_access_token(token),
-         true <- session_active?(token),
+         session when session != nil <- active_session(token),
          identity when not is_nil(identity) <- fetch_identity(claims["sub"]) do
       # Update last activity (async, throttled via cache)
       token_hash = Token.hash_token(token)
@@ -25,6 +25,7 @@ defmodule HybridsocialWeb.Plugs.Auth do
       conn
       |> assign(:current_identity, identity)
       |> assign(:current_token, token)
+      |> assign(:current_session, session)
     else
       _ ->
         conn
@@ -36,21 +37,38 @@ defmodule HybridsocialWeb.Plugs.Auth do
   # all devices) or has no live row must stop working, even though the JWT
   # itself can't be un-issued. Positive-cached in Valkey so the common
   # path stays DB-free; revocation invalidates the key for instant effect.
-  defp session_active?(token) do
+  #
+  # The cached entry carries the grant (application_id + scopes) so
+  # Plugs.RequireScope needs no second lookup.
+  defp active_session(token) do
     token_hash = Token.hash_token(token)
 
     case TokenCache.session_active_cached(token_hash) do
+      # The cache round-trips through JSON, so a hit comes back string-keyed.
+      %{} = session ->
+        normalize_session(session)
+
+      # Written by an older release, before the grant was cached.
       true ->
-        true
+        %{application_id: nil, scopes: []}
 
       _ ->
-        if Hybridsocial.Auth.access_token_active?(token_hash) do
-          TokenCache.cache_session_active(token_hash)
-          true
-        else
-          false
+        case Hybridsocial.Auth.active_session(token_hash) do
+          nil ->
+            nil
+
+          session ->
+            TokenCache.cache_session_active(token_hash, session)
+            session
         end
     end
+  end
+
+  defp normalize_session(session) do
+    %{
+      application_id: Map.get(session, "application_id", Map.get(session, :application_id)),
+      scopes: Map.get(session, "scopes", Map.get(session, :scopes)) || []
+    }
   end
 
   # Only update last_active_at every 5 minutes to avoid excessive writes

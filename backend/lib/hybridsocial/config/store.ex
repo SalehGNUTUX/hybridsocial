@@ -118,5 +118,6 @@ defmodule Hybridsocial.Config.Store do
   defp category_for_key("app_" <> _), do: "apps"
   defp category_for_key("backup_" <> _), do: "backups"
   defp category_for_key("tiers_" <> _), do: "tiers"
+  defp category_for_key("federation_" <> _), do: "federation"
   defp category_for_key(_), do: "general"
 end

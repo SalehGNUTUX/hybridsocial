@@ -27,12 +27,17 @@ defmodule Hybridsocial.Federation.InboxTest do
         id: id,
         type: "user",
         handle: handle,
+        # `is_local` defaults to true on the schema; the real resolver
+        # always sets it false for a fetched actor (every one of the
+        # 17k remote rows in production has it false), so the fixture
+        # has to as well or it isn't modelling a remote identity.
+        is_local: false,
         ap_actor_url: ap_id,
         inbox_url: "#{ap_id}/inbox",
         outbox_url: "#{ap_id}/outbox",
         followers_url: "#{ap_id}/followers"
       },
-      [:id, :type, :handle, :ap_actor_url, :inbox_url, :outbox_url, :followers_url]
+      [:id, :type, :handle, :is_local, :ap_actor_url, :inbox_url, :outbox_url, :followers_url]
     )
     |> Ecto.Changeset.validate_required([:type, :handle])
     |> Ecto.Changeset.unique_constraint(:handle)
@@ -575,6 +580,28 @@ defmodule Hybridsocial.Federation.InboxTest do
       }
 
       assert {:ok, :already_deleted} = Inbox.process(activity)
+    end
+
+    test "an actor deleting itself retires the account and its follows" do
+      remote = create_remote_identity("https://remote.example/users/quits", "quits_remote")
+      local = create_user("staysput", "staysput@example.com")
+      {:ok, _} = Hybridsocial.Social.follow(remote.id, local.id)
+
+      activity = %{
+        "@context" => "https://www.w3.org/ns/activitystreams",
+        "id" => "https://remote.example/activities/delete-self",
+        "type" => "Delete",
+        "actor" => remote.ap_actor_url,
+        # Object == actor: the account-closed broadcast. This used to
+        # fall through to the post lookup and report :already_deleted,
+        # leaving the follow (and the endless dead letters) behind.
+        "object" => remote.ap_actor_url
+      }
+
+      assert {:ok, stats} = Inbox.process(activity)
+      assert stats.follows_removed == 1
+
+      assert Repo.aggregate(Hybridsocial.Social.Follow, :count) == 0
     end
   end
 

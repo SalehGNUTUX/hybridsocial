@@ -22,11 +22,16 @@ defmodule Hybridsocial.Cache.TokenCache do
   # lookup on every request: on a miss it hits the DB once, then caches
   # the result for `ttl` seconds. Revocation invalidates the key for
   # instant effect on the single-token paths; bulk paths rely on the TTL.
+  #
+  # The cached value carries the session's `application_id` and `scopes` so
+  # Plugs.RequireScope can enforce the grant without a second lookup. A bare
+  # `true` is an entry written by an older release; it's treated as a
+  # first-party session and ages out within the TTL.
 
   @session_ttl 60
 
-  def cache_session_active(token_hash, ttl \\ @session_ttl) do
-    Cache.set("session_active:#{token_hash}", true, ttl)
+  def cache_session_active(token_hash, session \\ true, ttl \\ @session_ttl) do
+    Cache.set("session_active:#{token_hash}", session, ttl)
   end
 
   def session_active_cached(token_hash) do

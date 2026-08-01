@@ -3,7 +3,23 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
   alias Hybridsocial.Accounts
   alias Hybridsocial.Social
+  alias HybridsocialWeb.Compat
   import HybridsocialWeb.Helpers.Pagination, only: [clamp_limit: 1]
+
+  @doc """
+  GET /api/v1/accounts/verify_credentials — the account behind this token.
+
+  The first authenticated call every Mastodon client makes. Without it the
+  request fell through to `show/2` with id="verify_credentials", which failed
+  the UUID cast and answered 400.
+  """
+  def verify_credentials(conn, _params) do
+    identity = conn.assigns.current_identity
+
+    conn
+    |> put_status(:ok)
+    |> Compat.json(serialize_identity(identity, identity.id), :credential_account)
+  end
 
   def show(conn, %{"id" => id}) do
     case Accounts.get_identity(id) do
@@ -23,7 +39,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         else
           conn
           |> put_status(:ok)
-          |> json(serialize_identity(identity, viewer_id))
+          |> Compat.json(serialize_identity(identity, viewer_id), :account)
         end
     end
   end
@@ -149,7 +165,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         else
           conn
           |> put_status(:ok)
-          |> json(serialize_identity(identity, viewer_id))
+          |> Compat.json(serialize_identity(identity, viewer_id), :account)
         end
     end
   end
@@ -207,7 +223,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
       conn
       |> put_status(:ok)
-      |> json(serialized)
+      |> Compat.json(serialized, :statuses)
     end
   end
 
@@ -237,7 +253,12 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   defp do_follow(conn, identity, target_id) do
     case Hybridsocial.Social.follow(identity.id, target_id) do
       {:ok, follow} ->
-        conn |> put_status(:ok) |> json(serialize_relationship(identity.id, target_id, follow))
+        relationship_response(
+          conn,
+          identity.id,
+          target_id,
+          serialize_relationship(identity.id, target_id, follow)
+        )
 
       {:error, :cannot_follow_self} ->
         conn |> put_status(:unprocessable_entity) |> json(%{error: "social.cannot_follow_self"})
@@ -258,7 +279,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def unfollow(conn, %{"id" => target_id}) do
     identity = conn.assigns.current_identity
     :ok = Social.unfollow(identity.id, target_id)
-    conn |> put_status(:ok) |> json(%{id: target_id, following: false})
+    relationship_response(conn, identity.id, target_id, %{id: target_id, following: false})
   end
 
   def block(conn, %{"id" => target_id}) do
@@ -266,7 +287,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
     case Social.block(identity.id, target_id) do
       {:ok, _block} ->
-        conn |> put_status(:ok) |> json(%{id: target_id, blocking: true})
+        relationship_response(conn, identity.id, target_id, %{id: target_id, blocking: true})
 
       {:error, changeset} ->
         conn
@@ -278,7 +299,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def unblock(conn, %{"id" => target_id}) do
     identity = conn.assigns.current_identity
     :ok = Social.unblock(identity.id, target_id)
-    conn |> put_status(:ok) |> json(%{id: target_id, blocking: false})
+    relationship_response(conn, identity.id, target_id, %{id: target_id, blocking: false})
   end
 
   def mute(conn, %{"id" => target_id} = params) do
@@ -322,7 +343,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def unmute(conn, %{"id" => target_id}) do
     identity = conn.assigns.current_identity
     :ok = Social.unmute(identity.id, target_id)
-    conn |> put_status(:ok) |> json(%{id: target_id, muting: false})
+    relationship_response(conn, identity.id, target_id, %{id: target_id, muting: false})
   end
 
   def followers(conn, %{"id" => id}) do
@@ -330,7 +351,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
     conn
     |> put_status(:ok)
-    |> json(Enum.map(identities, &serialize_identity/1))
+    |> Compat.json(Enum.map(identities, &serialize_identity/1), :accounts)
   end
 
   def following(conn, %{"id" => id}) do
@@ -338,7 +359,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
 
     conn
     |> put_status(:ok)
-    |> json(Enum.map(identities, &serialize_identity/1))
+    |> Compat.json(Enum.map(identities, &serialize_identity/1), :accounts)
   end
 
   # --- Actor Migration ---
@@ -406,7 +427,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
       end
 
     rels = Social.relationships(identity.id, ids)
-    conn |> put_status(:ok) |> json(rels)
+    conn |> put_status(:ok) |> Compat.json(rels, :relationships)
   end
 
   defp conn_pagination_opts(conn) do
@@ -425,6 +446,24 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   end
 
   defp to_integer(val, _default) when is_integer(val), do: val
+
+  # Mastodon answers every social action with the full Relationship object,
+  # and its fields are non-null — a partial `%{id, following}` is a
+  # deserialization crash in the client, not a partial update. Our own
+  # frontend only reads the field it just changed, so it keeps the cheap
+  # payload and we pay for the extra queries only when a client needs them.
+  defp relationship_response(conn, identity_id, target_id, native_payload) do
+    if Compat.mastodon?(conn) do
+      rel =
+        identity_id
+        |> Social.relationships([target_id])
+        |> List.first()
+
+      conn |> put_status(:ok) |> Compat.json(rel, :relationship)
+    else
+      conn |> put_status(:ok) |> json(native_payload)
+    end
+  end
 
   defp serialize_relationship(identity_id, target_id, follow) do
     %{
@@ -575,26 +614,59 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
     identity = conn.assigns.current_identity
     requests = Social.pending_follow_requests(identity.id)
 
-    conn
-    |> json(
-      Enum.map(requests, fn f ->
-        requester = Hybridsocial.Repo.preload(f, :follower).follower
-        %{id: f.id, account: serialize_identity(requester), created_at: f.inserted_at}
-      end)
-    )
+    if Compat.mastodon?(conn) do
+      # Mastodon's list is bare accounts, and its authorize/reject calls
+      # address the requester by account id (handled below).
+      accounts =
+        Enum.map(requests, fn f ->
+          serialize_identity(Hybridsocial.Repo.preload(f, :follower).follower)
+        end)
+
+      Compat.json(conn, accounts, :accounts)
+    else
+      json(
+        conn,
+        Enum.map(requests, fn f ->
+          requester = Hybridsocial.Repo.preload(f, :follower).follower
+          %{id: f.id, account: serialize_identity(requester), created_at: f.inserted_at}
+        end)
+      )
+    end
   end
 
+  # `:id` is the follow row for our client and the requester's account for a
+  # Mastodon one; the context resolves either. Passing the current identity is
+  # what scopes the decision to the person it was addressed to — without it,
+  # any authenticated user could accept a request meant for someone else.
   def authorize_follow(conn, %{"id" => follow_id}) do
-    case Social.accept_follow(follow_id) do
-      {:ok, _} -> json(conn, %{status: "ok"})
+    identity = conn.assigns.current_identity
+
+    case Social.accept_follow(follow_id, identity.id) do
+      {:ok, follow} -> follow_decision_response(conn, identity.id, follow)
       {:error, _} -> conn |> put_status(:not_found) |> json(%{error: "follow_request.not_found"})
     end
   end
 
   def reject_follow(conn, %{"id" => follow_id}) do
-    case Social.reject_follow(follow_id) do
-      {:ok, _} -> json(conn, %{status: "ok"})
+    identity = conn.assigns.current_identity
+
+    case Social.reject_follow(follow_id, identity.id) do
+      {:ok, follow} -> follow_decision_response(conn, identity.id, follow)
       {:error, _} -> conn |> put_status(:not_found) |> json(%{error: "follow_request.not_found"})
+    end
+  end
+
+  # Mastodon answers both with the relationship to the requester.
+  defp follow_decision_response(conn, identity_id, follow) do
+    if Compat.mastodon?(conn) do
+      rel =
+        identity_id
+        |> Social.relationships([follow.follower_id])
+        |> List.first()
+
+      Compat.json(conn, rel, :relationship)
+    else
+      json(conn, %{status: "ok"})
     end
   end
 
@@ -904,7 +976,7 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
         current_identity_id: identity.id
       )
 
-    json(conn, serialized)
+    Compat.json(conn, serialized, :statuses)
   end
 
   # --- Recovery Code ---
@@ -1019,13 +1091,13 @@ defmodule HybridsocialWeb.Api.V1.AccountController do
   def blocked_accounts(conn, _params) do
     identity = conn.assigns.current_identity
     accounts = Social.blocked_accounts(identity.id)
-    json(conn, Enum.map(accounts, &serialize_identity/1))
+    Compat.json(conn, Enum.map(accounts, &serialize_identity/1), :accounts)
   end
 
   def muted_accounts(conn, _params) do
     identity = conn.assigns.current_identity
     accounts = Social.muted_accounts(identity.id)
-    json(conn, Enum.map(accounts, &serialize_identity/1))
+    Compat.json(conn, Enum.map(accounts, &serialize_identity/1), :accounts)
   end
 
   # --- Suggested Users ---
