@@ -163,29 +163,44 @@
   -d "name=My Script"
 # → {'{'} "client_id": "...", "client_secret": "...", "access_token": "..." {'}'}</pre>
 
-      <h3>2. OAuth 2.0 authorization code with PKCE</h3>
+      <h3>2. OAuth 2.0 authorization code</h3>
       <p>
         Use this for clients that authenticate <em>other</em> users, like a
-        third-party app. Requires PKCE — plain
-        <code>response_type=code</code> without a challenge is rejected.
+        third-party app. PKCE is supported and preferred, but optional: a client
+        that sends no <code>code_challenge</code> must present its
+        <code>client_secret</code> when it exchanges the code. One of the two is
+        always required.
       </p>
       <ol class="numbered-list">
         <li>
-          Create an app: <code>POST /api/v1/apps</code> with a name and the
-          scopes you need. Save the <code>client_id</code>.
+          Register the app: <code>POST /api/v1/apps</code> with
+          <code>client_name</code>, <code>redirect_uris</code> and
+          <code>scopes</code>. No authentication needed. Save the
+          <code>client_id</code> and <code>client_secret</code>.
         </li>
         <li>
-          Send the user to <code>/oauth/authorize?client_id=…&amp;response_type=code&amp;code_challenge=…&amp;code_challenge_method=S256&amp;scope=read+write</code>.
-          They approve in-app and you receive a 10-minute authorization code.
+          Open <code>/oauth/authorize?client_id=…&amp;response_type=code&amp;redirect_uri=…&amp;scope=read+write</code>
+          in a browser. The user signs in and approves, and you receive a
+          10-minute authorization code at your <code>redirect_uri</code>. Use
+          <code>urn:ietf:wg:oauth:2.0:oob</code> to have the code displayed for
+          copy-paste instead.
         </li>
         <li>
           Exchange the code: <code>POST /oauth/token</code> with
           <code>grant_type=authorization_code</code>, the <code>code</code>,
-          <code>client_id</code>, and <code>code_verifier</code>.
+          <code>client_id</code>, <code>redirect_uri</code>, and either
+          <code>code_verifier</code> (PKCE) or <code>client_secret</code>.
+          Credentials may also be sent as HTTP Basic.
         </li>
         <li>
           The response contains an <code>access_token</code> you can use just like
-          a direct token.
+          a direct token, plus a <code>refresh_token</code> you can rotate through
+          <code>grant_type=refresh_token</code>.
+        </li>
+        <li>
+          Tokens are limited to the scopes the user approved: a
+          <code>read</code> token cannot post, and no third-party token reaches
+          the admin API without an <code>admin:*</code> scope.
         </li>
         <li>
           Revoke any token (yours or the user's) with
@@ -193,6 +208,19 @@
           always returns 200 per RFC 7009.
         </li>
       </ol>
+
+      <h3>Mastodon client compatibility</h3>
+      <p>
+        A token obtained through the OAuth flow above is served the
+        Mastodon REST shapes: <code>username</code>/<code>acct</code>/<code>note</code>
+        on accounts, <code>replies_count</code>/<code>reblogs_count</code>/<code>favourites_count</code>
+        on statuses, boosts wrapped in <code>reblog</code>, and the
+        <code>/favourite</code>, <code>/reblog</code> and
+        <code>/accounts/verify_credentials</code> endpoints. Personal tokens
+        from Developer Tools keep the native shape. Send
+        <code>X-API-Compat: mastodon</code> or <code>native</code> to choose
+        explicitly.
+      </p>
 
       <h3>Listing and revoking your own apps</h3>
       <ul>

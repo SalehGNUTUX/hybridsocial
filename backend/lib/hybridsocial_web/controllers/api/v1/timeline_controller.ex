@@ -7,6 +7,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
   alias Hybridsocial.Cache
   alias HybridsocialWeb.Serializers.PostSerializer
   import HybridsocialWeb.Helpers.Pagination, only: [clamp_limit: 1]
+  alias HybridsocialWeb.Compat
 
   # Short cache window for the *serialized* first page of the public /
   # global feeds. The heavy cost is the query plus per-post serialization
@@ -78,7 +79,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
     conn
     |> put_link_headers(posts, "/api/v1/timelines/home")
     |> put_status(:ok)
-    |> json(posts)
+    |> Compat.json(posts, :statuses)
   end
 
   @doc "GET /api/v1/timelines/public - Public timeline (optional auth)"
@@ -115,7 +116,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         conn
         |> put_link_headers(serialized, "/api/v1/timelines/public")
         |> put_status(:ok)
-        |> json(serialized)
+        |> Compat.json(serialized, :statuses)
     end
   end
 
@@ -158,7 +159,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         conn
         |> put_link_headers(serialized, "/api/v1/timelines/tag/#{hashtag}")
         |> put_status(:ok)
-        |> json(serialized)
+        |> Compat.json(serialized, :statuses)
     end
   end
 
@@ -184,7 +185,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         conn
         |> put_link_headers(serialized, "/api/v1/timelines/list/#{list_id}")
         |> put_status(:ok)
-        |> json(%{data: serialized, next_cursor: next_cursor, prev_cursor: nil})
+        |> list_response(serialized, next_cursor)
 
       {:error, :not_found} ->
         conn
@@ -205,7 +206,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         conn
         |> put_link_headers(serialized, "/api/v1/timelines/group/#{group_id}")
         |> put_status(:ok)
-        |> json(serialized)
+        |> Compat.json(serialized, :statuses)
 
       {:error, :not_found} ->
         conn
@@ -261,7 +262,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         conn
         |> put_link_headers(serialized, "/api/v1/timelines/global")
         |> put_status(:ok)
-        |> json(serialized)
+        |> Compat.json(serialized, :statuses)
     end
   end
 
@@ -283,7 +284,17 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
     conn
     |> put_link_headers(serialized, "/api/v1/timelines/streams")
     |> put_status(:ok)
-    |> json(serialized)
+    |> Compat.json(serialized, :statuses)
+  end
+
+  # Our frontend reads `result.data` off a PaginatedResponse; a Mastodon
+  # client reads a bare array and takes the cursor from the Link header.
+  defp list_response(conn, serialized, next_cursor) do
+    if Compat.mastodon?(conn) do
+      Compat.json(conn, serialized, :statuses)
+    else
+      json(conn, %{data: serialized, next_cursor: next_cursor, prev_cursor: nil})
+    end
   end
 
   # ---------------------------------------------------------------------------

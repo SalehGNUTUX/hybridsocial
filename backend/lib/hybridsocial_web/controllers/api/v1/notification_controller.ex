@@ -8,6 +8,7 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
   alias Hybridsocial.Media
   import Ecto.Query
   import HybridsocialWeb.Helpers.Pagination, only: [clamp_limit: 1]
+  alias HybridsocialWeb.Compat
 
   # GET /api/v1/notifications
   def index(conn, params) do
@@ -40,13 +41,22 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
           {list, nil}
       end
 
-    posts = preload_target_posts(page)
+    posts = preload_target_posts(page, Compat.mastodon?(conn))
     reactions = preload_reaction_types(page)
     serialized = Enum.map(page, &serialize_notification(&1, posts, reactions))
 
-    conn
-    |> put_status(:ok)
-    |> json(%{data: serialized, next_cursor: next_cursor, prev_cursor: nil})
+    if Compat.mastodon?(conn) do
+      # Mastodon has no envelope: a bare array, and the cursor moves into
+      # the Link header the client already follows.
+      conn
+      |> Compat.put_cursor_link("/api/v1/notifications", next_cursor)
+      |> put_status(:ok)
+      |> Compat.json(serialized, :notifications)
+    else
+      conn
+      |> put_status(:ok)
+      |> json(%{data: serialized, next_cursor: next_cursor, prev_cursor: nil})
+    end
   end
 
   # GET /api/v1/notifications/:id
@@ -60,7 +70,10 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
       notification ->
         posts = preload_target_posts([notification])
         reactions = preload_reaction_types([notification])
-        conn |> put_status(:ok) |> json(serialize_notification(notification, posts, reactions))
+
+        conn
+        |> put_status(:ok)
+        |> Compat.json(serialize_notification(notification, posts, reactions), :notification)
     end
   end
 
@@ -216,7 +229,11 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
   # single batched query, with `media_attachments` preloaded so the
   # frontend can render either a 30-char text snippet or a small
   # thumbnail without a follow-up round trip.
-  defp preload_target_posts(notifications) do
+  # Our own client only needs enough of the target post to render a one-line
+  # preview. A Mastodon client renders the whole status inside the
+  # notification row, and its `account` field is non-null, so that case gets
+  # the full serialization instead.
+  defp preload_target_posts(notifications, full? \\ false) do
     ids =
       notifications
       |> Enum.filter(&(&1.target_type == "post" and not is_nil(&1.target_id)))
@@ -228,11 +245,22 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
         %{}
 
       ids ->
-        Post
-        |> where([p], p.id in ^ids and is_nil(p.deleted_at))
-        |> preload(:media_attachments)
-        |> Repo.all()
-        |> Map.new(&{&1.id, &1})
+        preloads =
+          if full?, do: [:media_attachments, :identity, :quote], else: [:media_attachments]
+
+        posts =
+          Post
+          |> where([p], p.id in ^ids and is_nil(p.deleted_at))
+          |> preload(^preloads)
+          |> Repo.all()
+
+        if full? do
+          posts
+          |> HybridsocialWeb.Serializers.PostSerializer.serialize_many([])
+          |> Map.new(&{&1[:id] || &1["id"], &1})
+        else
+          Map.new(posts, &{&1.id, &1})
+        end
     end
   end
 
@@ -245,6 +273,9 @@ defmodule HybridsocialWeb.Api.V1.NotificationController do
       media_attachments: Enum.map(post.media_attachments || [], &serialize_media_preview/1)
     }
   end
+
+  # Already serialized by the full path above.
+  defp serialize_post_preview(%{} = post), do: post
 
   defp serialize_media_preview(media) do
     url = Media.media_url(media)

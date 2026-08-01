@@ -102,6 +102,35 @@ defmodule Hybridsocial.SocialTest do
     test "returns error for non-existent follow" do
       assert {:error, :not_found} = Social.accept_follow(Ecto.UUID.generate())
     end
+
+    # The decision belongs to the account the request was addressed to. With
+    # no followee scoping, any authenticated user who learned a follow id
+    # could accept or reject someone else's pending request.
+    test "a third party cannot decide someone else's follow request", %{alice: alice, bob: bob} do
+      locked = create_identity("locked4", "locked4@example.com")
+      {:ok, _} = Accounts.update_identity(locked, %{"is_locked" => true})
+
+      {:ok, follow} = Social.follow(alice.id, locked.id)
+
+      assert {:error, :not_found} = Social.accept_follow(follow.id, bob.id)
+      assert {:error, :not_found} = Social.reject_follow(follow.id, bob.id)
+      refute Social.following?(alice.id, locked.id)
+
+      # The addressee still can.
+      assert {:ok, updated} = Social.accept_follow(follow.id, locked.id)
+      assert updated.status == :accepted
+    end
+
+    # Mastodon addresses follow requests by the requester's account id.
+    test "resolves a pending request by the requester's account id", %{alice: alice} do
+      locked = create_identity("locked5", "locked5@example.com")
+      {:ok, _} = Accounts.update_identity(locked, %{"is_locked" => true})
+
+      {:ok, _follow} = Social.follow(alice.id, locked.id)
+
+      assert {:ok, updated} = Social.accept_follow(alice.id, locked.id)
+      assert updated.status == :accepted
+    end
   end
 
   describe "following?/2" do

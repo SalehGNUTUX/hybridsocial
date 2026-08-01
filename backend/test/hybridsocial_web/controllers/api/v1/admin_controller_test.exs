@@ -258,6 +258,75 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
     end
   end
 
+  describe "federation dead letters + delivery kill switch" do
+    setup %{conn: conn} do
+      admin = create_user("fedadmin", "fedadmin@test.com") |> make_admin()
+
+      for _ <- 1..3 do
+        %Hybridsocial.Federation.Delivery{}
+        |> Hybridsocial.Federation.Delivery.changeset(%{
+          activity_id: "https://local.test/activities/#{System.unique_integer([:positive])}",
+          activity_type: "Create",
+          target_inbox: "https://gone.example/users/x/inbox",
+          status: "failed"
+        })
+        |> Hybridsocial.Repo.insert!()
+      end
+
+      %{conn: admin_conn(conn, admin)}
+    end
+
+    test "GET dead_letters reports whole-queue counts per domain", %{conn: conn} do
+      conn = get(conn, "/api/v1/admin/federation/dead_letters")
+      assert %{"total" => 3, "by_domain" => by_domain} = json_response(conn, 200)
+      assert [%{"domain" => "gone.example", "count" => 3}] = by_domain
+    end
+
+    test "POST dead_letters/drop_domain clears the whole domain", %{conn: conn} do
+      conn =
+        post(conn, "/api/v1/admin/federation/dead_letters/drop_domain", %{domain: "gone.example"})
+
+      assert %{"dropped" => 3} = json_response(conn, 200)
+      assert Hybridsocial.Repo.aggregate(Hybridsocial.Federation.Delivery, :count) == 0
+    end
+
+    test "disabling delivery drops the queue and blocks further attempts", %{conn: conn} do
+      conn =
+        post(conn, "/api/v1/admin/federation/delivery_disabled", %{
+          domain: "gone.example",
+          reason: "instance shut down",
+          drop_dead_letters: true
+        })
+
+      assert %{"delivery_disabled" => true, "dropped" => 3} = json_response(conn, 200)
+      refute Hybridsocial.Federation.CircuitBreaker.allow?("https://gone.example/users/x/inbox")
+      assert Hybridsocial.Repo.aggregate(Hybridsocial.Federation.Delivery, :count) == 0
+    end
+
+    test "the disabled list round-trips through enable", %{conn: conn} do
+      post(conn, "/api/v1/admin/federation/delivery_disabled", %{domain: "gone.example"})
+
+      conn2 = get(conn, "/api/v1/admin/federation/delivery_disabled")
+      assert %{"data" => [%{"domain" => "gone.example"}]} = json_response(conn2, 200)
+
+      conn3 = delete(conn, "/api/v1/admin/federation/delivery_disabled/gone.example")
+      assert %{"delivery_disabled" => false} = json_response(conn3, 200)
+      assert Hybridsocial.Federation.CircuitBreaker.allow?("https://gone.example/users/x/inbox")
+    end
+
+    test "a non-admin cannot stop delivery", %{conn: _conn} do
+      user = create_user("fednobody", "fednobody@test.com")
+
+      conn =
+        build_conn()
+        |> auth_conn(user)
+        |> post("/api/v1/admin/federation/delivery_disabled", %{domain: "gone.example"})
+
+      assert json_response(conn, 403)
+      refute Hybridsocial.Federation.CircuitBreaker.delivery_disabled?("gone.example")
+    end
+  end
+
   describe "permission-based access control" do
     test "community_manager cannot access reports", %{conn: conn} do
       cm = create_user("cm1", "cm1@test.com")

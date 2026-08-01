@@ -30,6 +30,13 @@ defmodule Hybridsocial.Federation.RemoteInstance do
     field :unreachable_since, :utc_datetime_usec
     field :circuit_reopen_at, :utc_datetime_usec
 
+    # Admin kill switch: when set, outbound delivery to this domain is
+    # skipped permanently (no probe, no queue rows) until an admin
+    # re-enables it. For peers that are gone for good.
+    field :delivery_disabled_at, :utc_datetime_usec
+    field :delivery_disabled_reason, :string
+    field :delivery_disabled_by, :binary_id
+
     timestamps(type: :utc_datetime_usec)
   end
 
@@ -45,7 +52,10 @@ defmodule Hybridsocial.Federation.RemoteInstance do
       :last_error,
       :consecutive_failures,
       :unreachable_since,
-      :circuit_reopen_at
+      :circuit_reopen_at,
+      :delivery_disabled_at,
+      :delivery_disabled_reason,
+      :delivery_disabled_by
     ])
     |> validate_required([:domain])
     |> unique_constraint(:domain)

@@ -31,5 +31,21 @@ defmodule Hybridsocial.Push.Vapid do
     Config.set("vapid_private_key", private_b64)
 
     %{public: public_b64, private: private_b64}
+  rescue
+    error -> unstorable_key(error)
+  catch
+    # The config store isn't running (it isn't in the test supervision tree).
+    # A keypair we can't persist is worse than none — every call would mint a
+    # different one — so report "no push" instead of handing back a key that
+    # no subscription will ever match.
+    :exit, reason -> unstorable_key(reason)
+  end
+
+  defp unstorable_key(reason) do
+    require Logger
+
+    Logger.warning("VAPID keypair could not be stored, Web Push unavailable: #{inspect(reason)}")
+
+    %{public: nil, private: nil}
   end
 end

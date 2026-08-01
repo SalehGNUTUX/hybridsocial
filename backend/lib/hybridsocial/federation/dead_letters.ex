@@ -60,6 +60,26 @@ defmodule Hybridsocial.Federation.DeadLetters do
 
   defp uuid_to_string(s) when is_binary(s), do: s
 
+  @doc """
+  Failed-delivery counts per destination domain across the *whole*
+  queue, not just the current page. The admin UI groups the page it
+  loaded by domain; without this, a domain with 700 failures behind a
+  50-row page reads as "12 failed" and a bulk drop looks far smaller
+  than it is.
+  """
+  def counts_by_domain do
+    from(d in "federation_deliveries",
+      where: d.status == "failed",
+      group_by: fragment("split_part(split_part(?, '/', 3), ':', 1)", d.target_inbox),
+      order_by: [desc: count(d.id)],
+      select: %{
+        domain: fragment("split_part(split_part(?, '/', 3), ':', 1)", d.target_inbox),
+        count: count(d.id)
+      }
+    )
+    |> Repo.all()
+  end
+
   @doc "Total number of failed deliveries (for pagination metadata)."
   def count do
     Repo.one(
@@ -158,6 +178,52 @@ defmodule Hybridsocial.Federation.DeadLetters do
       nil -> {:error, :not_found}
       delivery -> Repo.delete(delivery)
     end
+  end
+
+  @doc """
+  Permanently drop every failed delivery for a domain. Returns the
+  number of rows removed. Only `failed` rows are touched — anything
+  still pending or retrying is left for the queue to finish.
+  """
+  def drop_domain(domain) when is_binary(domain) do
+    {count, _} =
+      from(d in Delivery,
+        where:
+          d.status == "failed" and
+            fragment("split_part(split_part(?, '/', 3), ':', 1) = ?", d.target_inbox, ^domain)
+      )
+      |> Repo.delete_all()
+
+    count
+  end
+
+  @doc """
+  Hard-deletes delivery rows in a terminal state (`delivered` /
+  `failed`) older than `retention_days`, oldest-first.
+
+  `federation_deliveries` is an append-only log of every fan-out
+  attempt, so without this it grows without bound — tens of thousands
+  of rows within weeks on a small instance, and the dead-letter queue
+  becomes unreadable. Pending / retrying rows are never touched: they
+  are still live work.
+
+  Returns `{delivered_pruned, failed_pruned}`.
+  """
+  def prune(retention_days) when is_integer(retention_days) and retention_days > 0 do
+    cutoff = DateTime.add(DateTime.utc_now(), -retention_days * 86_400, :second)
+
+    delivered = prune_status("delivered", cutoff)
+    failed = prune_status("failed", cutoff)
+
+    {delivered, failed}
+  end
+
+  defp prune_status(status, cutoff) do
+    {count, _} =
+      from(d in Delivery, where: d.status == ^status and d.inserted_at < ^cutoff)
+      |> Repo.delete_all()
+
+    count
   end
 
   defp ensure_body(%Delivery{activity_body: body}) when is_map(body), do: {:ok, body}

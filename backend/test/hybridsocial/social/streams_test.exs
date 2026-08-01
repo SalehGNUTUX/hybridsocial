@@ -267,6 +267,23 @@ defmodule Hybridsocial.Social.StreamsTest do
       refute short.id in ids
     end
 
+    test "a clip at or above the default minimum (10s) qualifies" do
+      alice = create_user("sfeed_dur10", "sfeed_dur10@example.com")
+      # 12s — under the old hardcoded 15s floor, over the new 10s default.
+      clip = create_post(alice, %{content: "12s clip"}) |> attach_video(alice, duration: 12.0)
+
+      ids = Streams.streams_feed(nil) |> Enum.map(& &1.id)
+      assert clip.id in ids
+    end
+
+    test "the minimum duration is tunable — raising it excludes an otherwise-qualifying clip" do
+      alice = create_user("sfeed_durcfg", "sfeed_durcfg@example.com")
+      clip = create_post(alice, %{content: "12s clip"}) |> attach_video(alice, duration: 12.0)
+
+      ids = Streams.streams_feed(nil, min_duration_seconds: 20) |> Enum.map(& &1.id)
+      refute clip.id in ids
+    end
+
     test "excludes sensitive and content-warned posts" do
       alice = create_user("sfeed_cw", "sfeed_cw@example.com")
       nsfw = create_post(alice, %{content: "nsfw", sensitive: true}) |> attach_video(alice)

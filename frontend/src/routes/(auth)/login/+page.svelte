@@ -48,12 +48,26 @@
     captchaProvider === 'turnstile' || captchaProvider === 'hcaptcha'
   );
 
+  // Where to land after a successful login. Set by flows that interrupt the
+  // user mid-task — currently the OAuth consent screen at /authorize.
+  let nextPath = $state('/home');
+
+  // Only same-origin paths: an absolute URL (or a protocol-relative "//host")
+  // would turn login into an open redirect.
+  function safeNext(value: string | null): string {
+    if (!value) return '/home';
+    if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/home';
+    return value;
+  }
+
   onMount(() => {
     // Pre-fill the identifier when arriving from the account switcher's
     // "switch to @handle" / "add account" links (?handle=...).
     try {
-      const h = new URL(window.location.href).searchParams.get('handle');
+      const params = new URL(window.location.href).searchParams;
+      const h = params.get('handle');
       if (h) email = h;
+      nextPath = safeNext(params.get('next'));
     } catch {
       /* ignore */
     }
@@ -135,7 +149,7 @@
             setUser(user);
           } catch {}
           subscribeToPush();
-          await goto('/home');
+          await goto(nextPath);
         }
       } else {
         const body: Record<string, unknown> = { email, password };
@@ -170,7 +184,7 @@
             setUser(user);
           } catch {}
           subscribeToPush();
-          await goto('/home');
+          await goto(nextPath);
         }
       }
     } catch (err) {
@@ -276,7 +290,7 @@
         const user = await getCurrentUser();
         setUser(user);
         subscribeToPush();
-        goto('/home');
+        goto(nextPath);
       }
     } catch (e) {
       passkeyStep = 'email';

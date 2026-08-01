@@ -128,6 +128,10 @@
   // above to fit the 2-row picker.
   let reactionTriggerEl: HTMLButtonElement | undefined = $state();
   let reactionPickerBelow = $state(false);
+  // The hover picker is portaled to <body> (so the Reels frame's overflow
+  // doesn't clip it — the same trap #136/#152 fixed); position:fixed inline
+  // style anchors it to the trigger's viewport rect, centered, above or below.
+  let reactionPickerStyle = $state('');
   const REACTION_PICKER_ESTIMATED_HEIGHT = 130;
 
   $effect(() => {
@@ -138,8 +142,12 @@
     // Prefer above (existing behavior). Only flip if above is too
     // tight AND below has more room — keeps the popover stable when
     // both sides are roomy.
-    reactionPickerBelow =
-      spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
+    const below = spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
+    reactionPickerBelow = below;
+    const centerX = Math.round(rect.left + rect.width / 2);
+    reactionPickerStyle = below
+      ? `left:${centerX}px; top:${Math.round(rect.bottom + 8)}px;`
+      : `left:${centerX}px; bottom:${Math.round(window.innerHeight - rect.top + 8)}px;`;
   });
   let showMoreMenu = $state(false);
   let bounceReaction = $state(false);
@@ -1282,7 +1290,13 @@
       </button>
 
       {#if showReactionPicker}
-        <div class="picker-anchor" class:picker-anchor-below={reactionPickerBelow}>
+        <div
+          use:portal
+          class="picker-anchor"
+          style={reactionPickerStyle}
+          onpointerenter={() => { if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; } }}
+          onpointerleave={(e) => { if (e.pointerType === 'mouse') handleReactionHoverOut(); }}
+        >
           <ReactionPicker
             selected={currentReaction}
             onselect={handleReaction}
@@ -2252,22 +2266,14 @@
   }
 
   .picker-anchor {
-    position: absolute;
-    inset-block-end: 100%;
-    inset-inline-start: 50%;
+    /* Portaled to <body> and anchored via inline left + top/bottom (computed
+       from the trigger rect, flipping below when there's no room above) so it
+       escapes the Reels frame's overflow clip — the same trap #136/#152 fixed.
+       Centered on the trigger via the transform. */
+    position: fixed;
     transform: translateX(-50%);
-    margin-block-end: 8px;
-    z-index: var(--z-dropdown);
-  }
-
-  /* Flip below the trigger when there isn't enough room above —
-     keeps the picker fully visible on posts pinned near the top of
-     the viewport (a single post page, the first feed item, etc.). */
-  .picker-anchor-below {
-    inset-block-end: auto;
-    inset-block-start: 100%;
-    margin-block-end: 0;
-    margin-block-start: 8px;
+    /* At <body> level, clear the tab bar and reel overlays; under modals. */
+    z-index: 1000;
   }
 
   .action-more-wrapper {

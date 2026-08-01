@@ -87,6 +87,45 @@ defmodule Hybridsocial.Federation.PublisherTest do
       {:ok, count} = Publisher.publish(activity, identity)
       assert count == 0
     end
+
+    test "skips inboxes on domains an admin disabled delivery to" do
+      identity = create_user("pub2", "pub2@example.com")
+
+      # A remote follower whose instance is gone for good.
+      {:ok, follower} =
+        create_user("gonefollower", "gonefollower@example.com")
+        |> Ecto.Changeset.cast(
+          %{
+            is_local: false,
+            ap_actor_url: "https://gone.example/users/gonefollower",
+            inbox_url: "https://gone.example/users/gonefollower/inbox"
+          },
+          [:is_local, :ap_actor_url, :inbox_url]
+        )
+        |> Hybridsocial.Repo.update()
+
+      {:ok, _follow} = Hybridsocial.Social.follow(follower.id, identity.id)
+
+      activity = %{
+        "type" => "Create",
+        "id" => "http://localhost:4002/activities/disabled-peer",
+        "to" => [@public],
+        "cc" => ["http://localhost:4002/actors/#{identity.id}/followers"]
+      }
+
+      # Baseline: the follower's inbox is a real recipient.
+      assert "https://gone.example/users/gonefollower/inbox" in Publisher.determine_recipients(
+               activity,
+               identity
+             )
+
+      :ok = Hybridsocial.Federation.CircuitBreaker.disable_delivery("gone.example")
+
+      # No queue row is written at all — the point of the kill switch is
+      # that a dead peer stops generating dead letters.
+      assert {:ok, 0} = Publisher.publish(activity, identity)
+      assert Hybridsocial.Repo.aggregate(Hybridsocial.Federation.Delivery, :count) == 0
+    end
   end
 
   describe "deliver/3 — refuses to send unsigned" do
