@@ -46,6 +46,9 @@ defmodule Hybridsocial.Application do
             # Prunes terminal federation_deliveries rows older than
             # federation_delivery_retention_days (default 30)
             Hybridsocial.Federation.DeliveryRetentionWorker,
+            # Daily backstop that retires remote followers whose server
+            # reports them gone (410 / webfinger-confirmed 404)
+            Hybridsocial.Federation.DeadActorWorker,
             # Story expiry (hard-deletes expired ephemeral stories)
             Hybridsocial.Social.StoryExpiryWorker,
             # Media proxy cache TTL + LRU eviction

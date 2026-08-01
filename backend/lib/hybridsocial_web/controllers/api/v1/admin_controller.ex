@@ -4018,6 +4018,48 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
   end
 
   @doc """
+  Preview the dead-follower sweep: verifies each candidate against its
+  home server and reports the verdicts without changing anything.
+
+  Each candidate costs a signed fetch (and sometimes a webfinger)
+  against a foreign host, so this is not instant — the limit is
+  deliberately small.
+  """
+  def federation_dead_actors(conn, params) do
+    with :ok <- require_permission(conn, "federation.view") do
+      limit = params["limit"] |> parse_int(25) |> min(100)
+
+      json(conn, Hybridsocial.Federation.DeadActors.sweep(dry_run: true, limit: limit))
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc """
+  Run the dead-follower sweep for real: retires every candidate whose
+  server proves it is gone (410, or 404 confirmed by a webfinger 404).
+  Anything inconclusive is left untouched.
+  """
+  def federation_sweep_dead_actors(conn, params) do
+    with :ok <- require_permission(conn, "federation.manage") do
+      admin_id = conn.assigns.current_identity.id
+      limit = params["limit"] |> parse_int(25) |> min(100)
+
+      result = Hybridsocial.Federation.DeadActors.sweep(limit: limit)
+
+      Moderation.log(admin_id, "federation.dead_actors_swept", "federation", nil, %{
+        checked: result.checked,
+        retired: result.retired,
+        actors: Enum.filter(result.details, &(&1.verdict == "gone")) |> Enum.map(& &1.actor)
+      })
+
+      json(conn, result)
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  @doc """
   List peers with outbound delivery switched off.
   """
   def federation_list_delivery_disabled(conn, _params) do

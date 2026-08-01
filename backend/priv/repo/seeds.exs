@@ -269,6 +269,30 @@ settings = [
     description: "Whether federation with other instances is enabled"
   },
   %{
+    key: "federation_dead_actor_cleanup_enabled",
+    value: %{"value" => true},
+    type: "boolean",
+    category: "federation",
+    description:
+      "Daily sweep that removes follows to remote accounts whose server reports them deleted"
+  },
+  %{
+    key: "federation_dead_actor_failure_threshold",
+    value: %{"value" => 5},
+    type: "integer",
+    category: "federation",
+    description:
+      "How many 404/410 delivery failures a remote inbox must accumulate before its account is verified"
+  },
+  %{
+    key: "federation_dead_actor_purge_content",
+    value: %{"value" => false},
+    type: "boolean",
+    category: "federation",
+    description:
+      "When a remote account is confirmed deleted, also soft-delete its cached posts (off = keep them readable in threads)"
+  },
+  %{
     key: "federation_delivery_retention_days",
     value: %{"value" => 30},
     type: "integer",
