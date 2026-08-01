@@ -8,6 +8,13 @@ defmodule Hybridsocial.Auth.Token do
   refresh transparently on 401. Refresh tokens are 90 days and rotate
   on every use, so an active user effectively never logs out, and a
   refresh is the checkpoint where server-side revocation is enforced.
+
+  Third-party OAuth apps are the exception: Mastodon-API clients treat
+  an access token as permanent and never call the refresh grant, so a
+  15-minute token would strand them. Tokens minted through the
+  authorization-code flow get a longer TTL (`oauth_app_token_ttl_days`,
+  admin-configurable) and stay revocable through their `oauth_tokens`
+  row, which is what the Auth plug actually checks on every request.
   """
   use Joken.Config
 
@@ -29,6 +36,40 @@ defmodule Hybridsocial.Auth.Token do
     }
 
     generate_and_sign(claims, signer())
+  end
+
+  @doc """
+  Access token with an explicit lifetime, for third-party OAuth apps.
+
+  Joken only fills in a claim the caller didn't supply, so passing `exp`
+  here overrides the 15-minute `default_exp` from `token_config/0`.
+  """
+  def generate_access_token(identity_id, ttl_seconds) when is_integer(ttl_seconds) do
+    claims = %{
+      "sub" => identity_id,
+      "type" => "access",
+      "exp" => System.system_time(:second) + ttl_seconds
+    }
+
+    generate_and_sign(claims, signer())
+  end
+
+  @doc """
+  Lifetime of a token issued to a third-party OAuth application.
+
+  Admin-configurable; defaults to 60 days.
+  """
+  def oauth_app_token_ttl do
+    days = Hybridsocial.Config.get("oauth_app_token_ttl_days", 60)
+
+    days =
+      cond do
+        is_integer(days) -> days
+        is_binary(days) -> String.to_integer(days)
+        true -> 60
+      end
+
+    max(days, 1) * 24 * 3600
   end
 
   def verify_access_token(token) do

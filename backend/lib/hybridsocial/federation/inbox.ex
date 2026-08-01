@@ -808,6 +808,21 @@ defmodule Hybridsocial.Federation.Inbox do
        when is_binary(actor_ap_id) do
     object_ap_id = normalize_object_id(object)
 
+    # An actor deleting *itself* — the account-deletion broadcast every
+    # server sends when a user closes their account. It used to fall
+    # through to the post lookup below, find nothing, and report
+    # "already deleted", leaving the follow row in place so we kept
+    # fanning out to a mailbox that no longer exists.
+    if object_ap_id == actor_ap_id do
+      Hybridsocial.Federation.DeadActors.handle_self_delete(actor_ap_id)
+    else
+      delete_post_activity(actor_ap_id, object_ap_id)
+    end
+  end
+
+  defp handle_delete(_), do: {:error, :invalid_delete_activity}
+
+  defp delete_post_activity(actor_ap_id, object_ap_id) do
     with {:ok, remote_identity} <- resolve_remote_identity(actor_ap_id) do
       case get_post_by_ap_id(object_ap_id) do
         %Post{identity_id: identity_id} = post when identity_id == remote_identity.id ->
@@ -833,8 +848,6 @@ defmodule Hybridsocial.Federation.Inbox do
       end
     end
   end
-
-  defp handle_delete(_), do: {:error, :invalid_delete_activity}
 
   # --- Update ---
 

@@ -177,6 +177,12 @@
   // once the user keeps going the same way for about one clip — so they're
   // always a flick away without scrolling back to the top.
   let controlsRevealed = $state(false);
+  // Near the top the topbar sits in its natural place; deeper in the feed it
+  // stays pinned and only shows on a scroll-direction reversal.
+  let atTop = $state(true);
+  // The whole controls bar (title + sound/autoplay + search + sort) is visible
+  // when we're near the top OR the user just reversed direction.
+  let controlsVisible = $derived(atTop || controlsRevealed);
   let lastScrollTop = 0;
   let lastDir = 0; // -1 up, 1 down
   let revealAnchor = 0;
@@ -192,9 +198,10 @@
     if (Math.abs(delta) < 2) return;
 
     const dir = delta > 0 ? 1 : -1;
+    atTop = top <= REVEAL_MIN;
 
     if (top <= REVEAL_MIN) {
-      // Near the top the real header is visible; no floating copy needed.
+      // Near the top the controls sit in their natural place.
       controlsRevealed = false;
     } else if (dir !== lastDir) {
       // Direction just reversed — flash the controls in.
@@ -384,35 +391,11 @@
 <svelte:window onscroll={onWindowScroll} />
 
 <div class="streams-page">
-  <!-- Floating copy of the sound + autoplay controls, revealed on scroll
-       direction change (see onFeedScroll) so they're reachable mid-feed. -->
-  <div class="streams-floating-controls" class:revealed={controlsRevealed} aria-hidden={!controlsRevealed}>
-    <button
-      type="button"
-      class="float-btn"
-      class:on={!muted}
-      aria-label={muted ? 'Unmute all streams' : 'Mute all streams'}
-      tabindex={controlsRevealed ? 0 : -1}
-      onclick={toggleMuted}
-    >
-      {#if muted}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.63 3.63a.996.996 0 0 0 0 1.41L7.29 8.7 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71v-4.17l4.18 4.18c-.49.37-1.02.68-1.6.91v2.06a8.9 8.9 0 0 0 3.02-1.32l1.65 1.65a.996.996 0 1 0 1.41-1.41L5.05 3.63a.996.996 0 0 0-1.42 0zM19 12c0 .82-.15 1.61-.41 2.34l1.53 1.53A8.9 8.9 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71z" /></svg>
-      {:else}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71V6.41c0-.89-1.08-1.34-1.71-.71L7 9H4a1 1 0 0 0-1 1zm13.5 2A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
-      {/if}
-    </button>
-    <button
-      type="button"
-      class="float-btn"
-      class:on={autoplay}
-      aria-label={autoplay ? 'Autoplay on' : 'Autoplay off'}
-      tabindex={controlsRevealed ? 0 : -1}
-      onclick={toggleAutoplay}
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-    </button>
-  </div>
-
+  <!-- Title + sound/autoplay + search + sort as one bar. Pinned within the
+       feed column (so it sits over the feed, not the viewport edge) and hidden
+       on scroll-down / revealed on scroll-up, so every control is a flick away
+       without scrolling back to the top. -->
+  <div class="streams-topbar" class:hidden={!controlsVisible}>
   <div class="page-header">
     <h1 class="page-title">Streams</h1>
     <div class="header-controls">
@@ -473,6 +456,7 @@
         </button>
       {/each}
     </div>
+  </div>
   </div>
 
   {#if loading}
@@ -609,50 +593,27 @@
     margin: 0 auto;
   }
 
-  /* Floating sound + autoplay controls, revealed on scroll-direction change.
-     Fixed (the window scrolls), just under the app header. */
-  .streams-floating-controls {
-    position: fixed;
+  /* Controls bar (title + sound/autoplay + search + sort). Sticky within the
+     feed column — so it sits over the feed, never the viewport edge / sidebar
+     — and slides out of view on scroll-down, back on scroll-up. The window
+     scrolls (the feed has no internal overflow), so sticky pins it just under
+     the app header. A background hides feed content passing beneath it. */
+  .streams-topbar {
+    position: sticky;
     inset-block-start: calc(var(--header-height, 60px) + var(--space-2));
-    inset-inline-end: var(--space-4);
-    z-index: 50;
-    display: flex;
-    gap: var(--space-2);
+    z-index: 30;
+    background: var(--color-surface-base, var(--color-bg));
+    padding-block: var(--space-2);
+    margin-block-end: var(--space-2);
+    transition: transform 200ms ease, opacity 200ms ease;
+  }
+
+  /* Hidden = slid up out of view (its sticky offset + its own height + a
+     margin). pointer-events off so the buttons aren't tabbable while hidden. */
+  .streams-topbar.hidden {
+    transform: translateY(calc(-100% - var(--header-height, 60px)));
     opacity: 0;
-    transform: translateY(-10px);
     pointer-events: none;
-    transition: opacity 180ms ease, transform 180ms ease;
-  }
-
-  .streams-floating-controls.revealed {
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-  }
-
-  .float-btn {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: color-mix(in oklab, var(--color-surface-base, #fff) 80%, transparent);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    backdrop-filter: saturate(1.4) blur(10px);
-    -webkit-backdrop-filter: saturate(1.4) blur(10px);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-    transition: color 150ms ease, background 150ms ease;
-  }
-
-  .float-btn:hover {
-    color: var(--color-text);
-  }
-
-  .float-btn.on {
-    color: var(--color-primary);
   }
 
   /* Center-tap play/pause surface — covers the clip but clears the bottom

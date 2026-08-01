@@ -17,6 +17,9 @@ defmodule Hybridsocial.Federation.CircuitBreaker do
   State lives on `remote_instances` (`consecutive_failures`,
   `unreachable_since`, `circuit_reopen_at`).
   """
+  # `only: [from: 2]` — a bare import would shadow this module's own
+  # private `update/2` with Ecto.Query's macro of the same name.
+  import Ecto.Query, only: [from: 2]
   require Logger
 
   alias Hybridsocial.Federation.{ActivityMapper, RemoteInstance}
@@ -34,10 +37,11 @@ defmodule Hybridsocial.Federation.CircuitBreaker do
   Whether we should attempt delivery to this inbox right now.
 
   Returns `true` when the circuit is closed, or open-but-due-for-a-probe
-  (`circuit_reopen_at` has passed). Returns `false` only while the circuit is
-  open and the next probe time is still in the future. Unknown/malformed
-  inboxes always return `true` (fail open — never block a real delivery on a
-  breaker bug).
+  (`circuit_reopen_at` has passed). Returns `false` while the circuit is
+  open and the next probe time is still in the future, and always for a
+  domain an admin has disabled delivery to (`delivery_disabled_at`) —
+  that one never re-probes. Unknown/malformed inboxes always return
+  `true` (fail open — never block a real delivery on a breaker bug).
   """
   @spec allow?(String.t()) :: boolean()
   def allow?(inbox_url) do
@@ -47,6 +51,10 @@ defmodule Hybridsocial.Federation.CircuitBreaker do
 
       domain ->
         case Repo.get_by(RemoteInstance, domain: domain) do
+          # Admin kill switch wins over the breaker: no probe, ever.
+          %RemoteInstance{delivery_disabled_at: %DateTime{}} ->
+            false
+
           %RemoteInstance{circuit_reopen_at: %DateTime{} = reopen} ->
             # Allow once now >= reopen (half-open probe).
             DateTime.compare(now(), reopen) != :lt
@@ -55,6 +63,84 @@ defmodule Hybridsocial.Federation.CircuitBreaker do
             true
         end
     end
+  end
+
+  @doc """
+  Permanently stop delivering to `domain`. Unlike the breaker's open
+  state this never re-probes on its own — it stands until an admin
+  calls `enable_delivery/1`. For peers that are gone for good, where
+  every retry is a guaranteed timeout and a fresh dead-letter row.
+
+  Does not touch inbound: use an instance policy for that.
+  """
+  @spec disable_delivery(String.t(), keyword()) :: :ok
+  def disable_delivery(domain, opts \\ []) when is_binary(domain) do
+    domain = String.downcase(domain)
+
+    Logger.warning("[circuit] delivery to #{domain} disabled by admin")
+
+    upsert(domain, %{
+      delivery_disabled_at: now(),
+      delivery_disabled_reason: Keyword.get(opts, :reason),
+      delivery_disabled_by: Keyword.get(opts, :admin_id)
+    })
+  end
+
+  @doc """
+  Resume delivering to `domain`, clearing the kill switch and the
+  breaker state with it so the next activity gets a real attempt
+  instead of landing mid-backoff.
+  """
+  @spec enable_delivery(String.t()) :: :ok
+  def enable_delivery(domain) when is_binary(domain) do
+    domain = String.downcase(domain)
+
+    Logger.info("[circuit] delivery to #{domain} re-enabled by admin")
+
+    upsert(domain, %{
+      delivery_disabled_at: nil,
+      delivery_disabled_reason: nil,
+      delivery_disabled_by: nil,
+      consecutive_failures: 0,
+      unreachable_since: nil,
+      circuit_reopen_at: nil
+    })
+  end
+
+  @doc "Whether outbound delivery to this domain is disabled."
+  @spec delivery_disabled?(String.t()) :: boolean()
+  def delivery_disabled?(domain) when is_binary(domain) do
+    MapSet.member?(disabled_domains(), String.downcase(domain))
+  end
+
+  @doc """
+  The set of domains with delivery disabled. Read once per fan-out so
+  the publisher can drop those inboxes before it writes queue rows.
+  """
+  @spec disabled_domains() :: MapSet.t()
+  def disabled_domains do
+    from(r in RemoteInstance,
+      where: not is_nil(r.delivery_disabled_at),
+      select: r.domain
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc "Disabled peers with their reason, for the admin UI."
+  @spec list_disabled() :: [map()]
+  def list_disabled do
+    from(r in RemoteInstance,
+      where: not is_nil(r.delivery_disabled_at),
+      order_by: [desc: r.delivery_disabled_at],
+      select: %{
+        domain: r.domain,
+        disabled_at: r.delivery_disabled_at,
+        reason: r.delivery_disabled_reason,
+        software: r.software
+      }
+    )
+    |> Repo.all()
   end
 
   @doc """

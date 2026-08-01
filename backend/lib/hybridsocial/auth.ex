@@ -19,13 +19,25 @@ defmodule Hybridsocial.Auth do
   this on top of JWT verification. Callers pass `Token.hash_token(token)`.
   """
   def access_token_active?(token_hash) when is_binary(token_hash) do
+    active_session(token_hash) != nil
+  end
+
+  @doc """
+  The live session behind an access token, or nil.
+
+  Returns the grant the token carries — `application_id` (nil for a
+  first-party session) and `scopes` — so the auth plug can enforce both
+  revocation and scope from one lookup.
+  """
+  def active_session(token_hash) when is_binary(token_hash) do
     now = DateTime.utc_now()
 
     OAuthToken
     |> where([t], t.token_hash == ^token_hash)
     |> where([t], is_nil(t.revoked_at))
     |> where([t], t.expires_at > ^now)
-    |> Repo.exists?()
+    |> select([t], %{application_id: t.application_id, scopes: t.scopes})
+    |> Repo.one()
   end
 
   def login(email, password) do

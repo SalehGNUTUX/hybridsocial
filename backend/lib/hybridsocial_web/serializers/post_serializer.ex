@@ -881,7 +881,6 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
   # is no Hybridsocial.Pages.Page schema. Use Pages.get_page/1 which
   # preloads the organization, and synthesize a {id, name, avatar} chip
   # off the identity / organization fields.
-  defp page_summary_for(post, viewer_id \\ nil)
   defp page_summary_for(%{page_id: nil}, _viewer_id), do: nil
 
   defp page_summary_for(%{page_id: id}, viewer_id) when is_binary(id) do

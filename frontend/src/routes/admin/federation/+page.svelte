@@ -8,7 +8,8 @@
   import {
     getKnownInstances,
     getFederationPolicies, createFederationPolicy, deleteFederationPolicy,
-    purgeInstancePreview, purgeInstanceContent
+    purgeInstancePreview, purgeInstanceContent,
+    getAdminSettings, updateAdminSettings
   } from '$lib/api/admin.js';
   import { api } from '$lib/api/client.js';
   import Sparkline from '$lib/components/admin/Sparkline.svelte';
@@ -163,21 +164,39 @@
   let deadLettersTotal = $state(0);
   let deadLettersLoading = $state(false);
   let deadLettersBusy = $state<string | null>(null);
+  // Whole-queue failure counts per domain. The list itself is one page
+  // of 50, so without these the group headers (and the bulk-drop
+  // confirm) would only describe the page, not the backlog behind it.
+  let deadLetterDomainCounts = $state<Record<string, number>>({});
+  // Domains an admin has switched outbound delivery off for.
+  let deliveryDisabled = $state<Set<string>>(new Set());
 
   async function loadDeadLetters() {
     deadLettersLoading = true;
     try {
-      const res = await api.get<{ data: DeadLetter[]; total: number }>(
-        '/api/v1/admin/federation/dead_letters',
-        { limit: '50' },
-      );
+      const res = await api.get<{
+        data: DeadLetter[];
+        total: number;
+        by_domain?: { domain: string; count: number }[];
+        disabled_domains?: string[];
+      }>('/api/v1/admin/federation/dead_letters', { limit: '50' });
       deadLetters = res.data || [];
       deadLettersTotal = res.total || 0;
+      deadLetterDomainCounts = Object.fromEntries(
+        (res.by_domain || []).map((d) => [d.domain, d.count]),
+      );
+      deliveryDisabled = new Set(res.disabled_domains || []);
     } catch {
       addToast('Failed to load dead-letter queue', 'error');
     } finally {
       deadLettersLoading = false;
     }
+  }
+
+  // Total failures for a domain across the whole queue, falling back to
+  // the loaded page if the breakdown hasn't arrived yet.
+  function domainFailureCount(domain: string, loaded: number) {
+    return deadLetterDomainCounts[domain] ?? loaded;
   }
 
   async function retryDeadLetter(item: DeadLetter) {
@@ -245,6 +264,138 @@
       await loadDelivery();
     } catch {
       addToast('Bulk retry failed', 'error');
+    } finally {
+      deadLettersBusy = null;
+    }
+  }
+
+  // Peers with outbound delivery switched off. Kept separate from the
+  // dead-letter groups: once a peer is switched off and its queue
+  // cleared it has no rows left, and it would otherwise disappear with
+  // no way to undo.
+  type DisabledPeer = {
+    domain: string;
+    disabled_at: string;
+    reason: string | null;
+    software: string | null;
+  };
+  let disabledPeers: DisabledPeer[] = $state([]);
+
+  async function loadDisabledPeers() {
+    try {
+      const res = await api.get<{ data: DisabledPeer[] }>(
+        '/api/v1/admin/federation/delivery_disabled',
+      );
+      disabledPeers = res.data || [];
+    } catch {
+      // Non-fatal: the rest of the tab is still useful.
+      disabledPeers = [];
+    }
+  }
+
+  // Retention window for federation_deliveries rows. Every fan-out
+  // writes one row per recipient and nothing used to remove them, so
+  // the dead-letter queue grew without bound.
+  let retentionDays = $state<number | null>(null);
+  let retentionSaving = $state(false);
+
+  async function loadRetention() {
+    try {
+      const settings = await getAdminSettings();
+      const s = settings.find((x) => x.key === 'federation_delivery_retention_days');
+      retentionDays = s ? Number(s.value) : 30;
+    } catch {
+      retentionDays = 30;
+    }
+  }
+
+  async function saveRetention() {
+    if (retentionDays === null || retentionDays < 0) return;
+    retentionSaving = true;
+    try {
+      await updateAdminSettings([
+        { key: 'federation_delivery_retention_days', value: Math.floor(retentionDays) },
+      ]);
+      addToast(
+        retentionDays === 0
+          ? 'Delivery rows will be kept forever'
+          : `Delivery rows older than ${retentionDays} days will be pruned hourly`,
+        'success',
+      );
+    } catch {
+      addToast('Failed to save retention', 'error');
+    } finally {
+      retentionSaving = false;
+    }
+  }
+
+  async function dropAllForDomain(domain: string, total: number) {
+    if (deadLettersBusy) return;
+    if (
+      !confirm(
+        `Permanently drop all ${total.toLocaleString()} failed deliveries to ${domain}? This can't be undone.`,
+      )
+    )
+      return;
+    deadLettersBusy = `domain:${domain}`;
+    try {
+      const res = await api.post<{ dropped: number }>(
+        '/api/v1/admin/federation/dead_letters/drop_domain',
+        { domain },
+      );
+      addToast(`Dropped ${res.dropped.toLocaleString()} from ${domain}`, 'success');
+      await loadDeadLetters();
+      await loadDelivery();
+    } catch {
+      addToast('Bulk drop failed', 'error');
+    } finally {
+      deadLettersBusy = null;
+    }
+  }
+
+  // Outbound kill switch for peers that are gone for good. Separate
+  // from a suspend policy: that's a moderation decision about their
+  // content, this is "stop wasting delivery attempts on a dead host".
+  async function stopDelivering(domain: string, queued: number) {
+    if (deadLettersBusy) return;
+    const reason = prompt(
+      `Stop delivering to ${domain}?\n\nNothing will be sent to this instance until you resume it, ` +
+        `and its ${queued.toLocaleString()} queued failures will be dropped. ` +
+        `Inbound content is unaffected — use a policy for that.\n\nReason (optional):`,
+    );
+    if (reason === null) return;
+    deadLettersBusy = `domain:${domain}`;
+    try {
+      const res = await api.post<{ dropped: number }>(
+        '/api/v1/admin/federation/delivery_disabled',
+        { domain, reason: reason || null, drop_dead_letters: true },
+      );
+      addToast(
+        `Delivery to ${domain} stopped · ${res.dropped.toLocaleString()} dropped`,
+        'success',
+      );
+      await loadDeadLetters();
+      await loadDisabledPeers();
+      await loadDelivery();
+      await loadInstances();
+    } catch {
+      addToast('Failed to stop delivery', 'error');
+    } finally {
+      deadLettersBusy = null;
+    }
+  }
+
+  async function resumeDelivering(domain: string) {
+    if (deadLettersBusy) return;
+    deadLettersBusy = `domain:${domain}`;
+    try {
+      await api.delete(`/api/v1/admin/federation/delivery_disabled/${encodeURIComponent(domain)}`);
+      addToast(`Delivery to ${domain} resumed`, 'success');
+      await loadDeadLetters();
+      await loadDisabledPeers();
+      await loadInstances();
+    } catch {
+      addToast('Failed to resume delivery', 'error');
     } finally {
       deadLettersBusy = null;
     }
@@ -366,6 +517,8 @@
     } else if (activeTab === 'delivery' && !deliveryLoaded && !deliveryLoading) {
       loadDelivery();
       loadDeadLetters();
+      loadDisabledPeers();
+      loadRetention();
     }
   });
 
@@ -493,6 +646,11 @@
             {:else}
               <span class="instance-status instance-{row['status']}">
                 {(row['status'] as string).replace(/_/g, ' ')}
+              </span>
+            {/if}
+            {#if row['delivery_disabled']}
+              <span class="dl-off-badge" title="Outbound delivery is switched off for this instance">
+                Delivery off
               </span>
             {/if}
           </td>
@@ -726,18 +884,64 @@
                   <header class="dl-group-head">
                     <span class="failing-domain">{group.domain}</span>
                     <span class="dl-group-meta">
-                      {group.items.length} failed
+                      {domainFailureCount(group.domain, group.items.length).toLocaleString()} failed
+                      {#if domainFailureCount(group.domain, group.items.length) > group.items.length}
+                        <span class="dl-group-page">({group.items.length} shown)</span>
+                      {/if}
                     </span>
-                    {#if group.items.length > 1}
+                    {#if deliveryDisabled.has(group.domain)}
+                      <span class="dl-off-badge" title="Outbound delivery is switched off">
+                        Delivery off
+                      </span>
+                    {/if}
+                    <div class="dl-group-actions">
+                      {#if group.items.length > 1 && !deliveryDisabled.has(group.domain)}
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline"
+                          onclick={() => retryAllForDomain(group.domain)}
+                          disabled={deadLettersBusy === `domain:${group.domain}`}
+                        >
+                          {deadLettersBusy === `domain:${group.domain}` ? 'Retrying…' : 'Retry all'}
+                        </button>
+                      {/if}
                       <button
                         type="button"
-                        class="btn btn-sm btn-outline"
-                        onclick={() => retryAllForDomain(group.domain)}
+                        class="btn btn-sm btn-danger"
+                        onclick={() =>
+                          dropAllForDomain(
+                            group.domain,
+                            domainFailureCount(group.domain, group.items.length),
+                          )}
                         disabled={deadLettersBusy === `domain:${group.domain}`}
                       >
-                        {deadLettersBusy === `domain:${group.domain}` ? 'Retrying…' : 'Retry all'}
+                        Drop all
                       </button>
-                    {/if}
+                      {#if deliveryDisabled.has(group.domain)}
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline"
+                          onclick={() => resumeDelivering(group.domain)}
+                          disabled={deadLettersBusy === `domain:${group.domain}`}
+                        >
+                          Resume delivery
+                        </button>
+                      {:else}
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-danger"
+                          onclick={() =>
+                            stopDelivering(
+                              group.domain,
+                              domainFailureCount(group.domain, group.items.length),
+                            )}
+                          disabled={deadLettersBusy === `domain:${group.domain}`}
+                          title="Stop all outbound delivery to this instance (for peers that no longer exist)"
+                        >
+                          Stop delivering
+                        </button>
+                      {/if}
+                    </div>
                   </header>
                   <ul class="dl-list">
                     {#each group.items as item (item.id)}
@@ -778,8 +982,78 @@
           {/if}
         </section>
 
+        <!-- Peers we've stopped delivering to. Listed separately so a
+             switched-off instance with an empty queue is still visible
+             and reversible. -->
+        {#if disabledPeers.length > 0}
+          <section class="delivery-section">
+            <div class="delivery-section-head">
+              <h3 class="delivery-section-title">Delivery stopped</h3>
+              <span class="delivery-section-meta">{disabledPeers.length} instance{disabledPeers.length === 1 ? '' : 's'}</span>
+            </div>
+            <p class="delivery-section-note">
+              Nothing is sent to these instances and no queue rows are created for them.
+              Inbound content is unaffected — use a policy for that.
+            </p>
+            <div class="disabled-peers">
+              {#each disabledPeers as peer (peer.domain)}
+                <div class="disabled-peer card">
+                  <div class="disabled-peer-info">
+                    <strong>{peer.domain}</strong>
+                    <span class="text-secondary">
+                      stopped {formatRelative(peer.disabled_at)}{peer.reason ? ` · ${peer.reason}` : ''}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline"
+                    onclick={() => resumeDelivering(peer.domain)}
+                    disabled={deadLettersBusy === `domain:${peer.domain}`}
+                  >
+                    Resume delivery
+                  </button>
+                </div>
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        <!-- Retention: federation_deliveries is an append-only attempt
+             log, so without a window it grows forever. -->
+        <section class="delivery-section">
+          <div class="delivery-section-head">
+            <h3 class="delivery-section-title">Retention</h3>
+          </div>
+          <div class="retention-row">
+            <label class="retention-label" for="delivery-retention">
+              Keep delivered / failed rows for
+            </label>
+            <input
+              id="delivery-retention"
+              class="input retention-input"
+              type="number"
+              min="0"
+              step="1"
+              bind:value={retentionDays}
+            />
+            <span class="retention-unit">days</span>
+            <button
+              class="btn btn-sm btn-primary"
+              type="button"
+              onclick={saveRetention}
+              disabled={retentionSaving || retentionDays === null}
+            >
+              {retentionSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <p class="delivery-section-note">
+            Older rows are pruned hourly. Pending and retrying deliveries are never touched.
+            Set to 0 to keep everything.
+          </p>
+        </section>
+
         <div class="delivery-actions">
-          <button class="btn btn-outline" type="button" onclick={() => { loadDelivery(); loadDeadLetters(); }}>
+          <button class="btn btn-outline" type="button" onclick={() => { loadDelivery(); loadDeadLetters(); loadDisabledPeers(); }}>
             Refresh
           </button>
         </div>
@@ -1192,12 +1466,83 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    flex-wrap: wrap;
   }
 
   .dl-group-meta {
     font-size: var(--text-xs);
     color: var(--color-text-secondary);
     flex: 1;
+  }
+
+  .dl-group-page {
+    color: var(--color-text-tertiary);
+  }
+
+  .dl-group-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .dl-off-badge {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-full);
+    background: var(--color-danger-tint);
+    color: var(--color-danger);
+  }
+
+  .disabled-peers {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .disabled-peer {
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .disabled-peer-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--text-sm);
+    min-width: 0;
+  }
+
+  .delivery-section-note {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    margin: var(--space-2) 0 0;
+  }
+
+  .retention-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .retention-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .retention-input {
+    width: 90px;
+  }
+
+  .retention-unit {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
   }
 
   .dl-list {

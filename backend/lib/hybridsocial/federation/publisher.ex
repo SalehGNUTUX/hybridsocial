@@ -20,7 +20,14 @@ defmodule Hybridsocial.Federation.Publisher do
   Queues delivery tasks for each inbox URL.
   """
   def publish(activity, identity) do
-    inbox_urls = determine_recipients(activity, identity)
+    # Drop peers an admin has switched off *before* we write queue rows.
+    # Letting them through would create a delivery row per activity that
+    # can only ever fail, which is exactly the dead-letter flood the
+    # kill switch exists to stop.
+    inbox_urls =
+      activity
+      |> determine_recipients(identity)
+      |> reject_disabled_inboxes()
 
     Enum.each(inbox_urls, fn inbox_url ->
       {:ok, delivery} =
@@ -248,11 +255,21 @@ defmodule Hybridsocial.Federation.Publisher do
   """
   def retry_failed_deliveries do
     now = DateTime.utc_now()
+    disabled = CircuitBreaker.disabled_domains()
 
     Delivery
     |> where([d], d.status in ["failed", "retrying"])
     |> where([d], d.attempts < @max_attempts)
     |> Repo.all()
+    |> Enum.reject(fn delivery ->
+      # A disabled peer's rows stay parked in `failed`. Retrying them
+      # would only bump `attempts` and rewrite the error on a domain we
+      # have already decided to stop talking to.
+      case Hybridsocial.Federation.ActivityMapper.extract_domain(delivery.target_inbox) do
+        nil -> false
+        domain -> MapSet.member?(disabled, domain)
+      end
+    end)
     |> Enum.filter(fn delivery ->
       eligible_for_retry?(delivery, now)
     end)
@@ -288,6 +305,25 @@ defmodule Hybridsocial.Federation.Publisher do
   end
 
   # --- Private helpers ---
+
+  # Filters a list of inbox URLs down to peers we're still delivering to.
+  # One query per fan-out, and the disabled set is normally empty.
+  defp reject_disabled_inboxes([]), do: []
+
+  defp reject_disabled_inboxes(inbox_urls) do
+    disabled = CircuitBreaker.disabled_domains()
+
+    if MapSet.size(disabled) == 0 do
+      inbox_urls
+    else
+      Enum.reject(inbox_urls, fn url ->
+        case Hybridsocial.Federation.ActivityMapper.extract_domain(url) do
+          nil -> false
+          domain -> MapSet.member?(disabled, domain)
+        end
+      end)
+    end
+  end
 
   defp queue_delivery(activity, delivery, identity) do
     # Deliver directly via Task.Supervisor for reliability

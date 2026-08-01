@@ -105,7 +105,8 @@ defmodule HybridsocialWeb.Helpers.Account do
       avatar_url: nil,
       emojis: [],
       domain: nil,
-      url: nil
+      url: nil,
+      created_at: identity.inserted_at
     }
   end
 
@@ -120,7 +121,10 @@ defmodule HybridsocialWeb.Helpers.Account do
       # an account appears in a list (post author, notifications, etc.).
       emojis: identity.emojis || [],
       domain: remote_domain(identity),
-      url: profile_url(identity)
+      url: profile_url(identity),
+      # Mastodon's Account.created_at is non-null; a client that gets a null
+      # here fails to deserialize the whole notification.
+      created_at: identity.inserted_at
     }
   end
 end
