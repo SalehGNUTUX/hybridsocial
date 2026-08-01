@@ -169,6 +169,21 @@ defmodule Hybridsocial.PagesTest do
       assert {:error, :forbidden} = Pages.delete_page(page.id, rando.id)
     end
 
+    test "a page admin or editor — not the owner — cannot delete" do
+      owner = create_user("pg_del_own", "pg_del_own@example.com")
+      admin = create_user("pg_del_adm", "pg_del_adm@example.com")
+      editor = create_user("pg_del_edt", "pg_del_edt@example.com")
+      page = create_test_page(owner, "del_page_roles")
+
+      {:ok, _} = Pages.add_role(page.id, owner.id, admin.id, "admin")
+      {:ok, _} = Pages.add_role(page.id, owner.id, editor.id, "editor")
+
+      # Deletion is owner-only (plus instance-staff takedown). Elevated page
+      # roles manage the page but must not be able to delete it.
+      assert {:error, :forbidden} = Pages.delete_page(page.id, admin.id)
+      assert {:error, :forbidden} = Pages.delete_page(page.id, editor.id)
+    end
+
     test "deletion writes an audit entry with the actor role and reason" do
       owner = create_user("pg_audit", "pg_audit@example.com")
       page = create_test_page(owner, "audit_page")
