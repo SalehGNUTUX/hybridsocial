@@ -159,4 +159,47 @@ defmodule HybridsocialWeb.Serializers.PostSerializerTest do
       assert serialized.last_activity_at == post.published_at
     end
   end
+
+  describe "page.can_edit — so the client shows Edit/Delete on your page's posts" do
+    alias Hybridsocial.{Pages, Social.Posts}
+
+    setup do
+      owner = create_user("pgcanedit_owner", "pgcanedit_owner@test.com")
+      stranger = create_user("pgcanedit_stranger", "pgcanedit_stranger@test.com")
+
+      {:ok, page} =
+        Pages.create_page(owner.id, %{
+          "handle" => "pgcanedit_page",
+          "display_name" => "Page",
+          "bio" => "b",
+          "category" => "tech"
+        })
+
+      # Authored as the page: identity_id AND page_id are the page.
+      {:ok, post} =
+        Posts.create_post(page.id, %{
+          "content" => "Hello from the page",
+          "visibility" => "public",
+          "page_id" => page.id
+        })
+
+      reloaded = Repo.get!(Hybridsocial.Social.Post, post.id) |> Repo.preload(:identity)
+      %{owner: owner, stranger: stranger, post: reloaded}
+    end
+
+    test "true for the page owner (who can edit/delete it)", %{owner: owner, post: post} do
+      serialized = PostSerializer.serialize(post, current_identity_id: owner.id)
+      assert serialized.page.can_edit == true
+    end
+
+    test "false for an unrelated viewer", %{stranger: stranger, post: post} do
+      serialized = PostSerializer.serialize(post, current_identity_id: stranger.id)
+      assert serialized.page.can_edit == false
+    end
+
+    test "false for an anonymous viewer", %{post: post} do
+      serialized = PostSerializer.serialize(post)
+      assert serialized.page.can_edit == false
+    end
+  end
 end

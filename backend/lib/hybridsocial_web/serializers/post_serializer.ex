@@ -161,7 +161,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
       media_attachments: media_attachments,
       poll: poll_for(post, current_identity_id),
       group: group_summary_for(post),
-      page: page_summary_for(post)
+      page: page_summary_for(post, current_identity_id)
     }
     |> maybe_put_staff_fields(post, is_staff?)
   end
@@ -292,7 +292,7 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
         media_attachments: Map.get(media_by_post, post.id, []),
         poll: poll_for(post, current_identity_id),
         group: group_summary_for(post),
-        page: page_summary_for(post)
+        page: page_summary_for(post, current_identity_id)
       }
       |> maybe_put_staff_fields(post, is_staff?)
     end)
@@ -881,9 +881,9 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
   # is no Hybridsocial.Pages.Page schema. Use Pages.get_page/1 which
   # preloads the organization, and synthesize a {id, name, avatar} chip
   # off the identity / organization fields.
-  defp page_summary_for(%{page_id: nil}), do: nil
+  defp page_summary_for(%{page_id: nil}, _viewer_id), do: nil
 
-  defp page_summary_for(%{page_id: id}) when is_binary(id) do
+  defp page_summary_for(%{page_id: id}, viewer_id) when is_binary(id) do
     try do
       case Hybridsocial.Pages.get_page(id) do
         nil ->
@@ -896,14 +896,20 @@ defmodule HybridsocialWeb.Serializers.PostSerializer do
               _ -> identity.display_name || identity.handle
             end
 
-          %{id: identity.id, name: name, avatar_url: identity.avatar_url}
+          # `can_edit` tells the client whether THIS viewer may edit/delete the
+          # post (it's authored as the page, so the strict author == viewer
+          # check the UI uses otherwise fails). Mirrors get_owned_post's
+          # page path: anyone Pages.can_edit? can edit and delete its posts.
+          can_edit = is_binary(viewer_id) and Hybridsocial.Pages.can_edit?(id, viewer_id)
+
+          %{id: identity.id, name: name, avatar_url: identity.avatar_url, can_edit: can_edit}
       end
     rescue
       _ -> nil
     end
   end
 
-  defp page_summary_for(_), do: nil
+  defp page_summary_for(_, _viewer_id), do: nil
 
   defp tags_for(post_id) do
     {:ok, post_uuid} = Ecto.UUID.dump(post_id)
