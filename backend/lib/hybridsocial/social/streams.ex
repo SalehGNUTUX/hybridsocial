@@ -10,6 +10,9 @@ defmodule Hybridsocial.Social.Streams do
 
   @default_limit 20
   @max_limit 40
+  # Default minimum clip length (seconds) for the streams/reels feed when the
+  # `streams_min_duration_seconds` setting isn't configured.
+  @default_min_duration 10
 
   @doc """
   Records a view event for a video stream post.
@@ -89,7 +92,7 @@ defmodule Hybridsocial.Social.Streams do
   """
   def streams_feed(_viewer_id, opts \\ []) do
     limit = parse_limit(opts)
-    min_duration = Keyword.get(opts, :min_duration_seconds, 15.0)
+    min_duration = Keyword.get(opts, :min_duration_seconds) || min_duration_seconds()
     search = normalize_search(Keyword.get(opts, :q))
     # :portrait (default) keeps the strictly-vertical Reels feed; :all lets the
     # Streams page surface clips of any orientation/size (issue: a 640x360
@@ -108,9 +111,10 @@ defmodule Hybridsocial.Social.Streams do
     #     known dimensions); `:all` — what the Streams page requests — accepts
     #     any clip: horizontal, square, portrait, or unknown dimensions.
     #   - posts whose video attachment is shorter than `min_duration`
-    #     seconds (default 15) — the format is meant for short *clips*,
-    #     not micro-bursts that flash by before the page can render the
-    #     next one. This still applies in both orientation modes.
+    #     seconds (admin-tunable via `streams_min_duration_seconds`, default
+    #     10) — the format is meant for short *clips*, not micro-bursts that
+    #     flash by before the page can render the next one. Applies in both
+    #     orientation modes.
     # The video predicate joins the media table (duration + dimensions
     # live there per-attachment); the EXISTS form keeps the join from
     # multiplying rows on posts with multiple media.
@@ -133,6 +137,26 @@ defmodule Hybridsocial.Social.Streams do
   end
 
   # --- Private helpers ---
+
+  # Minimum clip length (seconds) for the streams/reels feed — admin-tunable
+  # via the `streams_min_duration_seconds` setting so an instance can include
+  # shorter clips or require longer ones. Values are stored untyped in Config,
+  # so coerce a stored string back to a number.
+  defp min_duration_seconds do
+    case Hybridsocial.Config.get("streams_min_duration_seconds", @default_min_duration) do
+      n when is_number(n) ->
+        n
+
+      s when is_binary(s) ->
+        case Float.parse(s) do
+          {f, _} -> f
+          :error -> @default_min_duration
+        end
+
+      _ ->
+        @default_min_duration
+    end
+  end
 
   # Portrait (Reels): strictly vertical clips with known dimensions.
   defp filter_by_qualifying_video(query, :portrait, min_duration) do
