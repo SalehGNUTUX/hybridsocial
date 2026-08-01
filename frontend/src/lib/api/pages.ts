@@ -14,7 +14,9 @@ export interface PageRole {
   id: string;
   organization_id: string;
   identity_id: string;
-  role: 'admin' | 'editor' | 'moderator';
+  // 'owner' is a synthetic, read-only entry the backend prepends (the owner
+  // isn't a real roles-table row); the grantable roles are the other three.
+  role: 'owner' | 'admin' | 'editor' | 'moderator';
   granted_by: string | null;
   created_at: string;
   identity: PageRoleIdentity | null;
