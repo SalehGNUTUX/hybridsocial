@@ -1375,6 +1375,20 @@ defmodule Hybridsocial.Social.Posts do
   end
 
   @doc """
+  Number of published, non-deleted posts authored by an identity.
+
+  Feeds Mastodon's non-null `statuses_count` on profile responses. Only used
+  on single-account endpoints — embedding it in a follower list would be one
+  count query per row.
+  """
+  def published_count(identity_id) do
+    Post
+    |> where([p], p.identity_id == ^identity_id)
+    |> where([p], is_nil(p.deleted_at) and not is_nil(p.published_at))
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
   Counts posts pinned to a given scope.
 
       pinned_count({:profile, identity_id}) — profile-scoped pins for the author.

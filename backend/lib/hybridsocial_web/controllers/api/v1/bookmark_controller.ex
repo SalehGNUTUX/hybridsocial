@@ -58,9 +58,16 @@ defmodule HybridsocialWeb.Api.V1.BookmarkController do
     # — see PaginatedResponse<T> on the frontend. Returning `posts:`
     # is what made the bookmarks page render an empty list even when
     # rows were saved on the backend.
-    conn
-    |> put_status(:ok)
-    |> json(%{data: posts, next_cursor: result.next_cursor, prev_cursor: nil})
+    if HybridsocialWeb.Compat.mastodon?(conn) do
+      conn
+      |> HybridsocialWeb.Compat.put_cursor_link("/api/v1/bookmarks", result.next_cursor)
+      |> put_status(:ok)
+      |> HybridsocialWeb.Compat.json(posts, :statuses)
+    else
+      conn
+      |> put_status(:ok)
+      |> json(%{data: posts, next_cursor: result.next_cursor, prev_cursor: nil})
+    end
   end
 
   defp serialize_post(post) do

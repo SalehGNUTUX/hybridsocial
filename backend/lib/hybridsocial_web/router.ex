@@ -13,11 +13,13 @@ defmodule HybridsocialWeb.Router do
   pipeline :authenticated do
     plug HybridsocialWeb.Plugs.Auth
     plug HybridsocialWeb.Plugs.RequireAuth
+    plug HybridsocialWeb.Plugs.RequireScope
     plug HybridsocialWeb.Plugs.RequireConfirmedEmail
   end
 
   pipeline :optional_auth do
     plug HybridsocialWeb.Plugs.Auth
+    plug HybridsocialWeb.Plugs.RequireScope
   end
 
   pipeline :rate_limited do
@@ -38,6 +40,7 @@ defmodule HybridsocialWeb.Router do
   pipeline :admin do
     plug HybridsocialWeb.Plugs.Auth
     plug HybridsocialWeb.Plugs.RequireAuth
+    plug HybridsocialWeb.Plugs.RequireScope
     plug HybridsocialWeb.Plugs.RequireConfirmedEmail
     plug HybridsocialWeb.Plugs.RequireAdmin
   end
@@ -46,6 +49,19 @@ defmodule HybridsocialWeb.Router do
   # the caller to have re-entered password + TOTP within the sudo TTL.
   pipeline :admin_sudo do
     plug HybridsocialWeb.Plugs.RequireSudo
+  end
+
+  # GET /oauth/authorize is opened by a browser, so it has to accept HTML and
+  # answer with a 302 into the web app rather than a 406.
+  pipeline :oauth_browser do
+    plug :accepts, ["html", "json"]
+    # This endpoint only ever answers with a 302 or a plain-text error, so
+    # nothing may execute or be framed here.
+    plug :put_secure_browser_headers,
+         %{"content-security-policy" => "default-src 'none'; frame-ancestors 'none'"}
+
+    plug HybridsocialWeb.Plugs.IpBan
+    plug HybridsocialWeb.Plugs.RateLimiter
   end
 
   pipeline :sse do
@@ -103,6 +119,9 @@ defmodule HybridsocialWeb.Router do
   scope "/api/v1/accounts", HybridsocialWeb.Api.V1 do
     pipe_through [:api, :authenticated]
 
+    # Must be declared before the public `get "/:id"` below, or the literal
+    # path is swallowed by the id route and fails a UUID cast with a 400.
+    get "/verify_credentials", AccountController, :verify_credentials
     patch "/update_credentials", AccountController, :update
     delete "/delete", AccountController, :delete
 
@@ -232,14 +251,34 @@ defmodule HybridsocialWeb.Router do
     get "/:id/webhook/deliveries", BotController, :list_deliveries
   end
 
+  # OAuth app registration (public — a client has no user yet at this point,
+  # which is exactly why every Mastodon-API client calls it first). Rate
+  # limited per IP in Plugs.RateLimiter. Optional auth so a registration made
+  # from a signed-in session is still attributed to that identity.
+  scope "/api/v1/apps", HybridsocialWeb.Api.V1 do
+    pipe_through [:api, :optional_auth]
+
+    post "/", OAuthController, :create_app
+    get "/info", OAuthController, :app_info
+  end
+
   # OAuth app management (authenticated)
   scope "/api/v1/apps", HybridsocialWeb.Api.V1 do
     pipe_through [:api, :authenticated]
 
-    post "/", OAuthController, :create_app
+    get "/verify_credentials", OAuthController, :verify_app_credentials
     post "/with_token", OAuthController, :create_app_with_token
     get "/", OAuthController, :list_apps
     delete "/:id", OAuthController, :delete_app
+  end
+
+  # OAuth authorization: browser entry point. Third-party clients open this
+  # in a browser/custom tab, so it answers with a redirect to the web app's
+  # consent screen rather than JSON.
+  scope "/oauth", HybridsocialWeb.Api.V1 do
+    pipe_through :oauth_browser
+
+    get "/authorize", OAuthController, :authorize_redirect
   end
 
   # OAuth authorization (authenticated)
@@ -273,6 +312,16 @@ defmodule HybridsocialWeb.Router do
     post "/:id/boost", StatusController, :boost
     delete "/:id/boost", StatusController, :unboost
 
+    # Mastodon spellings of the same actions. Separate actions rather than
+    # aliases because Mastodon answers each one with the full status, while
+    # our native routes return the lighter payloads the web app expects.
+    post "/:id/favourite", StatusController, :favourite
+    post "/:id/unfavourite", StatusController, :unfavourite
+    post "/:id/reblog", StatusController, :reblog
+    post "/:id/unreblog", StatusController, :unreblog
+    post "/:id/unbookmark", StatusController, :unbookmark
+    post "/:id/unpin", StatusController, :unpin
+
     post "/:id/pin", StatusController, :pin
     delete "/:id/pin", StatusController, :unpin
 
@@ -290,6 +339,20 @@ defmodule HybridsocialWeb.Router do
     pipe_through [:api, :authenticated]
 
     get "/", BookmarkController, :index
+  end
+
+  # Mastodon puts these lists at the top level; we nest them under
+  # /accounts. Same actions, second path — a client has no way to discover
+  # ours, and these are the tabs it opens on launch.
+  scope "/api/v1", HybridsocialWeb.Api.V1 do
+    pipe_through [:api, :authenticated]
+
+    get "/favourites", AccountController, :favourited_posts
+    get "/blocks", AccountController, :blocked_accounts
+    get "/mutes", AccountController, :muted_accounts
+    get "/follow_requests", AccountController, :follow_requests
+    post "/follow_requests/:id/authorize", AccountController, :authorize_follow
+    post "/follow_requests/:id/reject", AccountController, :reject_follow
   end
 
   # Polls (authenticated)
@@ -1053,6 +1116,26 @@ defmodule HybridsocialWeb.Router do
 
     get "/instance", InstanceController, :show
     get "/instance/info", InstanceController, :info
+  end
+
+  # Mastodon 4.x endpoints. Clients try these first and fall back to v1, so
+  # a 404 here costs a round trip on every launch.
+  scope "/api/v2", HybridsocialWeb.Api.V1 do
+    pipe_through :api
+
+    get "/instance", InstanceController, :show_v2
+  end
+
+  scope "/api/v2", HybridsocialWeb.Api.V1 do
+    pipe_through [:api, :optional_auth]
+
+    get "/search", SearchController, :index
+  end
+
+  scope "/api/v2/media", HybridsocialWeb.Api.V1 do
+    pipe_through [:api, :authenticated]
+
+    post "/", MediaController, :create
   end
 
   # Public OG / social-share metadata (JSON). Privacy-aware: reuses the

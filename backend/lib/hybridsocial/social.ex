@@ -117,18 +117,55 @@ defmodule Hybridsocial.Social do
     :ok
   end
 
-  def accept_follow(follow_id) do
-    case Repo.get(Follow, follow_id) do
-      nil -> {:error, :not_found}
-      follow -> follow |> Follow.status_changeset(:accepted) |> Repo.update()
+  @doc """
+  Accept a pending follow request.
+
+  `followee_id` is the identity the request was addressed to; the decision is
+  only theirs to make. Pass `nil` from federation paths, where the Accept was
+  already matched to its actor upstream.
+  """
+  def accept_follow(follow_id, followee_id \\ nil) do
+    with {:ok, follow} <- fetch_decidable_follow(follow_id, followee_id) do
+      follow |> Follow.status_changeset(:accepted) |> Repo.update()
     end
   end
 
-  def reject_follow(follow_id) do
-    case Repo.get(Follow, follow_id) do
-      nil -> {:error, :not_found}
-      follow -> follow |> Follow.status_changeset(:rejected) |> Repo.update()
+  def reject_follow(follow_id, followee_id \\ nil) do
+    with {:ok, follow} <- fetch_decidable_follow(follow_id, followee_id) do
+      follow |> Follow.status_changeset(:rejected) |> Repo.update()
     end
+  end
+
+  # Accepts either the follow row's id (ours) or the requester's identity id
+  # (Mastodon addresses follow requests by account). Answers :not_found rather
+  # than :forbidden for someone else's request — whether a given request
+  # exists isn't theirs to learn.
+  defp fetch_decidable_follow(follow_id, followee_id) do
+    follow = get_follow(follow_id) || pending_follow_from(follow_id, followee_id)
+
+    cond do
+      is_nil(follow) -> {:error, :not_found}
+      is_nil(followee_id) -> {:ok, follow}
+      follow.followee_id == followee_id -> {:ok, follow}
+      true -> {:error, :not_found}
+    end
+  end
+
+  defp get_follow(follow_id) do
+    Repo.get(Follow, follow_id)
+  rescue
+    Ecto.Query.CastError -> nil
+  end
+
+  defp pending_follow_from(_follower_id, nil), do: nil
+
+  defp pending_follow_from(follower_id, followee_id) do
+    Follow
+    |> where([f], f.follower_id == ^follower_id and f.followee_id == ^followee_id)
+    |> where([f], f.status == :pending)
+    |> Repo.one()
+  rescue
+    Ecto.Query.CastError -> nil
   end
 
   def following?(follower_id, followee_id) do
@@ -414,6 +451,13 @@ defmodule Hybridsocial.Social do
     |> order_by([f], desc: f.inserted_at)
     |> preload(:follower)
     |> Repo.all()
+  end
+
+  @doc "Count of follow requests awaiting this identity's decision."
+  def pending_follow_requests_count(identity_id) do
+    Follow
+    |> where([f], f.followee_id == ^identity_id and f.status == :pending)
+    |> Repo.aggregate(:count)
   end
 
   # --- Blocked & Muted account lists ---

@@ -91,6 +91,16 @@ defmodule HybridsocialWeb.Plugs.RateLimiter do
       "/api/v1/auth/recover/complete" ->
         {Config.get("rate_limit_recover", 5), 3600}
 
+      # OAuth app registration is unauthenticated by necessity (a client has
+      # no user yet), so it gets its own per-IP ceiling instead of sharing the
+      # anonymous browsing bucket. Only the POST — listing your own apps is a
+      # normal authenticated read.
+      path when path in ["/api/v1/apps", "/api/v1/apps/"] and conn.method == "POST" ->
+        {Config.get("rate_limit_app_registration", 10), 3600}
+
+      "/oauth/token" ->
+        {Config.get("rate_limit_oauth_token", 30), 900}
+
       _ ->
         if authenticated?(conn) do
           {Config.rate_limit_authenticated(), 60}
@@ -121,9 +131,14 @@ defmodule HybridsocialWeb.Plugs.RateLimiter do
     end
   end
 
+  # Endpoints with a bespoke limit need a bespoke counter too — sharing the
+  # generic per-minute bucket would compare a 10/hour ceiling against a count
+  # accumulated from every other request the caller made.
   defp rate_key(identifier, path, window) do
     case path do
       "/api/v1/auth/" <> _ -> "ratelimit:auth:#{identifier}:#{path}:#{window}"
+      "/api/v1/apps" <> _ -> "ratelimit:oauth:#{identifier}:#{path}:#{window}"
+      "/oauth/" <> _ -> "ratelimit:oauth:#{identifier}:#{path}:#{window}"
       _ -> "ratelimit:#{identifier}:#{window}"
     end
   end
