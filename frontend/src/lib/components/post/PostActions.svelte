@@ -678,6 +678,19 @@
   // which sits below --z-sticky (20). Set as inline style when we
   // toggle so the cap reflects the actual trigger position.
   let menuMaxHeight = $state<string>('');
+  // Fixed-position anchor for the menu. It's portaled to <body> so it escapes
+  // any clipping ancestor (e.g. the Reels player's overflow-hidden frame and
+  // its overflow-x:auto action pill, which otherwise clipped it to nothing).
+  // Computed from the trigger's viewport rect when the menu opens.
+  let menuFixedStyle = $state('');
+  let menuEl: HTMLDivElement | undefined = $state();
+
+  // Move an element to <body> so `position: fixed` resolves against the
+  // viewport, not a transformed/clipping ancestor.
+  function menuPortal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return { destroy() { node.remove(); } };
+  }
 
   // A unique tag per PostActions instance so the global `openMenuId`
   // store can identify which menu is currently expanded across the
@@ -769,8 +782,10 @@
     if (!showMoreMenu) return;
     function onDocClick(e: MouseEvent) {
       const t = e.target as Node | null;
-      // Click inside the menu or its trigger? Leave it open.
+      // Click inside the trigger, or inside the (body-portaled) menu itself?
+      // Leave it open.
       if (t && menuRootEl && menuRootEl.contains(t)) return;
+      if (t && menuEl && menuEl.contains(t)) return;
       openMenuId.set(null);
     }
     function onKey(e: KeyboardEvent) {
@@ -818,6 +833,14 @@
     menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
     const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
     menuMaxHeight = `${Math.min(available, 360)}px`;
+
+    // The menu is portaled to <body> with position:fixed, so anchor it to the
+    // trigger's viewport rect: right edge aligned to the trigger, opening up or
+    // down per the space check above.
+    const rightInset = Math.max(8, Math.round(window.innerWidth - rect.right));
+    menuFixedStyle = menuOpenUpward
+      ? `right:${rightInset}px; bottom:${Math.round(window.innerHeight - rect.top + 4)}px;`
+      : `right:${rightInset}px; top:${Math.round(rect.bottom + 4)}px;`;
 
     // Claim the global slot — every other PostActions instance sees
     // the change via $openMenuId and closes its own menu.
@@ -1373,7 +1396,15 @@
     </button>
 
     {#if showMoreMenu}
-      <div class="more-menu" class:more-menu-upward={menuOpenUpward} role="menu" style:max-height={menuMaxHeight}>
+      <div
+        use:menuPortal
+        bind:this={menuEl}
+        class="more-menu"
+        class:more-menu-upward={menuOpenUpward}
+        role="menu"
+        style={menuFixedStyle}
+        style:max-height={menuMaxHeight}
+      >
         {#if isRemotePost()}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleDisplayOnInstance}>
             <span class="material-symbols-outlined menu-icon">open_in_new</span>
@@ -2245,20 +2276,19 @@
 
   /* ---- More Menu ---- */
   .more-menu {
-    position: absolute;
-    inset-block-start: 100%;
-    inset-inline-end: 0;
-    margin-block-start: 4px;
+    /* Portaled to <body> and anchored via inline top/bottom/right (computed
+       from the trigger) so it escapes any clipping/transformed ancestor —
+       e.g. the Reels player's overflow-hidden frame and overflow-x action pill. */
+    position: fixed;
     min-width: 200px;
     background: var(--color-surface-container-lowest);
     border: 1px solid var(--color-border);
     border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
     padding: 6px;
-    /* Above --z-sticky (20) so the menu paints over the BottomTabs
-       bar on mobile instead of behind it — the runtime cap on
-       max-height keeps the menu from running into the bar visually. */
-    z-index: 25;
+    /* At <body> level it must clear the BottomTabs bar and reel overlays;
+       still below full-screen modals (9999). */
+    z-index: 1000;
     overflow-y: auto;
     overscroll-behavior: contain;
     animation: menu-roll-down 0.2s ease;
@@ -2266,10 +2296,6 @@
   }
 
   .more-menu-upward {
-    inset-block-start: auto;
-    inset-block-end: 100%;
-    margin-block-start: 0;
-    margin-block-end: 4px;
     animation: menu-roll-up 0.2s ease;
     transform-origin: bottom right;
   }
