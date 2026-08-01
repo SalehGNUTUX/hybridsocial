@@ -35,9 +35,11 @@ defmodule Hybridsocial.Auth.AuthorizationCode do
       :application_id,
       :identity_id,
       :redirect_uri,
-      :code_challenge,
       :expires_at
     ])
+    # PKCE is optional: a confidential client authenticates with its
+    # client_secret at the token endpoint instead. `Auth.OAuth` requires one
+    # or the other, so a challenge-less code is never redeemable on its own.
     |> validate_inclusion(:code_challenge_method, ["S256"])
   end
 end

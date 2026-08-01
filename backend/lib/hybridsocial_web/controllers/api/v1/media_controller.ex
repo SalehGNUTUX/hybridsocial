@@ -113,7 +113,7 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
   # Split out so credo's cyclomatic-complexity cap stays under 15 —
   # each error clause counts as a branch.
   defp render_upload_result(conn, {:ok, media}, _identity_id, _content_type, _file_size) do
-    conn |> put_status(:created) |> json(render_media(media))
+    conn |> put_status(:created) |> HybridsocialWeb.Compat.json(render_media(media), :media)
   end
 
   defp render_upload_result(conn, {:error, :invalid_content_type}, _, _, _) do
@@ -216,7 +216,7 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
       media ->
         conn
         |> put_status(:ok)
-        |> json(render_media(media))
+        |> HybridsocialWeb.Compat.json(render_media(media), :media)
     end
   end
 
@@ -231,7 +231,7 @@ defmodule HybridsocialWeb.Api.V1.MediaController do
       {:ok, media} ->
         conn
         |> put_status(:ok)
-        |> json(render_media(media))
+        |> HybridsocialWeb.Compat.json(render_media(media), :media)
 
       {:error, :not_found} ->
         conn

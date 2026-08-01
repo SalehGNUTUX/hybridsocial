@@ -3,11 +3,22 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
   alias Hybridsocial.Social.Posts
   alias Hybridsocial.Premium.TierLimits
+  alias HybridsocialWeb.Compat
+  alias HybridsocialWeb.Serializers.Mastodon
   alias HybridsocialWeb.Serializers.PostSerializer
+
+  # The reaction a Mastodon `favourite` maps to. Reactions are our superset
+  # of favourites; a client that only knows about stars gets the plain one.
+  @favourite_reaction "like"
 
   # POST /api/v1/statuses
   def create(conn, params) do
     identity = conn.assigns.current_identity
+    # `status`, `in_reply_to_id`, `visibility: private` and the nested poll
+    # params are Mastodon's spelling of fields we already have. Accepting them
+    # for every caller costs the frontend nothing and is what lets a
+    # third-party client post at all.
+    params = Mastodon.normalize_status_params(params)
     limits = TierLimits.limits_for(identity)
 
     with :ok <- validate_tier_limits(params, limits),
@@ -19,7 +30,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
           conn
           |> put_status(:created)
-          |> json(serialize_post(conn, post))
+          |> Compat.json(serialize_post(conn, post), :status)
 
         {:error, :premium_emojis_required, shortcodes} ->
           conn
@@ -91,7 +102,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
       |> Posts.list_posts_by_ids()
       |> Enum.filter(&Posts.viewer_can_read?(&1, viewer_id))
 
-    json(conn, Enum.map(posts, &serialize_post(conn, &1)))
+    Compat.json(conn, Enum.map(posts, &serialize_post(conn, &1)), :statuses)
   end
 
   # GET /api/v1/statuses/:id
@@ -114,7 +125,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
       post ->
         conn
         |> put_status(:ok)
-        |> json(serialize_post(conn, post))
+        |> Compat.json(serialize_post(conn, post), :status)
     end
   end
 
@@ -128,7 +139,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
         conn
         |> put_status(:ok)
-        |> json(serialize_post(conn, post))
+        |> Compat.json(serialize_post(conn, post), :status)
 
       {:error, :not_found} ->
         conn
@@ -399,7 +410,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
         conn
         |> put_status(:ok)
-        |> json(serialize_post(conn, post))
+        |> Compat.json(serialize_post(conn, post), :status)
 
       {:error, :not_found} ->
         conn
@@ -531,10 +542,10 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
         conn
         |> put_status(:ok)
-        |> json(%{
-          ancestors: serialized_ancestors,
-          descendants: serialized_descendants
-        })
+        |> Compat.json(
+          %{ancestors: serialized_ancestors, descendants: serialized_descendants},
+          :context
+        )
 
       {:error, :not_found} ->
         conn
@@ -569,7 +580,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
               conn
               |> put_status(:ok)
-              |> json(serialize_post(conn, pinned))
+              |> Compat.json(serialize_post(conn, pinned), :status)
 
             {:error, :not_found} ->
               conn |> put_status(:not_found) |> json(%{error: "status.not_found"})
@@ -614,7 +625,7 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
 
         conn
         |> put_status(:ok)
-        |> json(serialize_post(conn, post))
+        |> Compat.json(serialize_post(conn, post), :status)
 
       {:error, :not_found} ->
         conn
@@ -627,6 +638,83 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
         |> json(%{error: "status.forbidden"})
     end
   end
+
+  # --- Mastodon action aliases ---
+  #
+  # Mastodon spells these differently (`favourite`, `reblog`, `unbookmark`)
+  # and, unlike our native actions, every one of them answers with the full
+  # status — that's what the client re-renders the row from. They're thin
+  # wrappers over the same context calls rather than changes to the native
+  # responses, which the web app depends on.
+
+  # POST /api/v1/statuses/:id/favourite
+  def favourite(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+
+    case Posts.react(id, identity.id, @favourite_reaction, []) do
+      {:ok, _reaction} -> respond_with_status(conn, id)
+      {:error, :not_found} -> not_found(conn, "status.not_found")
+      {:error, _} -> respond_with_status(conn, id)
+    end
+  end
+
+  # POST /api/v1/statuses/:id/unfavourite
+  def unfavourite(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+    Posts.unreact(id, identity.id, nil)
+    respond_with_status(conn, id)
+  end
+
+  # POST /api/v1/statuses/:id/reblog
+  def reblog(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+
+    case Posts.boost(id, identity.id) do
+      {:ok, _boost} ->
+        respond_with_status(conn, id)
+
+      {:error, :not_found} ->
+        not_found(conn, "status.not_found")
+
+      {:error, :boost_not_allowed} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{
+          error: "status.boost_not_allowed",
+          message: "This post's audience can't be widened by a boost."
+        })
+
+      # Already boosted: the client's intent is satisfied, so report the
+      # current state rather than an error it has no way to act on.
+      {:error, _changeset} ->
+        respond_with_status(conn, id)
+    end
+  end
+
+  # POST /api/v1/statuses/:id/unreblog
+  def unreblog(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+    Posts.unboost(id, identity.id)
+    respond_with_status(conn, id)
+  end
+
+  # POST /api/v1/statuses/:id/unbookmark
+  def unbookmark(conn, %{"id" => id}) do
+    identity = conn.assigns.current_identity
+    Hybridsocial.Social.Bookmarks.unbookmark(identity.id, id)
+    respond_with_status(conn, id)
+  end
+
+  defp respond_with_status(conn, id) do
+    viewer_id = current_identity_id(conn)
+
+    case Posts.get_post_with_context_for_viewer(id, viewer_id) do
+      nil -> not_found(conn, "status.not_found")
+      post -> conn |> put_status(:ok) |> Compat.json(serialize_post(conn, post), :status)
+    end
+  end
+
+  defp not_found(conn, error), do: conn |> put_status(:not_found) |> json(%{error: error})
 
   # POST /api/v1/statuses/:id/view
   def view(conn, %{"id" => id} = params) do

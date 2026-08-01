@@ -1,8 +1,20 @@
 defmodule HybridsocialWeb.Api.V1.InstanceController do
   use HybridsocialWeb, :controller
 
+  alias HybridsocialWeb.Compat
+
   def show(conn, _params) do
-    json(conn, Hybridsocial.Instance.info())
+    Compat.json(conn, Hybridsocial.Instance.info(), :instance_v1)
+  end
+
+  @doc """
+  GET /api/v2/instance — the shape Mastodon 4.x clients ask for first.
+
+  Always answers in Mastodon's shape: nothing else calls it, and a client
+  reaching v2 has already told us which dialect it speaks.
+  """
+  def show_v2(conn, _params) do
+    json(conn, HybridsocialWeb.Serializers.Mastodon.instance_v2(Hybridsocial.Instance.info()))
   end
 
   def info(conn, _params) do
