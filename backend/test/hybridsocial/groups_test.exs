@@ -161,7 +161,9 @@ defmodule Hybridsocial.GroupsTest do
     test "a group admin — not the owner — cannot delete", %{alice: alice, bob: bob} do
       {:ok, group} = Groups.create_group(alice.id, %{"name" => "Safe"})
       {:ok, _} = Groups.join_group(group.id, bob.id)
-      {:ok, _} = Groups.update_member_role(group.id, alice.id, membership_id(group.id, bob.id), "admin")
+
+      {:ok, _} =
+        Groups.update_member_role(group.id, alice.id, membership_id(group.id, bob.id), "admin")
 
       # @destroy_roles is [:owner] — an admin manages the group but must not be
       # able to delete it (only the owner, plus instance-staff takedown).
