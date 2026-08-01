@@ -693,13 +693,6 @@
   let menuFixedStyle = $state('');
   let menuEl: HTMLDivElement | undefined = $state();
 
-  // Move an element to <body> so `position: fixed` resolves against the
-  // viewport, not a transformed/clipping ancestor.
-  function menuPortal(node: HTMLElement) {
-    document.body.appendChild(node);
-    return { destroy() { node.remove(); } };
-  }
-
   // A unique tag per PostActions instance so the global `openMenuId`
   // store can identify which menu is currently expanded across the
   // whole feed. Without this, opening a second post's ⋯ menu left
@@ -1411,7 +1404,7 @@
 
     {#if showMoreMenu}
       <div
-        use:menuPortal
+        use:portal
         bind:this={menuEl}
         class="more-menu"
         class:more-menu-upward={menuOpenUpward}
