@@ -4045,12 +4045,13 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       admin_id = conn.assigns.current_identity.id
       limit = params["limit"] |> parse_int(25) |> min(100)
 
-      result = Hybridsocial.Federation.DeadActors.sweep(limit: limit)
+      # Each retirement audit-logs itself inside DeadActors.retire/3
+      # (so the daily worker leaves a trail too); this records the run.
+      result = Hybridsocial.Federation.DeadActors.sweep(limit: limit, admin_id: admin_id)
 
       Moderation.log(admin_id, "federation.dead_actors_swept", "federation", nil, %{
         checked: result.checked,
-        retired: result.retired,
-        actors: Enum.filter(result.details, &(&1.verdict == "gone")) |> Enum.map(& &1.actor)
+        retired: result.retired
       })
 
       json(conn, result)

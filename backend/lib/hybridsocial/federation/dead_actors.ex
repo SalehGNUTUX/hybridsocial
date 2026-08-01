@@ -155,8 +155,13 @@ defmodule Hybridsocial.Federation.DeadActors do
 
   Content is only purged when `federation_dead_actor_purge_content` is
   on. Returns a stats map.
+
+  Every retirement is audit-logged here rather than at the call site,
+  so the daily worker's actions leave the same trail an admin-triggered
+  sweep does. `:admin_id` attributes it when a human pressed the
+  button; the worker leaves it nil.
   """
-  def retire(%Identity{} = identity, reason) do
+  def retire(%Identity{} = identity, reason, opts \\ []) do
     {follows, _} =
       from(f in Follow,
         where: f.follower_id == ^identity.id or f.followee_id == ^identity.id
@@ -174,6 +179,20 @@ defmodule Hybridsocial.Federation.DeadActors do
     Logger.info(
       "[dead-actor] retired #{identity.ap_actor_url} (#{reason}): " <>
         "#{follows} follow(s), #{dead_letters} dead letter(s), #{purged} post(s)"
+    )
+
+    Hybridsocial.Moderation.log(
+      Keyword.get(opts, :admin_id),
+      "federation.dead_actor_retired",
+      "identity",
+      identity.id,
+      %{
+        actor: identity.ap_actor_url,
+        reason: reason,
+        follows_removed: follows,
+        dead_letters_dropped: dead_letters,
+        posts_purged: purged
+      }
     )
 
     %{
@@ -214,6 +233,7 @@ defmodule Hybridsocial.Federation.DeadActors do
   """
   def sweep(opts \\ []) do
     dry_run = Keyword.get(opts, :dry_run, false)
+    retire_opts = Keyword.take(opts, [:admin_id])
 
     results =
       opts
@@ -230,7 +250,7 @@ defmodule Hybridsocial.Federation.DeadActors do
 
         case verdict do
           {:gone, reason} when not dry_run ->
-            Map.merge(detail, retire(identity, reason))
+            Map.merge(detail, retire(identity, reason, retire_opts))
 
           {:gone, reason} ->
             Map.merge(detail, %{reason: reason, dry_run: true})

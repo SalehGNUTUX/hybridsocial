@@ -94,6 +94,26 @@ defmodule Hybridsocial.Federation.DeadActorsTest do
       assert Repo.aggregate(Delivery, :count) == 1
       assert Repo.get(Hybridsocial.Accounts.Identity, dead.id).deleted_at == nil
     end
+
+    test "audit-logs the retirement even with no admin behind it" do
+      dead =
+        remote_user(
+          "audited",
+          "https://gone.example/users/audited",
+          "https://gone.example/users/audited/inbox"
+        )
+
+      DeadActors.retire(dead, "actor returned 410 Gone")
+
+      entry =
+        Hybridsocial.Moderation.AuditLog
+        |> Ecto.Query.where(action: "federation.dead_actor_retired")
+        |> Repo.one()
+
+      assert entry.actor_id == nil
+      assert entry.target_id == dead.id
+      assert entry.details["reason"] == "actor returned 410 Gone"
+    end
   end
 
   describe "handle_self_delete/1" do
