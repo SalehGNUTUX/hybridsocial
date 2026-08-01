@@ -82,24 +82,6 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
     end
   end
 
-  describe "GET /api/v1/pages/:id/roles" do
-    test "includes the owner as a synthetic, read-only 'owner' entry", %{conn: conn} do
-      owner = create_user("pc_roles_owner", "pc_roles_owner@example.com")
-      page = create_test_page(owner, "roles_pg1")
-
-      conn = get(conn, "/api/v1/pages/#{page.id}/roles")
-
-      roles = json_response(conn, 200)
-      owner_entry = Enum.find(roles, &(&1["role"] == "owner"))
-
-      # A brand-new page with no granted managers still lists its owner, so the
-      # managers UI never reads as "No managers yet" for a page that has one.
-      assert owner_entry, "expected an owner entry in the roles list"
-      assert owner_entry["identity_id"] == owner.id
-      assert owner_entry["identity"]["id"] == owner.id
-    end
-  end
-
   describe "PATCH /api/v1/pages/:id" do
     test "owner updates a page", %{conn: conn} do
       owner = create_user("pc_upd1", "pc_upd1@example.com")
@@ -160,7 +142,7 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
   # ---------------------------------------------------------------------------
 
   describe "GET /api/v1/pages/:id/roles" do
-    test "lists roles", %{conn: conn} do
+    test "lists the owner plus granted roles", %{conn: conn} do
       owner = create_user("pc_roles1", "pc_roles1@example.com")
       user = create_user("pc_roles2", "pc_roles2@example.com")
       page = create_test_page(owner, "roles_pg1")
@@ -169,8 +151,23 @@ defmodule HybridsocialWeb.Api.V1.PageControllerTest do
       conn = get(conn, "/api/v1/pages/#{page.id}/roles")
 
       response = json_response(conn, 200)
-      assert length(response) == 1
-      assert hd(response)["role"] == "editor"
+      # The synthetic owner entry is prepended alongside the granted editor.
+      assert Enum.any?(response, &(&1["role"] == "owner"))
+      assert Enum.any?(response, &(&1["role"] == "editor" and &1["identity_id"] == user.id))
+    end
+
+    test "includes the owner as a synthetic entry even with no granted roles", %{conn: conn} do
+      owner = create_user("pc_roles_owner", "pc_roles_owner@example.com")
+      page = create_test_page(owner, "roles_pg_owner")
+
+      conn = get(conn, "/api/v1/pages/#{page.id}/roles")
+
+      roles = json_response(conn, 200)
+      owner_entry = Enum.find(roles, &(&1["role"] == "owner"))
+
+      assert owner_entry, "expected an owner entry in the roles list"
+      assert owner_entry["identity_id"] == owner.id
+      assert owner_entry["identity"]["id"] == owner.id
     end
   end
 
