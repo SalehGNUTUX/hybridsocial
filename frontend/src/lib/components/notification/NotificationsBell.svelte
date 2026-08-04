@@ -2,6 +2,7 @@
   import { getNotifications, markNotificationRead, markAllNotificationsRead } from '$lib/api/notifications.js';
   import { unreadCount, markRead, markAllLocal } from '$lib/stores/notifications.js';
   import NotificationItem from './NotificationItem.svelte';
+  import { t } from '$lib/stores/i18n.js';
   import type { Notification } from '$lib/api/types.js';
 
   // The header bell opens this popover instead of navigating straight to the
@@ -93,7 +94,7 @@
     type="button"
     class="header-icon-btn"
     onclick={toggle}
-    aria-label="Notifications"
+    aria-label={$t('notifications.title')}
     aria-haspopup="dialog"
     aria-expanded={open}
   >
@@ -109,22 +110,22 @@
   {#if open}
     <div class="notif-popover" role="dialog" aria-label="Notifications">
       <div class="notif-popover-head">
-        <span class="notif-popover-title">Notifications</span>
+        <span class="notif-popover-title">{$t('notifications.title')}</span>
         {#if $unreadCount > 0}
-          <button type="button" class="notif-linkbtn" onclick={markAll}>Mark all read</button>
+          <button type="button" class="notif-linkbtn" onclick={markAll}>{$t('notifications.mark_all_read')}</button>
         {/if}
       </div>
 
       <div class="notif-popover-list">
         {#if loading}
-          <div class="notif-popover-state">Loading…</div>
+          <div class="notif-popover-state">{$t('notifications.loading')}</div>
         {:else if loadError}
           <div class="notif-popover-state">
-            Couldn't load notifications.
-            <button type="button" class="notif-linkbtn" onclick={fetchRecent}>Retry</button>
+            {$t('notifications.load_error')}
+            <button type="button" class="notif-linkbtn" onclick={fetchRecent}>{$t('notifications.retry')}</button>
           </div>
         {:else if items.length === 0}
-          <div class="notif-popover-state">You're all caught up.</div>
+          <div class="notif-popover-state">{$t('notifications.empty')}</div>
         {:else}
           {#each items as n (n.id)}
             <div class="notif-row" class:is-unread={!n.read}>
@@ -132,8 +133,8 @@
               <button
                 type="button"
                 class="notif-dismiss"
-                aria-label="Dismiss notification"
-                title="Dismiss"
+                aria-label={$t('notifications.dismiss')}
+                title={$t('notifications.dismiss')}
                 onclick={(e) => dismiss(e, n)}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
@@ -146,7 +147,7 @@
       </div>
 
       <a class="notif-popover-foot" href="/notifications" onclick={() => (open = false)}>
-        All notifications
+        {$t('notifications.view_all')}
       </a>
     </div>
   {/if}
