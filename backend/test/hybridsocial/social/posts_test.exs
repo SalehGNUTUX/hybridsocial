@@ -588,5 +588,28 @@ defmodule Hybridsocial.Social.PostsTest do
       assert {:error, :forbidden} = Posts.edit_post(post.id, rando.id, %{"content" => "nope"})
       assert {:error, :forbidden} = Posts.delete_post(post.id, rando.id)
     end
+
+    test "media uploaded by the editor attaches to a post authored as the page",
+         %{owner: owner, page: page} do
+      # Media is uploaded under the human (owner), but the post is authored as
+      # the page — attach must match the uploader, not post.identity_id.
+      media = upload_media(owner.id)
+
+      {:ok, post} =
+        Posts.create_post(
+          page.id,
+          %{
+            "content" => "With an image",
+            "visibility" => "public",
+            "page_id" => page.id,
+            "media_ids" => [media.id]
+          },
+          owner
+        )
+
+      attached = Repo.get(Hybridsocial.Media.MediaFile, media.id)
+      assert attached.post_id == post.id
+      assert Enum.map(post.media_attachments, & &1.id) == [media.id]
+    end
   end
 end
