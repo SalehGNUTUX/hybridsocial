@@ -198,6 +198,39 @@ defmodule Hybridsocial.Social.StreamsTest do
       refute remote_reel.id in ids
     end
 
+    test "includes a remote video once a LOCAL member boosts it (issue #22, curated)" do
+      remote = create_user("sfeed_rb_remote", "sfeed_rb_remote@example.com") |> make_remote()
+      remote_reel = create_post(remote, %{content: "Remote reel"}) |> attach_video(remote)
+
+      # Not boosted yet → still excluded.
+      refute remote_reel.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+
+      # A local member boosts it → it enters the feed.
+      local = create_user("sfeed_rb_local", "sfeed_rb_local@example.com")
+      Repo.insert!(%Hybridsocial.Social.Boost{post_id: remote_reel.id, identity_id: local.id})
+
+      assert remote_reel.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+    end
+
+    test "a boost by a REMOTE identity does not pull a remote video into the feed" do
+      remote = create_user("sfeed_rb2_r", "sfeed_rb2_r@example.com") |> make_remote()
+      remote_reel = create_post(remote, %{content: "Remote reel"}) |> attach_video(remote)
+
+      other_remote = create_user("sfeed_rb2_o", "sfeed_rb2_o@example.com") |> make_remote()
+      Repo.insert!(%Hybridsocial.Social.Boost{post_id: remote_reel.id, identity_id: other_remote.id})
+
+      refute remote_reel.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+    end
+
+    test "include_federated: true surfaces an un-boosted remote video (per-viewer opt-in)" do
+      remote = create_user("sfeed_incfed_r", "sfeed_incfed_r@example.com") |> make_remote()
+      remote_reel = create_post(remote, %{content: "Remote reel"}) |> attach_video(remote)
+
+      # Default (curated) excludes it; the opt-in includes it.
+      refute remote_reel.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+      assert remote_reel.id in (Streams.streams_feed(nil, include_federated: true) |> Enum.map(& &1.id))
+    end
+
     test "excludes horizontal and square videos — vertical only" do
       alice = create_user("sfeed_orient", "sfeed_orient@example.com")
 

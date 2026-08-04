@@ -53,6 +53,22 @@
     setMuted(!muted);
   }
 
+  // Per-user opt-in: when on, the feed also includes videos from the wider
+  // fediverse (not just local + locally-boosted). Remembered per device and
+  // re-fetches the feed on toggle. Off by default.
+  const FEDERATED_KEY = 'hs-streams-federated';
+  let showFederated = $state(false);
+
+  function toggleFederated() {
+    showFederated = !showFederated;
+    try {
+      localStorage.setItem(FEDERATED_KEY, showFederated ? '1' : '0');
+    } catch {
+      /* storage unavailable — the toggle just won't persist */
+    }
+    loadStreams();
+  }
+
   // The native <video controls> mute button is per-element; mirror any change
   // the viewer makes there back into the shared state so it propagates to
   // every other clip.
@@ -229,6 +245,7 @@
       // so it omits this and gets the portrait default).
       const params: Record<string, string> = { orientation: 'all' };
       if (sort !== 'trending') params.sort = sort;
+      if (showFederated) params.include_federated = 'true';
       const q = search.trim();
       if (q) params.q = q;
       const result = await api.get<any>('/api/v1/timelines/streams', params);
@@ -315,6 +332,7 @@
       autoplay = localStorage.getItem(AUTOPLAY_KEY) === '1';
       // Default to muted unless the viewer previously chose sound-on.
       muted = localStorage.getItem(MUTED_KEY) !== '0';
+      showFederated = localStorage.getItem(FEDERATED_KEY) === '1';
     } catch {
       /* ignore */
     }
@@ -425,6 +443,21 @@
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
         Autoplay
+      </button>
+      <button
+        type="button"
+        class="autoplay-toggle"
+        class:on={showFederated}
+        role="switch"
+        aria-checked={showFederated}
+        aria-label={showFederated ? 'Fediverse videos on' : 'Fediverse videos off'}
+        title="Also show videos from across the fediverse"
+        onclick={toggleFederated}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+        </svg>
+        Fediverse
       </button>
     </div>
   </div>

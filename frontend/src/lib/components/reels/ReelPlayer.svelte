@@ -8,8 +8,10 @@
     video,
     muted,
     autoplay,
+    federated = false,
     onmutetoggle,
     onautoplaytoggle,
+    onfederatedtoggle,
     onsearch,
     onsort,
     oncomment,
@@ -20,9 +22,12 @@
     /** Global, shared across every reel (see the page). */
     muted: boolean;
     autoplay: boolean;
+    /** Per-viewer opt-in: also pull videos from across the fediverse. */
+    federated?: boolean;
     onmutetoggle: () => void;
     /** Feed-level controls, overlaid on the clip (top-right). */
     onautoplaytoggle: () => void;
+    onfederatedtoggle?: () => void;
     onsearch: () => void;
     onsort: () => void;
     oncomment?: () => void;
@@ -282,6 +287,19 @@
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
     </button>
+    {#if onfederatedtoggle}
+      <button
+        type="button"
+        class="reel-icon-btn"
+        class:on={federated}
+        aria-pressed={federated}
+        aria-label={federated ? 'Fediverse videos on' : 'Fediverse videos off'}
+        title="Also show videos from across the fediverse"
+        onclick={(e) => { e.stopPropagation(); onfederatedtoggle?.(); }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>
+      </button>
+    {/if}
     <button
       type="button"
       class="reel-icon-btn"

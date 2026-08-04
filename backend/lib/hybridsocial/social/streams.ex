@@ -98,12 +98,19 @@ defmodule Hybridsocial.Social.Streams do
     # Streams page surface clips of any orientation/size (issue: a 640x360
     # horizontal upload never appeared because only height > width qualified).
     orientation = Keyword.get(opts, :orientation, :portrait)
+    # Per-user opt-in (a toggle on Streams/Reels): when true, drop the locality
+    # filter entirely so this viewer sees EVERY public fediverse video, not just
+    # local + locally-boosted. Off by default → the curated feed below.
+    include_federated = Keyword.get(opts, :include_federated, false)
 
     # Streams surfaces public video to everyone, including signed-out
-    # viewers. Membership is defined by "a LOCAL author posted a public
-    # post carrying a qualifying video". Excludes:
-    #   - remote/federated authors — streams is our own local video feed
-    #     (join Identity + is_local == true). See issue #22.
+    # viewers. By default membership is "a public post carrying a qualifying
+    # video whose author is LOCAL, OR that a LOCAL member has boosted" — so a
+    # federated video only enters the feed once someone here deliberately
+    # reblogs it (curated, not the whole fediverse). A viewer who flips the
+    # `include_federated` toggle instead sees all public fediverse videos. See
+    # `apply_local_or_boosted/1` and issue #22. Excludes:
+    #   - remote/federated authors that no local member boosted.
     #   - sensitive (NSFW) posts
     #   - posts with a content warning (spoiler_text)
     #   - by orientation (see `filter_by_qualifying_video`): the default
@@ -125,7 +132,7 @@ defmodule Hybridsocial.Social.Streams do
       |> where([p], is_nil(p.deleted_at))
       |> where([p], p.sensitive == false)
       |> where([p], is_nil(p.spoiler_text) or p.spoiler_text == "")
-      |> where([_p, i], i.is_local == true)
+      |> maybe_apply_locality(include_federated)
       |> filter_by_qualifying_video(orientation, min_duration)
       |> apply_search(search)
       |> apply_cursor_filters(opts)
@@ -137,6 +144,29 @@ defmodule Hybridsocial.Social.Streams do
   end
 
   # --- Private helpers ---
+
+  # `include_federated: true` (the per-viewer opt-in) skips the locality filter
+  # so every public fediverse video qualifies; otherwise apply the curated
+  # local-or-boosted rule.
+  defp maybe_apply_locality(query, true), do: query
+  defp maybe_apply_locality(query, _false), do: apply_local_or_boosted(query)
+
+  # Keep a post if its author is local, OR a local member has boosted it (an
+  # active, non-deleted boost by a local identity). The latter lets curated
+  # federated video enter Streams without opening the feed to the whole
+  # fediverse. `[p, i]` — i is the author Identity joined above.
+  defp apply_local_or_boosted(query) do
+    where(
+      query,
+      [p, i],
+      i.is_local == true or
+        fragment(
+          "EXISTS (SELECT 1 FROM boosts b JOIN identities bi ON bi.id = b.identity_id WHERE b.post_id = ? AND b.deleted_at IS NULL AND bi.is_local = TRUE)",
+          p.id
+        )
+    )
+  end
+
 
   # Minimum clip length (seconds) for the streams/reels feed — admin-tunable
   # via the `streams_min_duration_seconds` setting so an instance can include
