@@ -1,1 +1,6 @@
-{}
+{
+  "streams.fediverse": "الفديفرس",
+  "streams.fediverse_on": "مقاطع الفديفرس مفعّلة",
+  "streams.fediverse_off": "مقاطع الفديفرس معطّلة",
+  "streams.fediverse_hint": "أظهِر أيضاً مقاطع الفيديو من كل أنحاء الفديفرس"
+}

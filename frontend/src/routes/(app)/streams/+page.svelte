@@ -8,6 +8,7 @@
   import ThreadedReplies from '$lib/components/post/ThreadedReplies.svelte';
   import { getPostContext } from '$lib/api/statuses.js';
   import { instanceName } from '$lib/stores/instance.js';
+  import { t } from '$lib/stores/i18n.js';
 
   let posts: Post[] = $state([]);
   let loading = $state(true);
@@ -450,14 +451,14 @@
         class:on={showFederated}
         role="switch"
         aria-checked={showFederated}
-        aria-label={showFederated ? 'Fediverse videos on' : 'Fediverse videos off'}
-        title="Also show videos from across the fediverse"
+        aria-label={showFederated ? $t('streams.fediverse_on') : $t('streams.fediverse_off')}
+        title={$t('streams.fediverse_hint')}
         onclick={toggleFederated}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
         </svg>
-        Fediverse
+        {$t('streams.fediverse')}
       </button>
     </div>
   </div>

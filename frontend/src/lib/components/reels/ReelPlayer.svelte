@@ -2,6 +2,7 @@
   import type { Post, MediaAttachment } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import PostActions from '$lib/components/post/PostActions.svelte';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     post,
@@ -293,8 +294,8 @@
         class="reel-icon-btn"
         class:on={federated}
         aria-pressed={federated}
-        aria-label={federated ? 'Fediverse videos on' : 'Fediverse videos off'}
-        title="Also show videos from across the fediverse"
+        aria-label={federated ? $t('streams.fediverse_on') : $t('streams.fediverse_off')}
+        title={$t('streams.fediverse_hint')}
         onclick={(e) => { e.stopPropagation(); onfederatedtoggle?.(); }}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>
