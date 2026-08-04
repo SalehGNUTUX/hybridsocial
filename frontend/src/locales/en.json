@@ -315,5 +315,15 @@
   "post_actions.reply_aria": "Reply ({count})",
   "post_actions.boost": "Boost",
   "post_actions.undo_boost": "Undo boost",
-  "post_actions.more_options": "More options"
+  "post_actions.more_options": "More options",
+  "reactions.like": "Like",
+  "reactions.love": "Love",
+  "reactions.wow": "Wow",
+  "reactions.care": "Care",
+  "reactions.angry": "Angry",
+  "reactions.sad": "Sad",
+  "reactions.lol": "LOL",
+  "reactions.picker_aria": "Reactions",
+  "reactions.aria_premium": "{label} (premium)",
+  "reactions.title_premium": "{label} — premium tier only"
 }

@@ -384,14 +384,14 @@
   // The default 7 reactions every user can pick. Mirrors the canonical
   // list in ReactionPicker.svelte / reactionEmojis above — keep all
   // three in sync.
-  const defaultRadialReactions: Array<{ type: string; emoji: string; label: string; image?: string | null }> = [
-    { type: 'like', emoji: '\u{1F44D}', label: 'Like' },
-    { type: 'love', emoji: '\u{2764}\u{FE0F}', label: 'Love' },
-    { type: 'wow', emoji: '\u{1F92F}', label: 'Wow' },
-    { type: 'care', emoji: '\u{1F970}', label: 'Care' },
-    { type: 'angry', emoji: '\u{1F621}', label: 'Angry' },
-    { type: 'sad', emoji: '\u{1F622}', label: 'Sad' },
-    { type: 'lol', emoji: '\u{1F602}', label: 'LOL' },
+  const defaultRadialReactions: Array<{ type: string; emoji: string; labelKey: string; image?: string | null }> = [
+    { type: 'like', emoji: '\u{1F44D}', labelKey: 'reactions.like' },
+    { type: 'love', emoji: '\u{2764}\u{FE0F}', labelKey: 'reactions.love' },
+    { type: 'wow', emoji: '\u{1F92F}', labelKey: 'reactions.wow' },
+    { type: 'care', emoji: '\u{1F970}', labelKey: 'reactions.care' },
+    { type: 'angry', emoji: '\u{1F621}', labelKey: 'reactions.angry' },
+    { type: 'sad', emoji: '\u{1F622}', labelKey: 'reactions.sad' },
+    { type: 'lol', emoji: '\u{1F602}', labelKey: 'reactions.lol' },
   ];
 
   // Premium reactions get appended for tiers whose limits include
@@ -401,7 +401,16 @@
   const RADIAL_MAX = 14;
   let isPremiumUser = $derived(!!$currentUser?.limits?.custom_emoji);
   let radialReactions = $derived.by(() => {
-    if (!isPremiumUser) return defaultRadialReactions;
+    // Resolve the default labels through $t here (reactive to locale) so the
+    // tray keeps receiving ready-to-render `label` strings. Premium extras keep
+    // their admin-defined shortcode as the label — not translatable.
+    const defaults = defaultRadialReactions.map((r) => ({
+      type: r.type,
+      emoji: r.emoji,
+      label: $t(r.labelKey),
+      image: r.image ?? null,
+    }));
+    if (!isPremiumUser) return defaults;
     const extras: Array<{ type: string; emoji: string; label: string; image?: string | null }> = [];
     for (const [type, glyph] of $premiumCatalog) {
       extras.push({
@@ -411,7 +420,7 @@
         image: glyph.image_url ?? null,
       });
     }
-    return [...defaultRadialReactions, ...extras].slice(0, RADIAL_MAX);
+    return [...defaults, ...extras].slice(0, RADIAL_MAX);
   });
 
   // Suppress the one click a nonconformant UA may still synthesize

@@ -176,5 +176,15 @@
   "post_actions.reply_aria": "ردّ ({count})",
   "post_actions.boost": "إعادة نشر",
   "post_actions.undo_boost": "التراجع عن إعادة النشر",
-  "post_actions.more_options": "خيارات إضافية"
+  "post_actions.more_options": "خيارات إضافية",
+  "reactions.like": "إعجاب",
+  "reactions.love": "حب",
+  "reactions.wow": "واو",
+  "reactions.care": "اهتمام",
+  "reactions.angry": "غضب",
+  "reactions.sad": "حزن",
+  "reactions.lol": "هاها",
+  "reactions.picker_aria": "التفاعلات",
+  "reactions.aria_premium": "{label} (مميّز)",
+  "reactions.title_premium": "{label} — للباقة المميّزة فقط"
 }
