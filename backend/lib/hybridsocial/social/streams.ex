@@ -90,7 +90,7 @@ defmodule Hybridsocial.Social.Streams do
   video attachment, ordered by engagement (reaction_count) then recency,
   cursor paginated.
   """
-  def streams_feed(_viewer_id, opts \\ []) do
+  def streams_feed(viewer_id, opts \\ []) do
     limit = parse_limit(opts)
     min_duration = Keyword.get(opts, :min_duration_seconds) || min_duration_seconds()
     search = normalize_search(Keyword.get(opts, :q))
@@ -132,6 +132,7 @@ defmodule Hybridsocial.Social.Streams do
       |> where([p], is_nil(p.deleted_at))
       |> where([p], p.sensitive == false)
       |> where([p], is_nil(p.spoiler_text) or p.spoiler_text == "")
+      |> apply_viewer_blocks(viewer_id)
       |> maybe_apply_locality(include_federated)
       |> filter_by_qualifying_video(orientation, min_duration)
       |> apply_search(search)
@@ -163,6 +164,39 @@ defmodule Hybridsocial.Social.Streams do
         fragment(
           "EXISTS (SELECT 1 FROM boosts b JOIN identities bi ON bi.id = b.identity_id WHERE b.post_id = ? AND b.deleted_at IS NULL AND bi.is_local = TRUE)",
           p.id
+        )
+    )
+  end
+
+  # A signed-in viewer never sees clips they've moderated away — this is the
+  # safety net for the `include_federated` opt-in: once the whole fediverse can
+  # surface here, the viewer needs the same block/mute/domain controls the rest
+  # of the app already honors. Applies unconditionally (not just for federated),
+  # since a blocked local author's clip shouldn't appear either. Signed-out
+  # viewers (nil) have nothing to filter on.
+  defp apply_viewer_blocks(query, nil), do: query
+
+  defp apply_viewer_blocks(query, viewer_id) do
+    query
+    |> Hybridsocial.Feeds.Visibility.apply_block_filter(viewer_id)
+    |> Hybridsocial.Feeds.Visibility.apply_mute_filter(viewer_id)
+    |> apply_domain_block_filter(viewer_id)
+  end
+
+  # Drop clips whose REMOTE author lives on a domain the viewer has blocked
+  # (`user_domain_blocks`). Identities carry no domain column, so derive the
+  # host from `ap_actor_url` (`https://host/…` → split_part …, '/', 3, then
+  # strip any `:port`), matching the lowercased domain the block stores. Local
+  # authors and rows without an actor URL are always kept.
+  defp apply_domain_block_filter(query, viewer_id) do
+    where(
+      query,
+      [p, i],
+      i.is_local == true or is_nil(i.ap_actor_url) or
+        not fragment(
+          "EXISTS (SELECT 1 FROM user_domain_blocks udb WHERE udb.identity_id = ? AND udb.domain = lower(split_part(split_part(?, '/', 3), ':', 1)))",
+          ^viewer_id,
+          i.ap_actor_url
         )
     )
   end

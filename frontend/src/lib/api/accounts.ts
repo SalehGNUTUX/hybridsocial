@@ -85,6 +85,27 @@ export function unmute(id: string): Promise<Relationship> {
   return api.post(`/api/v1/accounts/${id}/unmute`);
 }
 
+/** A domain the viewer has blocked (Mastodon-compatible domain block). */
+export interface DomainBlock {
+  id: string;
+  domain: string;
+}
+
+/** List the domains the viewer has blocked (also rendered in Settings → Blocked & muted). */
+export function getDomainBlocks(): Promise<DomainBlock[]> {
+  return api.get('/api/v1/accounts/domain_blocks');
+}
+
+/** Block every account on a domain — hides its content, including from Streams/Reels. */
+export function blockDomain(domain: string): Promise<DomainBlock> {
+  return api.post('/api/v1/accounts/domain_blocks', { domain });
+}
+
+/** Lift a domain block. The API expects the domain in the request body. */
+export function unblockDomain(domain: string): Promise<void> {
+  return api.delete('/api/v1/accounts/domain_blocks', { domain });
+}
+
 export function getRelationships(ids: string[]): Promise<Relationship[]> {
   return api.get('/api/v1/accounts/relationships', { ids: ids.join(',') });
 }

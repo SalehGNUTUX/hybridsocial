@@ -2,5 +2,10 @@
   "streams.fediverse": "الفديفرس",
   "streams.fediverse_on": "مقاطع الفديفرس مفعّلة",
   "streams.fediverse_off": "مقاطع الفديفرس معطّلة",
-  "streams.fediverse_hint": "أظهِر أيضاً مقاطع الفيديو من كل أنحاء الفديفرس"
+  "streams.fediverse_hint": "أظهِر أيضاً مقاطع الفيديو من كل أنحاء الفديفرس",
+  "block.block_domain": "حجب النطاق {domain}",
+  "block.not_interested": "لا يهمّني",
+  "block.hidden": "أُخفي المقطع",
+  "block.domain_blocked": "حُجب {domain} — أصبح محتواه مخفياً",
+  "block.domain_error": "تعذّر حجب هذا النطاق. حاول مرة أخرى."
 }
