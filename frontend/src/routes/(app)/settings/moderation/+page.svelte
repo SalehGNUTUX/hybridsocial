@@ -10,6 +10,8 @@
   import { ApiError } from '$lib/api/client.js';
   import { addToast } from '$lib/stores/toast.js';
   import Modal from '$lib/components/ui/Modal.svelte';
+  import { t } from '$lib/stores/i18n.js';
+  import { t as ti } from '$lib/utils/i18n.js';
 
   let takedowns = $state<Takedown[]>([]);
   let loading = $state(true);
@@ -37,23 +39,23 @@
 
   onMount(load);
 
-  const TARGET_LABEL: Record<TakedownTargetType, string> = {
-    group: 'Group',
-    page: 'Page',
-    post: 'Post',
-    media: 'Media',
-    account_badge: 'Verified badge',
+  const TARGET_KEY: Record<TakedownTargetType, string> = {
+    group: 'mod_appeal.target_group',
+    page: 'mod_appeal.target_page',
+    post: 'mod_appeal.target_post',
+    media: 'mod_appeal.target_media',
+    account_badge: 'mod_appeal.target_account_badge',
   };
 
-  function targetLabel(t: TakedownTargetType): string {
-    return TARGET_LABEL[t] ?? 'Content';
+  function targetKey(type: TakedownTargetType): string {
+    return TARGET_KEY[type] ?? 'mod_appeal.target_content';
   }
 
-  const STATUS_LABEL: Record<TakedownStatus, string> = {
-    active: 'Removed',
-    appealed: 'Appeal under review',
-    restored: 'Restored',
-    purged: 'Permanently deleted',
+  const STATUS_KEY: Record<TakedownStatus, string> = {
+    active: 'mod_appeal.status_active',
+    appealed: 'mod_appeal.status_appealed',
+    restored: 'mod_appeal.status_restored',
+    purged: 'mod_appeal.status_purged',
   };
 
   function fmtDate(iso: string | null): string {
@@ -94,28 +96,28 @@
       await appealTakedown(target.id, reason);
       // Reflect the new state locally: an active takedown becomes "appealed".
       takedowns = takedowns.map((t) => (t.id === target.id ? { ...t, status: 'appealed' } : t));
-      addToast('Appeal submitted — a moderator will review it', 'success');
+      addToast(ti('mod_appeal.submitted'), 'success');
       closeAppeal();
     } catch (e) {
       if (e instanceof ApiError) {
         switch (e.body.error) {
           case 'appeal.already_pending':
-            appealError = 'You already have an appeal under review for this.';
+            appealError = ti('mod_appeal.err_duplicate');
             break;
           case 'takedown.not_appealable':
-            appealError = 'This can no longer be appealed.';
+            appealError = ti('mod_appeal.err_closed');
             break;
           case 'takedown.forbidden':
-            appealError = "You can't appeal this item.";
+            appealError = ti('mod_appeal.err_forbidden');
             break;
           case 'takedown.not_found':
-            appealError = 'This moderation record no longer exists.';
+            appealError = ti('mod_appeal.err_missing');
             break;
           default:
-            appealError = e.message || 'Could not submit your appeal. Please try again.';
+            appealError = e.message || ti('mod_appeal.err_generic');
         }
       } else {
-        appealError = 'Could not submit your appeal. Please try again.';
+        appealError = ti('mod_appeal.err_generic');
       }
     } finally {
       submitting = false;
@@ -124,11 +126,7 @@
 </script>
 
 <div class="mod-page">
-  <p class="mod-intro">
-    When a moderator removes something you own, it appears here with the reason. Content stays
-    recoverable for a limited time — submit an appeal to ask a moderator to restore it before it
-    is permanently deleted.
-  </p>
+  <p class="mod-intro">{$t('mod_appeal.intro')}</p>
 
   {#if loading}
     <ul class="mod-list" aria-hidden="true">
@@ -142,59 +140,57 @@
     </ul>
   {:else if loadError}
     <div class="mod-empty">
-      <p class="empty-title">Couldn't load your moderation status</p>
-      <p class="empty-hint">Something went wrong reaching the server. Check your connection.</p>
-      <button type="button" class="btn btn-primary" onclick={load}>Retry</button>
+      <p class="empty-title">{$t('mod_appeal.load_error_title')}</p>
+      <p class="empty-hint">{$t('mod_appeal.load_error_hint')}</p>
+      <button type="button" class="btn btn-primary" onclick={load}>{$t('common.retry')}</button>
     </div>
   {:else if takedowns.length === 0}
     <div class="mod-empty">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" />
       </svg>
-      <p class="empty-title">Nothing has been removed</p>
-      <p class="empty-hint">Your content is in good standing. If a moderator ever removes something, you'll find it here with a way to appeal.</p>
+      <p class="empty-title">{$t('mod_appeal.empty_title')}</p>
+      <p class="empty-hint">{$t('mod_appeal.empty_hint')}</p>
     </div>
   {:else}
     <ul class="mod-list">
-      {#each takedowns as t (t.id)}
-        {@const days = daysUntilPurge(t.purge_after)}
+      {#each takedowns as td (td.id)}
+        {@const days = daysUntilPurge(td.purge_after)}
         <li class="mod-card">
           <div class="mod-card-head">
-            <span class="mod-target">{targetLabel(t.target_type)}</span>
-            <span class="mod-status mod-status-{t.status}">{STATUS_LABEL[t.status]}</span>
+            <span class="mod-target">{$t(targetKey(td.target_type))}</span>
+            <span class="mod-status mod-status-{td.status}">{$t(STATUS_KEY[td.status])}</span>
           </div>
 
-          {#if t.reason}
-            <p class="mod-reason"><span class="mod-label">Reason:</span> {t.reason}</p>
+          {#if td.reason}
+            <p class="mod-reason"><span class="mod-label">{$t('mod_appeal.reason_label')}</span> {td.reason}</p>
           {:else}
-            <p class="mod-reason mod-reason-none">No reason was provided.</p>
+            <p class="mod-reason mod-reason-none">{$t('mod_appeal.no_reason')}</p>
           {/if}
 
-          <p class="mod-meta">Removed {fmtDate(t.created_at)}</p>
+          <p class="mod-meta">{$t('mod_appeal.removed_at', { date: fmtDate(td.created_at) })}</p>
 
-          {#if t.status === 'active'}
+          {#if td.status === 'active'}
             {#if days !== null}
               <p class="mod-deadline" class:mod-deadline-urgent={days <= 7}>
                 {#if days === 0}
-                  Permanent deletion is due today.
-                {:else if days === 1}
-                  Permanent deletion in <strong>1 day</strong> ({fmtDate(t.purge_after)}).
+                  {$t('mod_appeal.purge_today')}
                 {:else}
-                  Permanent deletion in <strong>{days} days</strong> ({fmtDate(t.purge_after)}).
+                  {$t('mod_appeal.purge_in_pre')} <strong>{days === 1 ? $t('mod_appeal.days_one') : $t('mod_appeal.days_other', { days })}</strong> {$t('mod_appeal.purge_in_post', { date: fmtDate(td.purge_after) })}
                 {/if}
               </p>
             {/if}
             <div class="mod-actions">
-              <button type="button" class="btn btn-primary btn-sm" onclick={() => openAppeal(t)}>
-                Appeal this
+              <button type="button" class="btn btn-primary btn-sm" onclick={() => openAppeal(td)}>
+                {$t('mod_appeal.appeal_this')}
               </button>
             </div>
-          {:else if t.status === 'appealed'}
-            <p class="mod-note">Your appeal is with a moderator. We'll notify you when it's reviewed.</p>
-          {:else if t.status === 'restored'}
-            <p class="mod-note mod-note-good">This was restored and is available again.</p>
-          {:else if t.status === 'purged'}
-            <p class="mod-note mod-note-final">This has been permanently deleted and can't be recovered.</p>
+          {:else if td.status === 'appealed'}
+            <p class="mod-note">{$t('mod_appeal.note_appealed')}</p>
+          {:else if td.status === 'restored'}
+            <p class="mod-note mod-note-good">{$t('mod_appeal.note_restored')}</p>
+          {:else if td.status === 'purged'}
+            <p class="mod-note mod-note-final">{$t('mod_appeal.note_purged')}</p>
           {/if}
         </li>
       {/each}
@@ -202,41 +198,40 @@
   {/if}
 </div>
 
-<Modal open={appealing !== null} title="Appeal this removal" size="sm" onclose={closeAppeal}>
+<Modal open={appealing !== null} title={$t('mod_appeal.modal_title')} size="sm" onclose={closeAppeal}>
   {#if appealing}
     <p class="appeal-lead">
-      Tell the moderators why this {targetLabel(appealing.target_type).toLowerCase()} should be
-      restored. Be specific — this goes to a person who will review it.
+      {$t('mod_appeal.modal_lead', { target: $t(targetKey(appealing.target_type)).toLowerCase() })}
     </p>
     <div class="appeal-field">
       <textarea
         bind:value={appealReason}
         rows="5"
         maxlength="2000"
-        placeholder="Explain your case…"
-        aria-label="Appeal reason"
+        placeholder={$t('mod_appeal.placeholder')}
+        aria-label={$t('mod_appeal.textarea_label')}
         disabled={submitting}
       ></textarea>
     </div>
     <div class="appeal-foot">
       <span class="appeal-count" class:appeal-count-short={appealReason.trim().length < MIN_REASON}>
         {appealReason.trim().length < MIN_REASON
-          ? `At least ${MIN_REASON} characters`
-          : `${appealReason.trim().length} characters`}
+          ? $t('mod_appeal.min_chars', { min: MIN_REASON })
+          : $t('mod_appeal.char_count', { count: appealReason.trim().length })}
       </span>
     </div>
     {#if appealError}
       <p class="appeal-error">{appealError}</p>
     {/if}
     <div class="appeal-actions">
-      <button type="button" class="btn btn-ghost" onclick={closeAppeal} disabled={submitting}>Cancel</button>
+      <button type="button" class="btn btn-ghost" onclick={closeAppeal} disabled={submitting}>{$t('common.cancel')}</button>
       <button
         type="button"
         class="btn btn-primary"
         onclick={submitAppeal}
         disabled={submitting || appealReason.trim().length < MIN_REASON}
       >
-        {submitting ? 'Submitting…' : 'Submit appeal'}
+        {submitting ? $t('mod_appeal.submitting') : $t('mod_appeal.submit')}
       </button>
     </div>
   {/if}

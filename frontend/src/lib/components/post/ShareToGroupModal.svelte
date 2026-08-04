@@ -5,6 +5,7 @@
   import { getGroups } from '$lib/api/groups.js';
   import type { Group } from '$lib/api/types.js';
   import type { Post } from '$lib/api/types.js';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     open = $bindable(false),
@@ -60,7 +61,7 @@
         detail: {
           quotePost: post,
           groupId: group.id,
-          contextLabel: `Sharing to ${group.name || 'group'}`,
+          contextLabel: $t('share_group.context', { name: group.name || $t('share_group.group_fallback') }),
         },
       }),
     );
@@ -74,32 +75,32 @@
   }
 </script>
 
-<Modal open={open} title="Share to a group" size="sm" onclose={close}>
+<Modal open={open} title={$t('share_group.title')} size="sm" onclose={close}>
   {#if loading}
     <div class="stg-center"><Spinner /></div>
   {:else if loadError}
     <div class="stg-empty">
-      <p class="stg-empty-title">Couldn't load your groups</p>
-      <button type="button" class="btn btn-primary btn-sm" onclick={load}>Retry</button>
+      <p class="stg-empty-title">{$t('share_group.load_error')}</p>
+      <button type="button" class="btn btn-primary btn-sm" onclick={load}>{$t('common.retry')}</button>
     </div>
   {:else if groups.length === 0}
     <div class="stg-empty">
-      <p class="stg-empty-title">You haven't joined any groups yet</p>
-      <p class="stg-empty-hint">You can only share a post into groups you're a member of.</p>
-      <a class="btn btn-primary btn-sm" href="/groups" onclick={close}>Find groups</a>
+      <p class="stg-empty-title">{$t('share_group.empty_title')}</p>
+      <p class="stg-empty-hint">{$t('share_group.empty_hint')}</p>
+      <a class="btn btn-primary btn-sm" href="/groups" onclick={close}>{$t('share_group.find')}</a>
     </div>
   {:else}
     {#if groups.length > 6}
       <input
         type="text"
         class="input stg-search"
-        placeholder="Search your groups…"
+        placeholder={$t('share_group.search_placeholder')}
         bind:value={query}
-        aria-label="Search your groups"
+        aria-label={$t('share_group.search_label')}
       />
     {/if}
     {#if filtered.length === 0}
-      <p class="stg-noresults">No groups match “{query}”.</p>
+      <p class="stg-noresults">{$t('share_group.no_match', { query })}</p>
     {:else}
       <ul class="stg-list">
         {#each filtered as group (group.id)}
@@ -108,7 +109,7 @@
               <Avatar src={group.avatar_url} name={group.name} size="sm" />
               <span class="stg-item-text">
                 <span class="stg-item-name">{group.name}</span>
-                <span class="stg-item-meta">{group.member_count} {group.member_count === 1 ? 'member' : 'members'}</span>
+                <span class="stg-item-meta">{group.member_count} {group.member_count === 1 ? $t('share_group.member_one') : $t('share_group.member_other')}</span>
               </span>
             </button>
           </li>

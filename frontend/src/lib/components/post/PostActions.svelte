@@ -4,6 +4,7 @@
   import { authStore } from '$lib/stores/auth.js';
   import { mute, unmute, block, unblock } from '$lib/api/accounts.js';
   import { pinPost, unpinPost } from '$lib/api/statuses.js';
+  import { t } from '$lib/stores/i18n.js';
   import { get } from 'svelte/store';
   import { on } from 'svelte/events';
   import ReactionPicker from './ReactionPicker.svelte';
@@ -1424,7 +1425,7 @@
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShareToGroup}>
           <span class="material-symbols-outlined menu-icon">group_add</span>
-          Share to group
+          {$t('share_group.menu_item')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShare}>
           <span class="material-symbols-outlined menu-icon">share</span>
