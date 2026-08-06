@@ -20,12 +20,28 @@
   const exploreCache: TimelineCache = { read: readExploreFeed, write: writeExploreFeed };
 
   // ── Public feeds (Local / Global / Trending) ─────────────────────────
-  async function loadPublic(base: string, cursor: string | null): Promise<Post[]> {
+  async function loadPublic(base: string, cursor: string | null, sort?: string): Promise<Post[]> {
+    const params: string[] = [];
+    // `newest` is the server default → omit it.
+    if (sort && sort !== 'newest') params.push(`sort=${sort}`);
+    if (cursor) {
+      // Oldest is ascending, so "load more" fetches posts NEWER than the last
+      // shown → min_id. Every other order is descending → max_id (older).
+      params.push(`${sort === 'oldest' ? 'min_id' : 'max_id'}=${encodeURIComponent(cursor)}`);
+    }
     let endpoint = base;
-    if (cursor) endpoint += (endpoint.includes('?') ? '&' : '?') + `max_id=${cursor}`;
+    if (params.length) endpoint += (endpoint.includes('?') ? '&' : '?') + params.join('&');
     const items = await api.get<Post[]>(endpoint);
     return Array.isArray(items) ? items : [];
   }
+
+  // Reels-style sort chips for the Local/Global feeds. Order is display order;
+  // `newest` stays the default (chronological), matching the prior behavior.
+  const EXPLORE_SORTS = [
+    { value: 'trending', label: 'Trending' },
+    { value: 'newest', label: 'Newest' },
+    { value: 'oldest', label: 'Oldest' },
+  ];
 
   // Local tab shows only posts authored on this instance. Remote federated
   // authors (acct contains '@', or a foreign URL host) belong on Global.
@@ -42,7 +58,10 @@
       id: 'local',
       label: 'Local',
       icon: 'home',
-      load: (c) => loadPublic('/api/v1/timelines/public?local=true', c),
+      load: (c, sort) => loadPublic('/api/v1/timelines/public?local=true', c, sort),
+      sorts: EXPLORE_SORTS,
+      defaultSort: 'newest',
+      sortStorageKey: 'hs-explore-local-sort',
       stream: {
         kind: 'public',
         filter: (p) => !(((p.account as any)?.acct ?? '') as string).includes('@'),
@@ -54,7 +73,10 @@
       id: 'global',
       label: 'Global',
       icon: 'public',
-      load: (c) => loadPublic('/api/v1/timelines/global', c),
+      load: (c, sort) => loadPublic('/api/v1/timelines/global', c, sort),
+      sorts: EXPLORE_SORTS,
+      defaultSort: 'newest',
+      sortStorageKey: 'hs-explore-global-sort',
       stream: { kind: 'public' },
       emptyMessage: 'No posts from the fediverse yet',
     },

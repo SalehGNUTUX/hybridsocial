@@ -6,8 +6,26 @@
     label: string;
     /** Optional Material Symbols glyph shown in the tab. */
     icon?: string;
-    /** Fetch a page of entries for the given cursor (null = first page). */
-    load: (cursor: string | null) => Promise<Post[]>;
+    /**
+     * Fetch a page of entries for the given cursor (null = first page).
+     * `sort` is the currently-selected sort value when the tab defines `sorts`,
+     * so the loader can pass it (and pick max_id vs min_id for asc/desc).
+     */
+    load: (cursor: string | null, sort?: string) => Promise<Post[]>;
+    /**
+     * Optional per-tab sort control (Reels-style chips under the tabs). When
+     * present, the first entry is the default. Persisted per device under
+     * `sortStorageKey` if given.
+     */
+    sorts?: { value: string; label: string }[];
+    sortStorageKey?: string;
+    /**
+     * The sort value that is chronological-newest (live-streamable). Defaults
+     * to the first entry. Live posts prepend / the composer's optimistic post
+     * only apply in this order; under trending/oldest a new post shouldn't jump
+     * to the top, so streaming is suppressed there.
+     */
+    defaultSort?: string;
     /**
      * Live-stream wiring for this tab, or null for no streaming (e.g.
      * algorithmic feeds where a brand-new post shouldn't jump in).
@@ -75,6 +93,47 @@
 
   let activeTab = $derived(tabs.find((t) => t.id === activeId) ?? tabs[0]);
 
+  // Per-tab sort (Reels-style chips). Remembered per device so the choice
+  // survives navigation (the component remounts each visit).
+  function readSort(tab: TimelineTab | undefined): string | null {
+    if (!tab?.sorts?.length) return null;
+    const def = tab.defaultSort ?? tab.sorts[0].value;
+    if (!tab.sortStorageKey) return def;
+    try {
+      const saved = localStorage.getItem(tab.sortStorageKey);
+      return saved && tab.sorts.some((s) => s.value === saved) ? saved : def;
+    } catch {
+      return def;
+    }
+  }
+  let activeSort = $state<string | null>(readSort(activeTab));
+
+  function changeSort(next: string) {
+    if (next === activeSort) return;
+    activeSort = next;
+    if (activeTab?.sortStorageKey) {
+      try {
+        localStorage.setItem(activeTab.sortStorageKey, next);
+      } catch {
+        /* storage unavailable — the choice just won't persist */
+      }
+    }
+    feed.reset();
+    wireStream();
+    scrollToTop();
+  }
+
+  // The sort row auto-hides on scroll-down and reappears on scroll-up (and at
+  // the top), mirroring the Streams reveal behavior.
+  let sortHidden = $state(false);
+  let lastDirY = 0;
+
+  // Live posts (stream + optimistic composer) only belong at the top in the
+  // chronological-newest order. Under trending/oldest, suppress them.
+  let streamable = $derived(
+    !activeTab?.sorts || activeSort === (activeTab.defaultSort ?? activeTab.sorts[0]?.value),
+  );
+
   // Latest known window scroll offset. Kept current by handleScroll so
   // whatever persist() writes carries the depth the user is actually at
   // when they tap into a post.
@@ -96,7 +155,7 @@
   // optimistic composer updates and scroll restoration on top. The fetch
   // closure reads `activeTab` at call time, so a reset after switchTab
   // fetches the newly-selected tab.
-  const feed = createEntityFeed((cursor) => activeTab.load(cursor), 20, {
+  const feed = createEntityFeed((cursor) => activeTab.load(cursor, activeSort ?? undefined), 20, {
     initial: cached
       ? { posts: cached.posts, cursor: cached.cursor, hasMore: cached.hasMore }
       : null,
@@ -107,6 +166,10 @@
   function switchTab(id: string) {
     if (id === activeId) return;
     activeId = id;
+    // Re-init the sort from the newly-selected tab. `activeTab` (a $derived)
+    // recomputes on read now that activeId changed.
+    activeSort = readSort(activeTab);
+    sortHidden = false;
     feed.reset();
     wireStream();
   }
@@ -114,7 +177,8 @@
   function wireStream() {
     const apiBase = import.meta.env.VITE_API_URL || '';
     const s = activeTab.stream;
-    if (!s) {
+    // No stream config, or a non-newest sort is active → nothing to prepend.
+    if (!s || !streamable) {
       disconnectStream();
       return;
     }
@@ -149,10 +213,22 @@
   let prevAtTop = true;
   let scrollPersistQueued = false;
   function handleScroll() {
-    const atTop = window.scrollY < 50;
+    const y = window.scrollY;
+    const atTop = y < 50;
     setAtTop(atTop);
     if (atTop && !prevAtTop) mergeQueued();
     prevAtTop = atTop;
+
+    // Sort row: visible at the top; hide when scrolling down, reveal on the
+    // first upward flick. Small deadband so tiny jitters don't toggle it.
+    if (atTop) {
+      sortHidden = false;
+    } else if (y > lastDirY + 6) {
+      sortHidden = true;
+    } else if (y < lastDirY - 6) {
+      sortHidden = false;
+    }
+    lastDirY = y;
 
     // Record scroll depth into the session cache so a back-nav from a
     // post detail can return to it. Coalesce to one write per frame —
@@ -196,6 +272,8 @@
   function handleNewPost(e: Event) {
     const p = (e as CustomEvent<Post>).detail;
     if (!p || p.parent_id) return;
+    // Under trending/oldest a fresh post shouldn't jump to the top.
+    if (!streamable) return;
     if (activeTab.accepts && !activeTab.accepts(p)) return;
     feed.prepend(p);
   }
@@ -264,10 +342,25 @@
          deep in a long timeline doesn't force a scroll to top. -->
     <div class="timeline-sticky-bar">
       <FeedTabs {tabs} active={activeId} onchange={switchTab} />
+      {#if activeTab?.sorts?.length}
+        <div class="timeline-sort" class:timeline-sort-hidden={sortHidden} role="group" aria-label="Sort">
+          {#each activeTab.sorts as s (s.value)}
+            <button
+              type="button"
+              class="timeline-sort-chip"
+              class:on={activeSort === s.value}
+              aria-pressed={activeSort === s.value}
+              onclick={() => changeSort(s.value)}
+            >
+              {s.label}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
-  {#if activeTab?.stream}
+  {#if activeTab?.stream && streamable}
     <NewPostsBanner count={$queuedCount} onclick={mergeQueued} />
   {/if}
 
@@ -303,6 +396,53 @@
     padding: var(--space-3) 0;
     margin-inline: calc(-1 * var(--space-2));
     padding-inline: var(--space-2);
+  }
+
+  .timeline-sort {
+    display: flex;
+    gap: var(--space-2, 8px);
+    align-items: center;
+    overflow: hidden;
+    /* Collapse smoothly when hidden on scroll-down. */
+    max-height: 44px;
+    opacity: 1;
+    transition:
+      max-height 0.22s ease,
+      opacity 0.18s ease,
+      margin 0.22s ease;
+  }
+
+  .timeline-sort-hidden {
+    max-height: 0;
+    opacity: 0;
+    margin-block-start: calc(-1 * var(--space-2, 8px));
+    pointer-events: none;
+  }
+
+  .timeline-sort-chip {
+    padding: 4px 12px;
+    border-radius: var(--radius-full, 999px);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm, 0.875rem);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background-color 0.12s ease,
+      color 0.12s ease,
+      border-color 0.12s ease;
+  }
+
+  .timeline-sort-chip:hover {
+    background: var(--color-surface-hover, rgba(0, 0, 0, 0.06));
+  }
+
+  .timeline-sort-chip.on {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-on-primary, #fff);
   }
 
   /* On mobile the translucent blur on this sticky bar repaints every

@@ -1,6 +1,7 @@
 defmodule Hybridsocial.FeedsTest do
   use Hybridsocial.DataCase, async: false
 
+  alias Hybridsocial.Accounts.Identity
   alias Hybridsocial.Feeds
   alias Hybridsocial.Feeds.Visibility
   alias Hybridsocial.Social.{Post, Follow, Block, Mute, Boost}
@@ -223,7 +224,7 @@ defmodule Hybridsocial.FeedsTest do
       refute _private_post.id in ids
     end
 
-    test "algorithm: \"trending\" ranks public posts by engagement (Explore Trending)" do
+    test "sort: \"trending\" ranks public posts by engagement (Explore Trending)" do
       # Distinct authors so per-author diversity doesn't drop any candidate.
       alice = create_user("trend_a", "trend_a@example.com")
       bob = create_user("trend_b", "trend_b@example.com")
@@ -236,7 +237,7 @@ defmodule Hybridsocial.FeedsTest do
       hot |> Ecto.Changeset.change(reaction_count: 50) |> Repo.update!()
       warm |> Ecto.Changeset.change(reaction_count: 5) |> Repo.update!()
 
-      ranked = Feeds.public_timeline(algorithm: "trending", viewer_id: nil) |> Enum.map(& &1.id)
+      ranked = Feeds.public_timeline(sort: "trending", viewer_id: nil) |> Enum.map(& &1.id)
 
       # Engaged posts surface, ordered by engagement; the zero-engagement post
       # is outside the trending set entirely.
@@ -247,10 +248,60 @@ defmodule Hybridsocial.FeedsTest do
       assert Enum.find_index(ranked, &(&1 == hot.id)) <
                Enum.find_index(ranked, &(&1 == warm.id))
 
-      # The default (no algorithm) is plain chronological and keeps every public
+      # The default (no sort) is plain chronological and keeps every public
       # post, including the un-engaged one — proving the ranking is the new path.
       chrono = Feeds.public_timeline() |> Enum.map(& &1.id)
       assert cold.id in chrono
+    end
+
+    test "sort: \"trending\" with local_only scopes to local authors (Explore Local)" do
+      local = create_user("ltr_local", "ltr_local@example.com")
+      remote = create_user("ltr_remote", "ltr_remote@example.com")
+
+      {1, _} =
+        Repo.update_all(from(i in Identity, where: i.id == ^remote.id),
+          set: [is_local: false, ap_actor_url: "https://remote.example/users/x"]
+        )
+
+      local_hot = create_post(local, %{content: "local hot"})
+      remote_hot = create_post(remote, %{content: "remote hot"})
+      local_hot |> Ecto.Changeset.change(reaction_count: 30) |> Repo.update!()
+      remote_hot |> Ecto.Changeset.change(reaction_count: 90) |> Repo.update!()
+
+      local_ids =
+        Feeds.public_timeline(sort: "trending", local_only: true, viewer_id: nil)
+        |> Enum.map(& &1.id)
+
+      assert local_hot.id in local_ids
+      # The more-engaged REMOTE post is excluded from LOCAL trending…
+      refute remote_hot.id in local_ids
+
+      # …but a global (non-local) trending call surfaces it.
+      global_ids =
+        Feeds.public_timeline(sort: "trending", local_only: false, viewer_id: nil)
+        |> Enum.map(& &1.id)
+
+      assert remote_hot.id in global_ids
+    end
+
+    test "sort: \"oldest\" returns public posts in ascending time order" do
+      alice = create_user("oldest_a", "oldest_a@example.com")
+      t0 = ~U[2026-01-01 00:00:00.000000Z]
+
+      older =
+        create_post(alice, %{content: "older", published_at: t0, last_activity_at: t0})
+
+      newer =
+        create_post(alice, %{
+          content: "newer",
+          published_at: DateTime.add(t0, 3600, :second),
+          last_activity_at: DateTime.add(t0, 3600, :second)
+        })
+
+      ids = Feeds.public_timeline(sort: "oldest", local_only: false) |> Enum.map(& &1.id)
+
+      assert Enum.find_index(ids, &(&1 == older.id)) <
+               Enum.find_index(ids, &(&1 == newer.id))
     end
 
     test "excludes replies by default" do
