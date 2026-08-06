@@ -84,7 +84,10 @@
       id: 'trending',
       label: 'Trending',
       icon: 'trending_up',
-      load: (c) => loadPublic('/api/v1/timelines/public?algorithm=trending', c),
+      // Explicitly global: the public endpoint defaults local_only=true, and the
+      // Trending algorithm now honors it — so without local=false this tab would
+      // show only *local* trending and drop federated content.
+      load: (c) => loadPublic('/api/v1/timelines/public?algorithm=trending&local=false', c),
       // Algorithmic — a brand-new post shouldn't jump onto Trending.
       stream: null,
       accepts: () => false,
