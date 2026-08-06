@@ -223,6 +223,36 @@ defmodule Hybridsocial.FeedsTest do
       refute _private_post.id in ids
     end
 
+    test "algorithm: \"trending\" ranks public posts by engagement (Explore Trending)" do
+      # Distinct authors so per-author diversity doesn't drop any candidate.
+      alice = create_user("trend_a", "trend_a@example.com")
+      bob = create_user("trend_b", "trend_b@example.com")
+      carol = create_user("trend_c", "trend_c@example.com")
+
+      hot = create_post(alice, %{content: "hot"})
+      warm = create_post(bob, %{content: "warm"})
+      cold = create_post(carol, %{content: "cold"})
+
+      hot |> Ecto.Changeset.change(reaction_count: 50) |> Repo.update!()
+      warm |> Ecto.Changeset.change(reaction_count: 5) |> Repo.update!()
+
+      ranked = Feeds.public_timeline(algorithm: "trending", viewer_id: nil) |> Enum.map(& &1.id)
+
+      # Engaged posts surface, ordered by engagement; the zero-engagement post
+      # is outside the trending set entirely.
+      assert hot.id in ranked
+      assert warm.id in ranked
+      refute cold.id in ranked
+
+      assert Enum.find_index(ranked, &(&1 == hot.id)) <
+               Enum.find_index(ranked, &(&1 == warm.id))
+
+      # The default (no algorithm) is plain chronological and keeps every public
+      # post, including the un-engaged one — proving the ranking is the new path.
+      chrono = Feeds.public_timeline() |> Enum.map(& &1.id)
+      assert cold.id in chrono
+    end
+
     test "excludes replies by default" do
       alice = create_user("alice_rep", "alice_rep@example.com")
       parent = create_post(alice, %{content: "Parent"})

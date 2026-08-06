@@ -69,6 +69,22 @@ defmodule Hybridsocial.Feeds do
     * `:local_only`      - only local posts (default true, reserved for federation)
   """
   def public_timeline(opts \\ []) do
+    # Explore's "Trending" tab asks for engagement-ranked public posts, the same
+    # way Home's "Top" tab does. Route it through the shared Trending algorithm
+    # (globally-trending PUBLIC posts, scored by engagement × velocity × decay,
+    # already viewer block/mute-filtered) instead of the chronological feed
+    # below — otherwise `?algorithm=trending` was silently ignored and Explore
+    # returned newest-first, never the most-reacted posts. Bypasses the
+    # chronological FeedCache; the controller still caches the serialized first
+    # page under an algorithm-specific key.
+    if Keyword.get(opts, :algorithm) == "trending" do
+      Hybridsocial.Feeds.Algorithms.Trending.home_feed(Keyword.get(opts, :viewer_id), opts)
+    else
+      public_timeline_chrono(opts)
+    end
+  end
+
+  defp public_timeline_chrono(opts) do
     local_only = Keyword.get(opts, :local_only, true)
 
     # Only the default (local_only=true) path is cached — the cache

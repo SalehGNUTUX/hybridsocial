@@ -102,9 +102,10 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
             local_only: Map.get(params, "local", "true") == "true",
             viewer_id: viewer_id
           )
+          |> maybe_put_public_algorithm(params["algorithm"])
 
         cache_key =
-          "feed:public:ser:#{viewer_id || "anon"}:#{opts[:local_only]}:#{opts[:include_replies]}"
+          "feed:public:ser:#{viewer_id || "anon"}:#{opts[:local_only]}:#{opts[:include_replies]}:#{Keyword.get(opts, :algorithm, "chrono")}"
 
         serialized =
           cached_feed(cache_key, first_page?(params), fn ->
@@ -343,6 +344,15 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
     do: Keyword.put(opts, :orientation, :all)
 
   defp maybe_put_streams_orientation(opts, _), do: opts
+
+  # The public timeline supports one non-chronological mode: Explore's
+  # "Trending" tab (`?algorithm=trending`), which `Feeds.public_timeline`
+  # routes through the engagement-ranked Trending algorithm. Any other value
+  # (or none) keeps the default chronological order.
+  defp maybe_put_public_algorithm(opts, "trending"),
+    do: Keyword.put(opts, :algorithm, "trending")
+
+  defp maybe_put_public_algorithm(opts, _), do: opts
 
   defp maybe_put_streams_query(opts, q) when is_binary(q) and q != "",
     do: Keyword.put(opts, :q, q)
