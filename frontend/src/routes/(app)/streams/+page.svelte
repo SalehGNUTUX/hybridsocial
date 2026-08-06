@@ -159,7 +159,11 @@
 
   // Timeline ordering + free-text/hashtag filter. `trending` is the default
   // (matches the server) so it's omitted from the query on the happy path.
-  let sort = $state<'trending' | 'newest' | 'oldest'>('trending');
+  // The choice is remembered per device (the page component remounts on every
+  // navigation, so without this the sort snaps back to trending each visit).
+  const SORT_KEY = 'hs-streams-sort';
+  const SORT_VALUES = ['trending', 'newest', 'oldest'] as const;
+  let sort = $state<(typeof SORT_VALUES)[number]>('trending');
   let search = $state('');
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -241,9 +245,14 @@
     }
   }
 
-  function changeSort(next: 'trending' | 'newest' | 'oldest') {
+  function changeSort(next: (typeof SORT_VALUES)[number]) {
     if (sort === next) return;
     sort = next;
+    try {
+      localStorage.setItem(SORT_KEY, next);
+    } catch {
+      /* storage unavailable — the choice just won't persist */
+    }
     loadStreams();
   }
 
@@ -315,6 +324,10 @@
       autoplay = localStorage.getItem(AUTOPLAY_KEY) === '1';
       // Default to muted unless the viewer previously chose sound-on.
       muted = localStorage.getItem(MUTED_KEY) !== '0';
+      const savedSort = localStorage.getItem(SORT_KEY);
+      if (savedSort && (SORT_VALUES as readonly string[]).includes(savedSort)) {
+        sort = savedSort as (typeof SORT_VALUES)[number];
+      }
     } catch {
       /* ignore */
     }

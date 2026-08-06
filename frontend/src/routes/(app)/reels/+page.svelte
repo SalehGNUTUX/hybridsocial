@@ -43,8 +43,12 @@
   }
 
   // Sort + free-text/hashtag filter, mirroring Streams. `trending` is the
-  // server default so it's omitted from the query on the happy path.
-  let sort = $state<'trending' | 'newest' | 'oldest'>('trending');
+  // server default so it's omitted from the query on the happy path. Remembered
+  // per device (the page remounts on navigation, so otherwise the sort snaps
+  // back to trending each visit).
+  const SORT_KEY = 'hs-reels-sort';
+  const SORT_VALUES = ['trending', 'newest', 'oldest'] as const;
+  let sort = $state<(typeof SORT_VALUES)[number]>('trending');
   let search = $state('');
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   // The immersive layout keeps the clip full-bleed; search + sort open as
@@ -109,9 +113,14 @@
     }
   }
 
-  function changeSort(next: 'trending' | 'newest' | 'oldest') {
+  function changeSort(next: (typeof SORT_VALUES)[number]) {
     if (sort === next) return;
     sort = next;
+    try {
+      localStorage.setItem(SORT_KEY, next);
+    } catch {
+      /* storage unavailable — the choice just won't persist */
+    }
     loadReels();
   }
 
@@ -174,6 +183,10 @@
       const v = localStorage.getItem(AUTOPLAY_KEY);
       if (v !== null) autoplay = v === '1';
       muted = localStorage.getItem(MUTED_KEY) !== '0';
+      const savedSort = localStorage.getItem(SORT_KEY);
+      if (savedSort && (SORT_VALUES as readonly string[]).includes(savedSort)) {
+        sort = savedSort as (typeof SORT_VALUES)[number];
+      }
     } catch {
       /* ignore */
     }
