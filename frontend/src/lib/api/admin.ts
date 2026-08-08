@@ -1,5 +1,6 @@
 import { api } from './client.js';
 import type {
+  Post,
   AdminUser,
   AdminReport,
   ContentFilter,
@@ -57,6 +58,19 @@ export function getAdminUsers(params?: Record<string, string>): Promise<Paginate
 
 export function getAdminUser(id: string): Promise<AdminUser> {
   return api.get(`/api/v1/admin/users/${id}`);
+}
+
+/**
+ * An account's own content for the admin panel's Content tabs.
+ * `type` is 'posts' (top-level only), 'replies' or 'media'.
+ * Privately-addressed statuses (direct/list) are never returned — reading those
+ * is a separate policy decision, not part of "show me what this account posted".
+ */
+export function getAdminUserStatuses(
+  id: string,
+  params?: { type?: string; max_id?: string; limit?: string },
+): Promise<Post[]> {
+  return api.get(`/api/v1/admin/users/${id}/statuses`, params as Record<string, string>);
 }
 
 export interface CreateAdminUserPayload {

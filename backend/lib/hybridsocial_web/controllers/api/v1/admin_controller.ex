@@ -3433,9 +3433,23 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
     identity = Repo.preload(identity, :user)
 
-    post_count =
-      Post
-      |> where([p], p.identity_id == ^identity.id and is_nil(p.deleted_at))
+    # Split so the panel can show posts / replies / media separately. All three
+    # run through `admin_visible_posts/1`, which drops privately-addressed
+    # statuses — see that function for why.
+    base = admin_visible_posts(identity.id)
+
+    post_count = base |> where([p], is_nil(p.parent_id)) |> Repo.aggregate(:count)
+    reply_count = base |> where([p], not is_nil(p.parent_id)) |> Repo.aggregate(:count)
+
+    media_count =
+      base
+      |> where(
+        [p],
+        fragment(
+          "EXISTS (SELECT 1 FROM media m WHERE m.post_id = ? AND m.deleted_at IS NULL)",
+          p.id
+        )
+      )
       |> Repo.aggregate(:count)
 
     followers_count =
@@ -3452,10 +3466,112 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
     serialize_account(identity)
     |> Map.merge(%{
       post_count: post_count,
+      reply_count: reply_count,
+      media_count: media_count,
       followers_count: followers_count,
       last_active_at: last_active_at
     })
   end
+
+  @doc """
+  GET /api/v1/admin/users/:id/statuses?type=posts|replies|media
+
+  The account's own content, for the admin panel's Content tabs. Cursor
+  paginated on `max_id`, newest first.
+  """
+  def account_statuses(conn, %{"id" => id} = params) do
+    with :ok <- require_permission(conn, "users.view") do
+      case Accounts.get_identity(id) do
+        nil ->
+          conn |> put_status(:not_found) |> json(%{error: "account.not_found"})
+
+        identity ->
+          conn
+          |> put_status(:ok)
+          |> json(fetch_account_statuses(conn, identity, params))
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  defp fetch_account_statuses(conn, identity, params) do
+    import Ecto.Query
+    alias Hybridsocial.Repo
+
+    viewer_id = conn.assigns[:current_identity] && conn.assigns.current_identity.id
+
+    type_filter =
+      case params["type"] do
+        "replies" ->
+          dynamic([p], not is_nil(p.parent_id))
+
+        "media" ->
+          dynamic(
+            [p],
+            fragment(
+              "EXISTS (SELECT 1 FROM media m WHERE m.post_id = ? AND m.deleted_at IS NULL)",
+              p.id
+            )
+          )
+
+        # "posts" (and anything unrecognised) -> top-level only, so the Posts
+        # tab doesn't repeat everything already under Replies.
+        _ ->
+          dynamic([p], is_nil(p.parent_id))
+      end
+
+    identity.id
+    |> admin_visible_posts()
+    |> where(^type_filter)
+    |> admin_statuses_cursor(params["max_id"])
+    |> order_by([p], desc: p.inserted_at, desc: p.id)
+    |> limit(^clamp_limit(params["limit"]))
+    |> preload([:identity, :quote])
+    |> Repo.all()
+    |> HybridsocialWeb.Serializers.PostSerializer.serialize_many(current_identity_id: viewer_id)
+  end
+
+  # An account's posts as the admin panel is allowed to see them.
+  #
+  # `direct` and `list` statuses are addressed to named recipients - private
+  # messages that happen to be stored as posts (Mastodon-style DMs), not
+  # published content. Browsing them here would be reading users' private mail
+  # through the back door, which is a separate policy decision from "show me
+  # what this account posted". They stay out unconditionally; a moderator who
+  # needs a specific one still reaches it through a report.
+  defp admin_visible_posts(identity_id) do
+    import Ecto.Query
+
+    Hybridsocial.Social.Post
+    |> where([p], p.identity_id == ^identity_id and is_nil(p.deleted_at))
+    |> where([p], p.visibility not in ["direct", "list"])
+  end
+
+  # Keyset on (inserted_at, id) to match the ORDER BY - a bare `p.id < max_id`
+  # returns an arbitrary slice whenever the sort isn't by id.
+  defp admin_statuses_cursor(query, max_id) when is_binary(max_id) and max_id != "" do
+    import Ecto.Query
+    alias Hybridsocial.Repo
+
+    case Repo.one(
+           from p in Hybridsocial.Social.Post,
+             where: p.id == ^max_id,
+             select: {p.inserted_at, p.id}
+         ) do
+      nil ->
+        query
+
+      {ts, pid} ->
+        where(
+          query,
+          [p],
+          fragment("(?, ?) < (?, ?)", p.inserted_at, p.id, ^ts, type(^pid, Ecto.UUID))
+        )
+    end
+  end
+
+  defp admin_statuses_cursor(query, _), do: query
 
   def suspend_account(conn, %{"id" => _id} = p),
     do: account_action(conn, Map.put(p, "action", "suspend"))

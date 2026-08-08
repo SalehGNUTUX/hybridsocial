@@ -543,7 +543,10 @@ export interface AdminUser {
   is_shadow_banned: boolean;
   force_sensitive: boolean;
   trust_level: number;
+  /** Top-level posts only — replies are counted separately. */
   post_count: number;
+  reply_count?: number;
+  media_count?: number;
   followers_count: number;
   created_at: string;
   last_active_at: string | null;

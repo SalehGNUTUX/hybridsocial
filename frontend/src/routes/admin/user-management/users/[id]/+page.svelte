@@ -6,6 +6,7 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import {
     getAdminUser,
+    getAdminUserStatuses,
     deleteUser,
     suspendUser,
     unsuspendUser,
@@ -34,7 +35,7 @@
     revokeUserRole,
     type UserRoleAssignment,
   } from '$lib/api/admin.js';
-  import type { AdminUser, ModerationNote, AdminRole } from '$lib/api/types.js';
+  import type { AdminUser, ModerationNote, AdminRole, Post } from '$lib/api/types.js';
 
   let userId = $derived(page.params.id ?? '');
 
@@ -66,7 +67,68 @@
     { value: 'verified_pro', label: 'Pro (L3)', description: 'Professional accounts, highest limits' },
   ];
 
+  // --- Content tabs (issue #166): the account's own posts / replies / media.
+  // Privately-addressed statuses are excluded server-side; see the API comment.
+  type ContentTab = 'posts' | 'replies' | 'media';
+  const CONTENT_TABS: { value: ContentTab; label: string }[] = [
+    { value: 'posts', label: 'Posts' },
+    { value: 'replies', label: 'Replies' },
+    { value: 'media', label: 'Media' },
+  ];
+  let contentTab = $state<ContentTab>('posts');
+  let content = $state<Post[]>([]);
+  let contentLoading = $state(false);
+  let contentError = $state('');
+  let contentDone = $state(false);
+
+  async function loadContent(append = false) {
+    if (!userId) return;
+    contentLoading = true;
+    if (!append) {
+      contentError = '';
+      contentDone = false;
+    }
+    try {
+      const params: { type: string; limit: string; max_id?: string } = {
+        type: contentTab,
+        limit: '20',
+      };
+      if (append && content.length) params.max_id = content[content.length - 1].id;
+      const rows = await getAdminUserStatuses(userId, params);
+      const list = Array.isArray(rows) ? rows : [];
+      content = append ? [...content, ...list] : list;
+      if (list.length < 20) contentDone = true;
+    } catch {
+      contentError = 'Failed to load content.';
+    } finally {
+      contentLoading = false;
+    }
+  }
+
+  function switchContentTab(t: ContentTab) {
+    if (t === contentTab) return;
+    contentTab = t;
+    content = [];
+    loadContent();
+  }
+
+  // Plain-text preview: the admin list wants a scannable line, not a rendered
+  // post. Falls back to the raw content when there's no HTML body (e.g. a
+  // media-only post).
+  function preview(p: Post): string {
+    const raw = (p.content_html || p.content || '').replace(/<[^>]*>/g, ' ');
+    const txt = raw.replace(/\s+/g, ' ').trim();
+    if (txt) return txt.length > 180 ? txt.slice(0, 180) + '…' : txt;
+    return p.media_attachments?.length ? `[${p.media_attachments.length} attachment(s)]` : '—';
+  }
+
   let isLocal = $derived(!!user?.is_local);
+
+  // Where this account's public profile lives: local accounts on this
+  // instance, remote ones on their origin server.
+  let profileHref = $derived(
+    user ? (user.is_local ? `/@${user.handle}` : `/@${user.handle}@${user.domain ?? ''}`) : '',
+  );
 
   onMount(load);
 
@@ -91,6 +153,8 @@
         allRoles = roles;
         userRoles = assignments;
       }
+      // Non-blocking: a content failure shouldn't blank the whole page.
+      loadContent();
     } catch {
       error = 'Failed to load this user.';
     } finally {
@@ -291,14 +355,91 @@
             {:else}<span class="pill pill-warn">Email unverified</span>{/if}
           {/if}
         </div>
+        <a
+          class="btn btn-sm btn-outline visit-profile"
+          href={profileHref}
+          target={isLocal ? undefined : '_blank'}
+          rel={isLocal ? undefined : 'noopener noreferrer'}
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+          Visit profile
+        </a>
       </div>
       <div class="overview-stats">
         <div><span class="stat-n">{user.post_count ?? 0}</span><span class="stat-l">posts</span></div>
+        <div><span class="stat-n">{user.reply_count ?? 0}</span><span class="stat-l">replies</span></div>
+        <div><span class="stat-n">{user.media_count ?? 0}</span><span class="stat-l">media</span></div>
         <div><span class="stat-n">{user.followers_count ?? 0}</span><span class="stat-l">followers</span></div>
         <div><span class="stat-n">TL {user.trust_level}</span><span class="stat-l">trust</span></div>
         <div><span class="stat-n">{fmtDate(user.created_at)}</span><span class="stat-l">joined</span></div>
         <div><span class="stat-n">{fmtDate(user.last_active_at)}</span><span class="stat-l">last active</span></div>
       </div>
+    </section>
+
+    <!-- Content (issue #166): what this account has posted -->
+    <section class="card sect">
+      <h2 class="sect-title">Content</h2>
+      <div class="content-tabs" role="tablist">
+        {#each CONTENT_TABS as t (t.value)}
+          <button
+            type="button"
+            role="tab"
+            class="content-tab"
+            class:on={contentTab === t.value}
+            aria-selected={contentTab === t.value}
+            onclick={() => switchContentTab(t.value)}
+          >
+            {t.label}
+            <span class="content-tab-n">
+              {t.value === 'posts'
+                ? (user.post_count ?? 0)
+                : t.value === 'replies'
+                  ? (user.reply_count ?? 0)
+                  : (user.media_count ?? 0)}
+            </span>
+          </button>
+        {/each}
+      </div>
+
+      {#if contentError}
+        <div class="detail-error">{contentError}</div>
+      {:else if contentLoading && content.length === 0}
+        <div class="skeleton" style="height: 72px; border-radius: 12px;"></div>
+      {:else if content.length === 0}
+        <p class="content-empty">Nothing here.</p>
+      {:else}
+        <ul class="content-list">
+          {#each content as p (p.id)}
+            <li class="content-row">
+              <a class="content-link" href={`/admin/posts/${p.id}`}>
+                <span class="content-text">{preview(p)}</span>
+              </a>
+              <span class="content-meta">
+                {#if p.media_attachments?.length}
+                  <span class="material-symbols-outlined content-ic" aria-label="has media">image</span>
+                {/if}
+                {#if p.visibility && p.visibility !== 'public'}
+                  <span class="pill pill-neutral content-vis">{p.visibility}</span>
+                {/if}
+                <span class="content-date">{fmtDate(p.created_at)}</span>
+              </span>
+            </li>
+          {/each}
+        </ul>
+        {#if !contentDone}
+          <button
+            type="button"
+            class="btn btn-sm btn-outline"
+            disabled={contentLoading}
+            onclick={() => loadContent(true)}
+          >
+            {contentLoading ? 'Loading…' : 'Load more'}
+          </button>
+        {/if}
+      {/if}
+      <p class="content-note">
+        Privately-addressed statuses (direct messages) are never listed here.
+      </p>
     </section>
 
     <!-- Moderation -->
@@ -643,4 +784,122 @@
   .modal-text { margin: 0 0 10px; font-size: var(--text-sm); color: var(--color-text-secondary); }
   .modal-warn { margin: 0 0 18px; font-size: var(--text-sm); font-weight: 600; color: var(--color-danger); }
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+  .visit-profile {
+    align-self: flex-start;
+    margin-block-start: var(--space-2);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+  }
+
+  .visit-profile .material-symbols-outlined {
+    font-size: 16px;
+  }
+
+  .content-tabs {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-block-end: var(--space-3);
+  }
+
+  .content-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: var(--radius-full, 999px);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm, 0.875rem);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .content-tab.on {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-on-primary, #fff);
+  }
+
+  .content-tab-n {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+    font-size: 0.8em;
+  }
+
+  .content-list {
+    list-style: none;
+    margin: 0 0 var(--space-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .content-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding-block: var(--space-2);
+    border-block-end: 1px solid var(--color-border);
+  }
+
+  .content-row:last-child {
+    border-block-end: none;
+  }
+
+  .content-link {
+    color: var(--color-text);
+    text-decoration: none;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .content-link:hover .content-text {
+    text-decoration: underline;
+  }
+
+  .content-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .content-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm, 0.875rem);
+  }
+
+  .content-ic {
+    font-size: 16px;
+  }
+
+  .content-vis {
+    text-transform: capitalize;
+  }
+
+  .content-date {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .content-empty {
+    color: var(--color-text-secondary);
+    margin: 0 0 var(--space-3);
+  }
+
+  .content-note {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm, 0.875rem);
+    margin: 0;
+  }
 </style>
