@@ -146,5 +146,14 @@
   "notifications.loading": "Loading…",
   "notifications.load_error": "Couldn't load notifications.",
   "notifications.retry": "Retry",
-  "notifications.dismiss": "Dismiss notification"
+  "notifications.dismiss": "Dismiss notification",
+  "streams.fediverse": "Fediverse",
+  "streams.fediverse_on": "Fediverse videos on",
+  "streams.fediverse_off": "Fediverse videos off",
+  "streams.fediverse_hint": "Also show videos from across the fediverse",
+  "block.block_domain": "Block domain {domain}",
+  "block.not_interested": "Not interested",
+  "block.hidden": "Clip hidden",
+  "block.domain_blocked": "Blocked {domain} — its content is now hidden",
+  "block.domain_error": "Couldn't block that domain. Please try again."
 }

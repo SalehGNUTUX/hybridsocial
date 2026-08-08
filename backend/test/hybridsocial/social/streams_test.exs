@@ -196,6 +196,88 @@ defmodule Hybridsocial.Social.StreamsTest do
       refute remote_clip.id in ids
     end
 
+    test "includes a remote video once a LOCAL member boosts it (issue #22, curated)" do
+      remote = create_user("sfeed_rb_remote", "sfeed_rb_remote@example.com") |> make_remote()
+      remote_clip = create_post(remote, %{content: "Remote clip"}) |> attach_video(remote)
+
+      # Not boosted yet → still excluded.
+      refute remote_clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+
+      # A local member boosts it → it enters the feed.
+      local = create_user("sfeed_rb_local", "sfeed_rb_local@example.com")
+      Repo.insert!(%Hybridsocial.Social.Boost{post_id: remote_clip.id, identity_id: local.id})
+
+      assert remote_clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+    end
+
+    test "a boost by a REMOTE identity does not pull a remote video into the feed" do
+      remote = create_user("sfeed_rb2_r", "sfeed_rb2_r@example.com") |> make_remote()
+      remote_clip = create_post(remote, %{content: "Remote clip"}) |> attach_video(remote)
+
+      other_remote = create_user("sfeed_rb2_o", "sfeed_rb2_o@example.com") |> make_remote()
+      Repo.insert!(%Hybridsocial.Social.Boost{post_id: remote_clip.id, identity_id: other_remote.id})
+
+      refute remote_clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+    end
+
+    test "include_federated: true surfaces an un-boosted remote video (per-viewer opt-in)" do
+      remote = create_user("sfeed_incfed_r", "sfeed_incfed_r@example.com") |> make_remote()
+      remote_clip = create_post(remote, %{content: "Remote clip"}) |> attach_video(remote)
+
+      # Default (curated) excludes it; the opt-in includes it.
+      refute remote_clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+      assert remote_clip.id in (Streams.streams_feed(nil, include_federated: true) |> Enum.map(& &1.id))
+    end
+
+    test "excludes clips from an account the viewer has blocked" do
+      viewer = create_user("sfeed_blk_v", "sfeed_blk_v@example.com")
+      author = create_user("sfeed_blk_a", "sfeed_blk_a@example.com")
+      clip = create_post(author, %{content: "Blocked author clip"}) |> attach_video(author)
+
+      # Anyone else (and anon) still sees it.
+      assert clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+
+      Repo.insert!(%Hybridsocial.Social.Block{blocker_id: viewer.id, blocked_id: author.id})
+
+      refute clip.id in (Streams.streams_feed(viewer.id) |> Enum.map(& &1.id))
+      # Scoped to the viewer — a different viewer is unaffected.
+      other = create_user("sfeed_blk_o", "sfeed_blk_o@example.com")
+      assert clip.id in (Streams.streams_feed(other.id) |> Enum.map(& &1.id))
+    end
+
+    test "excludes clips from an account the viewer has muted" do
+      viewer = create_user("sfeed_mut_v", "sfeed_mut_v@example.com")
+      author = create_user("sfeed_mut_a", "sfeed_mut_a@example.com")
+      clip = create_post(author, %{content: "Muted author clip"}) |> attach_video(author)
+
+      Repo.insert!(%Hybridsocial.Social.Mute{muter_id: viewer.id, muted_id: author.id})
+
+      refute clip.id in (Streams.streams_feed(viewer.id) |> Enum.map(& &1.id))
+      assert clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
+    end
+
+    test "excludes federated clips from a domain the viewer has blocked" do
+      viewer = create_user("sfeed_dom_v", "sfeed_dom_v@example.com")
+      remote = create_user("sfeed_dom_r", "sfeed_dom_r@example.com")
+
+      {1, _} =
+        Repo.update_all(from(i in Identity, where: i.id == ^remote.id),
+          set: [is_local: false, ap_actor_url: "https://evil.example/users/x"]
+        )
+
+      clip = create_post(remote, %{content: "Remote clip"}) |> attach_video(remote)
+
+      # With the fediverse opt-in the viewer normally sees the remote clip…
+      assert clip.id in
+               (Streams.streams_feed(viewer.id, include_federated: true) |> Enum.map(& &1.id))
+
+      {:ok, _} = Hybridsocial.Social.block_domain(viewer.id, "evil.example")
+
+      # …but once its domain is blocked, it's gone for this viewer.
+      refute clip.id in
+               (Streams.streams_feed(viewer.id, include_federated: true) |> Enum.map(& &1.id))
+    end
+
     test "orientation: :portrait excludes horizontal and square videos" do
       alice = create_user("sfeed_orient", "sfeed_orient@example.com")
 

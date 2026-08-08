@@ -2,8 +2,11 @@
   import type { Post } from '$lib/api/types.js';
   import { api } from '$lib/api/client.js';
   import { authStore } from '$lib/stores/auth.js';
-  import { mute, unmute, block, unblock } from '$lib/api/accounts.js';
+  import { mute, unmute, block, unblock, blockDomain } from '$lib/api/accounts.js';
   import { pinPost, unpinPost } from '$lib/api/statuses.js';
+  import { addToast } from '$lib/stores/toast.js';
+  import { t } from '$lib/stores/i18n.js';
+  import { t as ti } from '$lib/utils/i18n.js';
   import { get } from 'svelte/store';
   import { on } from 'svelte/events';
   import ReactionPicker from './ReactionPicker.svelte';
@@ -225,6 +228,14 @@
   let isRemotePost = $derived(() => {
     const acct = post.account.acct || post.account.handle;
     return acct.includes('@');
+  });
+
+  // The source domain of a remote post's author (user@host → host), used by
+  // the "Block domain" action so a viewer can shut out a whole instance —
+  // most useful for unwanted federated video in Streams/Reels.
+  let postDomain = $derived(() => {
+    const acct = post.account.acct || post.account.handle;
+    return acct.includes('@') ? acct.split('@')[1] || '' : '';
   });
 
   // "Display on original instance" only makes sense for federated
@@ -1124,12 +1135,14 @@
       switch (confirmAction) {
         case 'mute_user':
           await mute(post.account.id);
+          dismissClip();
           break;
         case 'unmute_user':
           await unmute(post.account.id);
           break;
         case 'block_user':
           await block(post.account.id);
+          dismissClip();
           break;
         case 'unblock_user':
           await unblock(post.account.id);
@@ -1137,6 +1150,37 @@
       }
     } catch { /* handle error */ }
     confirmAction = null;
+  }
+
+  // Remove this clip from the feed it lives in right now. Feeds listen for
+  // `post-deleted` and drop the matching row (same convention as delete), so
+  // the offending clip vanishes immediately; the server-side block/mute/domain
+  // filter keeps the rest of that source out of the next page.
+  function dismissClip() {
+    window.dispatchEvent(new CustomEvent('post-deleted', { detail: { id: post.id } }));
+  }
+
+  // "Not interested" — hide just this clip locally, no server call. The durable,
+  // reviewable controls are Block account / Block domain (Settings → Blocked & muted).
+  function handleNotInterested(e: MouseEvent) {
+    e.stopPropagation();
+    showMoreMenu = false;
+    dismissClip();
+    addToast(ti('block.hidden'), 'info');
+  }
+
+  async function handleBlockDomain(e: MouseEvent) {
+    e.stopPropagation();
+    showMoreMenu = false;
+    const domain = postDomain();
+    if (!domain) return;
+    try {
+      await blockDomain(domain);
+      dismissClip();
+      addToast(ti('block.domain_blocked', { domain }), 'success');
+    } catch {
+      addToast(ti('block.domain_error'), 'error');
+    }
   }
 
   let showDeleteConfirm = $state(false);
@@ -1492,6 +1536,16 @@
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleBlockUser}>
             <span class="material-symbols-outlined menu-icon">block</span>
             Block @{post.account.acct || post.account.handle}
+          </button>
+          {#if isRemotePost() && postDomain()}
+            <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleBlockDomain}>
+              <span class="material-symbols-outlined menu-icon">public_off</span>
+              {$t('block.block_domain', { domain: postDomain() })}
+            </button>
+          {/if}
+          <button type="button" class="more-menu-item" role="menuitem" onclick={handleNotInterested}>
+            <span class="material-symbols-outlined menu-icon">visibility_off</span>
+            {$t('block.not_interested')}
           </button>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleReport}>
             <span class="material-symbols-outlined menu-icon">flag</span>

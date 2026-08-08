@@ -283,6 +283,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
       |> maybe_put_streams_sort(params["sort"])
       |> maybe_put_streams_query(params["q"])
       |> maybe_put_streams_orientation(params["orientation"])
+      |> maybe_put_streams_federated(params["include_federated"])
 
     posts = Hybridsocial.Social.Streams.streams_feed(viewer_id, opts)
     serialized = PostSerializer.serialize_many(posts, current_identity_id: viewer_id)
@@ -360,6 +361,13 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
     do: Keyword.put(opts, :sort, sort)
 
   defp maybe_put_public_sort(opts, _), do: opts
+
+  # Per-user opt-in: `include_federated=true` surfaces every public fediverse
+  # video for this viewer. Only the literal "true" opts in.
+  defp maybe_put_streams_federated(opts, "true"),
+    do: Keyword.put(opts, :include_federated, true)
+
+  defp maybe_put_streams_federated(opts, _), do: opts
 
   defp maybe_put_streams_query(opts, q) when is_binary(q) and q != "",
     do: Keyword.put(opts, :q, q)

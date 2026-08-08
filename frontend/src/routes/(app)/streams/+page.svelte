@@ -42,6 +42,22 @@
     }
   }
 
+  // Per-user opt-in: when on, the feed also includes videos from the wider
+  // fediverse (not just local + locally-boosted). Remembered per device and
+  // re-fetches the feed on toggle. Off by default.
+  const FEDERATED_KEY = 'hs-streams-federated';
+  let showFederated = $state(false);
+
+  function toggleFederated() {
+    showFederated = !showFederated;
+    try {
+      localStorage.setItem(FEDERATED_KEY, showFederated ? '1' : '0');
+    } catch {
+      /* storage unavailable — the toggle just won't persist */
+    }
+    loadStreams();
+  }
+
   // Sort + free-text/hashtag filter. `trending` is the server default so it's
   // omitted from the query on the happy path.
   let sort = $state<'trending' | 'newest' | 'oldest'>('trending');
@@ -97,6 +113,7 @@
       // belongs here just as much as a 9:16 one.
       const params: Record<string, string> = { orientation: 'all' };
       if (sort !== 'trending') params.sort = sort;
+      if (showFederated) params.include_federated = 'true';
       const q = search.trim();
       if (q) params.q = q;
       const result = await api.get<any>('/api/v1/timelines/streams', params);
@@ -174,6 +191,7 @@
       const v = localStorage.getItem(AUTOPLAY_KEY);
       if (v !== null) autoplay = v === '1';
       muted = localStorage.getItem(MUTED_KEY) !== '0';
+      showFederated = localStorage.getItem(FEDERATED_KEY) === '1';
     } catch {
       /* ignore */
     }
@@ -256,8 +274,10 @@
             video={v}
             {muted}
             {autoplay}
+            federated={showFederated}
             onmutetoggle={toggleMuted}
             onautoplaytoggle={toggleAutoplay}
+            onfederatedtoggle={toggleFederated}
             onsearch={() => { sortOpen = false; searchOpen = !searchOpen; }}
             onsort={() => { searchOpen = false; sortOpen = !sortOpen; }}
             oncomment={() => openComments(post)}
