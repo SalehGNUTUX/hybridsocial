@@ -69,12 +69,33 @@ defmodule Hybridsocial.Feeds do
     * `:local_only`      - only local posts (default true, reserved for federation)
   """
   def public_timeline(opts \\ []) do
-    local_only = Keyword.get(opts, :local_only, true)
+    # Explore's sort control (and the standalone Trending tab) picks the order
+    # via `:sort` — "trending" | "newest" (default) | "oldest".
+    #
+    # "trending" routes through the shared Trending algorithm (engagement ×
+    # velocity × decay, already viewer block/mute-filtered), the same ranking
+    # Home's "Top" uses — scoped to LOCAL authors when opts carries
+    # `local_only: true` (Explore's Local tab). Otherwise `?sort=trending` was
+    # silently ignored and Explore returned newest-first, never the most-reacted
+    # posts. Bypasses the chronological FeedCache; the controller caches the
+    # serialized page under a sort-specific key.
+    case Keyword.get(opts, :sort) do
+      "trending" ->
+        Hybridsocial.Feeds.Algorithms.Trending.home_feed(Keyword.get(opts, :viewer_id), opts)
 
-    # Only the default (local_only=true) path is cached — the cache
-    # key is a single "feed:public" slot, so mixing in non-local
-    # results would poison the local tab for everyone.
-    if local_only and cacheable?(opts) do
+      _ ->
+        public_timeline_chrono(opts)
+    end
+  end
+
+  defp public_timeline_chrono(opts) do
+    local_only = Keyword.get(opts, :local_only, true)
+    newest? = Keyword.get(opts, :sort) in [nil, "newest"]
+
+    # Only the default (newest + local_only) path is cached — the cache key is a
+    # single "feed:public" slot, so mixing in oldest-first or non-local results
+    # would poison the local tab for everyone.
+    if newest? and local_only and cacheable?(opts) do
       case safe_cache_get(fn -> FeedCache.get_public_timeline() end) do
         nil ->
           result = fetch_public_timeline(opts)
@@ -109,18 +130,30 @@ defmodule Hybridsocial.Feeds do
       |> Visibility.apply_silence_filter()
       |> Visibility.apply_shadow_ban_filter(viewer_id)
       |> maybe_filter_local(local_only)
-      # Order by the thread-bump timestamp (falls back to published_at,
-      # then inserted_at so nothing sorts as NULL and drops off the
-      # end). `id DESC` is the tie-breaker for the many-same-second
-      # case; deterministic + matches cursor semantics.
-      |> order_by([p],
-        desc: coalesce(p.last_activity_at, coalesce(p.published_at, p.inserted_at)),
-        desc: p.id
-      )
+      |> apply_public_order(Keyword.get(opts, :sort))
       |> limit(^limit)
       |> preload([:identity, :quote])
 
     Repo.all(query)
+  end
+
+  # Order by the thread-bump timestamp (falls back to published_at, then
+  # inserted_at so nothing sorts as NULL and drops off the end). `id` is the
+  # tie-breaker for the many-same-second case; deterministic + matches the
+  # keyset cursor (`lookup_activity_cursor`), so ascending "oldest" paginates
+  # accurately via `min_id` just as newest does via `max_id`.
+  defp apply_public_order(query, "oldest") do
+    order_by(query, [p],
+      asc: coalesce(p.last_activity_at, coalesce(p.published_at, p.inserted_at)),
+      asc: p.id
+    )
+  end
+
+  defp apply_public_order(query, _newest) do
+    order_by(query, [p],
+      desc: coalesce(p.last_activity_at, coalesce(p.published_at, p.inserted_at)),
+      desc: p.id
+    )
   end
 
   # Restrict a post query to authors hosted on this instance. Local
@@ -326,6 +359,19 @@ defmodule Hybridsocial.Feeds do
     * `:include_replies` - include replies (default false)
   """
   def global_timeline(opts \\ []) do
+    # Explore's sort control also drives Global: "trending" ranks the whole
+    # fediverse by engagement (the Trending algorithm, unscoped — no
+    # local_only), while "newest"/"oldest" order chronologically.
+    case Keyword.get(opts, :sort) do
+      "trending" ->
+        Hybridsocial.Feeds.Algorithms.Trending.home_feed(Keyword.get(opts, :viewer_id), opts)
+
+      _ ->
+        global_timeline_chrono(opts)
+    end
+  end
+
+  defp global_timeline_chrono(opts) do
     limit = parse_limit(opts)
     include_replies = Keyword.get(opts, :include_replies, false)
     viewer_id = Keyword.get(opts, :viewer_id)
@@ -340,21 +386,23 @@ defmodule Hybridsocial.Feeds do
       |> apply_cursor_filters(opts)
       |> Visibility.apply_silence_filter()
       |> Visibility.apply_shadow_ban_filter(viewer_id)
-      |> order_by([p],
-        # Strict chronological order by *post time*. The previous
-        # ordering coalesced last_activity_at first, which meant any
-        # reply or boost on an old post bumped it ahead of a brand-new
-        # post with zero engagement — fine for a forum thread list,
-        # confusing for a global timeline. Use published_at when set
-        # (so scheduled posts surface at their intended publish time)
-        # and fall back to inserted_at for inbound/legacy rows.
-        desc: coalesce(p.published_at, p.inserted_at),
-        desc: p.id
-      )
+      |> apply_global_order(Keyword.get(opts, :sort))
       |> limit(^limit)
       |> preload([:identity, :quote])
 
     Repo.all(query)
+  end
+
+  # Strict chronological order by *post time*. Deliberately does NOT coalesce
+  # last_activity_at first (a reply/boost shouldn't bump an old post above a
+  # fresh one on a global timeline). published_at when set (scheduled posts
+  # surface at their intended time), else inserted_at for inbound/legacy rows.
+  defp apply_global_order(query, "oldest") do
+    order_by(query, [p], asc: coalesce(p.published_at, p.inserted_at), asc: p.id)
+  end
+
+  defp apply_global_order(query, _newest) do
+    order_by(query, [p], desc: coalesce(p.published_at, p.inserted_at), desc: p.id)
   end
 
   # ---------------------------------------------------------------------------

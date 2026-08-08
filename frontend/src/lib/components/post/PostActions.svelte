@@ -2,8 +2,11 @@
   import type { Post } from '$lib/api/types.js';
   import { api } from '$lib/api/client.js';
   import { authStore } from '$lib/stores/auth.js';
-  import { mute, unmute, block, unblock } from '$lib/api/accounts.js';
+  import { mute, unmute, block, unblock, blockDomain } from '$lib/api/accounts.js';
   import { pinPost, unpinPost } from '$lib/api/statuses.js';
+  import { addToast } from '$lib/stores/toast.js';
+  import { t } from '$lib/stores/i18n.js';
+  import { t as ti } from '$lib/utils/i18n.js';
   import { get } from 'svelte/store';
   import { on } from 'svelte/events';
   import ReactionPicker from './ReactionPicker.svelte';
@@ -227,6 +230,14 @@
     return acct.includes('@');
   });
 
+  // The source domain of a remote post's author (user@host → host), used by
+  // the "Block domain" action so a viewer can shut out a whole instance —
+  // most useful for unwanted federated video in Streams/Reels.
+  let postDomain = $derived(() => {
+    const acct = post.account.acct || post.account.handle;
+    return acct.includes('@') ? acct.split('@')[1] || '' : '';
+  });
+
   // "Display on original instance" only makes sense for federated
   // posts. For those, the origin permalink is `post.uri` (the AP
   // object id, which every major server — Mastodon, Pleroma, Misskey
@@ -242,11 +253,13 @@
   // Confirmation dialog state
   let confirmAction: 'mute_user' | 'unmute_user' | 'block_user' | 'unblock_user' | null = $state(null);
 
-  const confirmMessages: Record<string, { title: string; message: string; button: string }> = {
-    mute_user: { title: 'Mute this user?', message: 'Their posts will be hidden from your feeds. They will not be notified.', button: 'Mute' },
-    unmute_user: { title: 'Unmute this user?', message: 'Their posts will appear in your feeds again.', button: 'Unmute' },
-    block_user: { title: 'Block this user?', message: 'They will not be able to see your posts or interact with you. You can unblock them at any time.', button: 'Block' },
-    unblock_user: { title: 'Unblock this user?', message: 'They will be able to see your posts and interact with you again.', button: 'Unblock' },
+  // Each confirm action maps to a `post_actions.confirm_<key>_{title,message,button}`
+  // trio so the dialog copy re-resolves on locale switch.
+  const confirmKeys: Record<string, string> = {
+    mute_user: 'mute',
+    unmute_user: 'unmute',
+    block_user: 'block',
+    unblock_user: 'unblock',
   };
 
   // Report modal state
@@ -269,12 +282,12 @@
   );
 
   const reportCategories = [
-    { value: 'spam', label: 'Spam' },
-    { value: 'harassment', label: 'Harassment' },
-    { value: 'hate_speech', label: 'Hate speech' },
-    { value: 'illegal', label: 'Illegal content' },
-    { value: 'misinformation', label: 'Misinformation' },
-    { value: 'other', label: 'Other' },
+    { value: 'spam', labelKey: 'post_actions.report_cat_spam' },
+    { value: 'harassment', labelKey: 'post_actions.report_cat_harassment' },
+    { value: 'hate_speech', labelKey: 'post_actions.report_cat_hate_speech' },
+    { value: 'illegal', labelKey: 'post_actions.report_cat_illegal' },
+    { value: 'misinformation', labelKey: 'post_actions.report_cat_misinformation' },
+    { value: 'other', labelKey: 'post_actions.report_cat_other' },
   ];
 
   async function handleReply(e: MouseEvent) {
@@ -380,14 +393,14 @@
   // The default 7 reactions every user can pick. Mirrors the canonical
   // list in ReactionPicker.svelte / reactionEmojis above — keep all
   // three in sync.
-  const defaultRadialReactions: Array<{ type: string; emoji: string; label: string; image?: string | null }> = [
-    { type: 'like', emoji: '\u{1F44D}', label: 'Like' },
-    { type: 'love', emoji: '\u{2764}\u{FE0F}', label: 'Love' },
-    { type: 'wow', emoji: '\u{1F92F}', label: 'Wow' },
-    { type: 'care', emoji: '\u{1F970}', label: 'Care' },
-    { type: 'angry', emoji: '\u{1F621}', label: 'Angry' },
-    { type: 'sad', emoji: '\u{1F622}', label: 'Sad' },
-    { type: 'lol', emoji: '\u{1F602}', label: 'LOL' },
+  const defaultRadialReactions: Array<{ type: string; emoji: string; labelKey: string; image?: string | null }> = [
+    { type: 'like', emoji: '\u{1F44D}', labelKey: 'reactions.like' },
+    { type: 'love', emoji: '\u{2764}\u{FE0F}', labelKey: 'reactions.love' },
+    { type: 'wow', emoji: '\u{1F92F}', labelKey: 'reactions.wow' },
+    { type: 'care', emoji: '\u{1F970}', labelKey: 'reactions.care' },
+    { type: 'angry', emoji: '\u{1F621}', labelKey: 'reactions.angry' },
+    { type: 'sad', emoji: '\u{1F622}', labelKey: 'reactions.sad' },
+    { type: 'lol', emoji: '\u{1F602}', labelKey: 'reactions.lol' },
   ];
 
   // Premium reactions get appended for tiers whose limits include
@@ -397,7 +410,16 @@
   const RADIAL_MAX = 14;
   let isPremiumUser = $derived(!!$currentUser?.limits?.custom_emoji);
   let radialReactions = $derived.by(() => {
-    if (!isPremiumUser) return defaultRadialReactions;
+    // Resolve the default labels through $t here (reactive to locale) so the
+    // tray keeps receiving ready-to-render `label` strings. Premium extras keep
+    // their admin-defined shortcode as the label — not translatable.
+    const defaults = defaultRadialReactions.map((r) => ({
+      type: r.type,
+      emoji: r.emoji,
+      label: $t(r.labelKey),
+      image: r.image ?? null,
+    }));
+    if (!isPremiumUser) return defaults;
     const extras: Array<{ type: string; emoji: string; label: string; image?: string | null }> = [];
     for (const [type, glyph] of $premiumCatalog) {
       extras.push({
@@ -407,7 +429,7 @@
         image: glyph.image_url ?? null,
       });
     }
-    return [...defaultRadialReactions, ...extras].slice(0, RADIAL_MAX);
+    return [...defaults, ...extras].slice(0, RADIAL_MAX);
   });
 
   // Suppress the one click a nonconformant UA may still synthesize
@@ -1018,7 +1040,7 @@
       });
       showReportModal = false;
     } catch {
-      reportError = 'Failed to submit report. Please try again.';
+      reportError = ti('post_actions.report_error');
     } finally {
       reportSubmitting = false;
     }
@@ -1124,12 +1146,14 @@
       switch (confirmAction) {
         case 'mute_user':
           await mute(post.account.id);
+          dismissClip();
           break;
         case 'unmute_user':
           await unmute(post.account.id);
           break;
         case 'block_user':
           await block(post.account.id);
+          dismissClip();
           break;
         case 'unblock_user':
           await unblock(post.account.id);
@@ -1137,6 +1161,37 @@
       }
     } catch { /* handle error */ }
     confirmAction = null;
+  }
+
+  // Remove this clip from the feed it lives in right now. Feeds listen for
+  // `post-deleted` and drop the matching row (same convention as delete), so
+  // the offending clip vanishes immediately; the server-side block/mute/domain
+  // filter keeps the rest of that source out of the next page.
+  function dismissClip() {
+    window.dispatchEvent(new CustomEvent('post-deleted', { detail: { id: post.id } }));
+  }
+
+  // "Not interested" — hide just this clip locally, no server call. The durable,
+  // reviewable controls are Block account / Block domain (Settings → Blocked & muted).
+  function handleNotInterested(e: MouseEvent) {
+    e.stopPropagation();
+    showMoreMenu = false;
+    dismissClip();
+    addToast(ti('block.hidden'), 'info');
+  }
+
+  async function handleBlockDomain(e: MouseEvent) {
+    e.stopPropagation();
+    showMoreMenu = false;
+    const domain = postDomain();
+    if (!domain) return;
+    try {
+      await blockDomain(domain);
+      dismissClip();
+      addToast(ti('block.domain_blocked', { domain }), 'success');
+    } catch {
+      addToast(ti('block.domain_error'), 'error');
+    }
   }
 
   let showDeleteConfirm = $state(false);
@@ -1228,7 +1283,7 @@
   {/if}
 {/snippet}
 
-<div class="post-actions" role="group" aria-label="Post actions">
+<div class="post-actions" role="group" aria-label={$t('post_actions.group_aria')}>
   <div class="post-actions-left">
     <!-- Like / React -->
     <div
@@ -1247,7 +1302,7 @@
         ontouchend={reactionTouchEnd}
         ontouchcancel={reactionTouchCancel}
         oncontextmenu={(e) => e.preventDefault()}
-        aria-label="React (long-press for more)"
+        aria-label={$t('post_actions.react_aria')}
         aria-expanded={showReactionPicker}
       >
         {#if currentReaction}
@@ -1318,11 +1373,11 @@
         type="button"
         class="action-btn action-reply action-reply-locked"
         disabled
-        aria-label="Replies are disabled on this post"
-        title="Replies are disabled on this post"
+        aria-label={$t('post_actions.replies_disabled_aria')}
+        title={$t('post_actions.replies_disabled_aria')}
       >
         <span class="material-symbols-outlined action-icon">speaker_notes_off</span>
-        <span class="action-locked-label">Replies disabled</span>
+        <span class="action-locked-label">{$t('post_actions.replies_disabled')}</span>
       </button>
     {:else}
       <button
@@ -1330,7 +1385,7 @@
         class="action-btn action-reply"
         onclick={handleReply}
         onkeydown={(e) => handleActionKeydown(e, () => handleReply(new MouseEvent('click')))}
-        aria-label="Reply ({replyCount})"
+        aria-label={$t('post_actions.reply_aria', { count: replyCount })}
       >
         <svg
           class="action-icon"
@@ -1359,7 +1414,7 @@
       class="action-btn action-boost"
       class:active-boost={isBoosted}
       onclick={handleBoost}
-      aria-label="{isBoosted ? 'Undo boost' : 'Boost'} ({boostCount})"
+      aria-label="{isBoosted ? $t('post_actions.undo_boost') : $t('post_actions.boost')} ({boostCount})"
       aria-pressed={isBoosted}
     >
       <span class="material-symbols-outlined action-icon">cached</span>
@@ -1377,7 +1432,7 @@
         type="button"
         class="reaction-stack"
         onclick={(e) => { e.stopPropagation(); fetchReactionDetail(); }}
-        aria-label="View reactions"
+        aria-label={$t('post_actions.view_reactions')}
       >
         <span class="reaction-stack-emojis">
           {#each sorted.slice(0, 3) as r, i (r.name)}
@@ -1395,7 +1450,7 @@
       type="button"
       class="action-btn action-options"
       onclick={toggleMoreMenu}
-      aria-label="More options"
+      aria-label={$t('post_actions.more_options')}
       aria-expanded={showMoreMenu}
       aria-haspopup="menu"
     >
@@ -1415,87 +1470,101 @@
         {#if isRemotePost()}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleDisplayOnInstance}>
             <span class="material-symbols-outlined menu-icon">open_in_new</span>
-            Display on original instance
+            {$t('post_actions.display_original')}
           </button>
         {/if}
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleQuote}>
           <span class="material-symbols-outlined menu-icon">format_quote</span>
-          Quote post
+          {$t('post_actions.quote')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShareToGroup}>
           <span class="material-symbols-outlined menu-icon">group_add</span>
-          Share to group
+          {$t('share_group.menu_item')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShare}>
           <span class="material-symbols-outlined menu-icon">share</span>
-          Share
+          {$t('post_actions.share')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleBookmark}>
           <span class="material-symbols-outlined menu-icon">{isBookmarked ? 'bookmark_remove' : 'bookmark'}</span>
-          {isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+          {isBookmarked ? $t('post_actions.remove_bookmark') : $t('post_actions.bookmark')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleMuteNotifications}>
           <span class="material-symbols-outlined menu-icon">{isPostMuted ? 'notifications_active' : 'notifications_off'}</span>
-          {isPostMuted ? 'Unmute notifications' : 'Mute notifications'}
+          {isPostMuted ? $t('post_actions.unmute_notifications') : $t('post_actions.mute_notifications')}
         </button>
         {#if isOwnPost()}
           {#if !isPinned || viewerContext === null || viewerContext === pinScope}
-            {@const pinNoun =
-              pinScope === 'group'
-                ? (post.group?.name ? `from ${post.group.name}` : 'from group')
-                : pinScope === 'page'
-                  ? (post.page?.name ? `from ${post.page.name}` : 'from page')
-                  : 'from profile'}
-            {@const pinNounAdd =
-              pinScope === 'group'
-                ? (post.group?.name ? `in ${post.group.name}` : 'in group')
-                : pinScope === 'page'
-                  ? (post.page?.name ? `on ${post.page.name}` : 'on page')
-                  : 'to profile'}
+            {@const pinName =
+              pinScope === 'group' ? post.group?.name : pinScope === 'page' ? post.page?.name : ''}
             <button type="button" class="more-menu-item" role="menuitem" onclick={handlePinToggle}>
               <span class="material-symbols-outlined menu-icon">{isPinned ? 'keep_off' : 'push_pin'}</span>
-              {isPinned ? `Unpin ${pinNoun}` : `Pin ${pinNounAdd}`}
+              {#if isPinned}
+                {#if pinScope === 'group'}
+                  {pinName ? $t('post_actions.unpin_from', { name: pinName }) : $t('post_actions.unpin_from_group')}
+                {:else if pinScope === 'page'}
+                  {pinName ? $t('post_actions.unpin_from', { name: pinName }) : $t('post_actions.unpin_from_page')}
+                {:else}
+                  {$t('post_actions.unpin_from_profile')}
+                {/if}
+              {:else if pinScope === 'group'}
+                {pinName ? $t('post_actions.pin_in', { name: pinName }) : $t('post_actions.pin_in_group')}
+              {:else if pinScope === 'page'}
+                {pinName ? $t('post_actions.pin_on', { name: pinName }) : $t('post_actions.pin_on_page')}
+              {:else}
+                {$t('post_actions.pin_to_profile')}
+              {/if}
             </button>
           {/if}
           {#if !post.edit_expires_at || new Date(post.edit_expires_at) > new Date()}
             <button type="button" class="more-menu-item" role="menuitem" onclick={handleEdit}>
               <span class="material-symbols-outlined menu-icon">edit</span>
-              Edit
+              {$t('post_actions.edit')}
             </button>
           {/if}
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleDelete}>
             <span class="material-symbols-outlined menu-icon">delete</span>
-            Delete
+            {$t('post_actions.delete')}
           </button>
         {/if}
         {#if post.edited_at}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleViewHistory}>
             <span class="material-symbols-outlined menu-icon">history</span>
-            Edit history
+            {$t('post_actions.edit_history')}
           </button>
         {/if}
         {#if !isOwnPost()}
           <div class="more-menu-divider"></div>
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleMentionUser}>
             <span class="material-symbols-outlined menu-icon">alternate_email</span>
-            Mention @{post.account.acct || post.account.handle}
+            {$t('post_actions.mention', { acct: post.account.acct || post.account.handle })}
           </button>
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleChatWithUser}>
             <span class="material-symbols-outlined menu-icon">chat</span>
-            Chat with @{post.account.acct || post.account.handle}
+            {$t('post_actions.chat', { acct: post.account.acct || post.account.handle })}
           </button>
           <div class="more-menu-divider"></div>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleMuteUser}>
             <span class="material-symbols-outlined menu-icon">volume_off</span>
-            Mute @{post.account.acct || post.account.handle}
+            {$t('post_actions.mute_user', { acct: post.account.acct || post.account.handle })}
           </button>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleBlockUser}>
             <span class="material-symbols-outlined menu-icon">block</span>
-            Block @{post.account.acct || post.account.handle}
+            {$t('post_actions.block_user', { acct: post.account.acct || post.account.handle })}
+          </button>
+          {#if isRemotePost() && postDomain()}
+            <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleBlockDomain}>
+              <span class="material-symbols-outlined menu-icon">public_off</span>
+              {$t('block.block_domain', { domain: postDomain() })}
+            </button>
+          {/if}
+          <button type="button" class="more-menu-item" role="menuitem" onclick={handleNotInterested}>
+            <span class="material-symbols-outlined menu-icon">visibility_off</span>
+            {$t('block.not_interested')}
           </button>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleReport}>
             <span class="material-symbols-outlined menu-icon">flag</span>
-            Report
+            {$t('post_actions.report')}
           </button>
         {/if}
       </div>
@@ -1505,13 +1574,13 @@
 </div>
 
 {#if showDeleteConfirm}
-  <div class="dialog-overlay" onclick={cancelDelete} role="dialog" aria-modal="true" aria-label="Confirm delete">
+  <div class="dialog-overlay" onclick={cancelDelete} role="dialog" aria-modal="true" aria-label={$t('post_actions.delete_confirm_aria')}>
     <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-      <h3 class="dialog-title">Delete post?</h3>
-      <p class="dialog-message">This action cannot be undone. The post will be permanently removed.</p>
+      <h3 class="dialog-title">{$t('post_actions.delete_title')}</h3>
+      <p class="dialog-message">{$t('post_actions.delete_message')}</p>
       <div class="dialog-actions">
-        <button type="button" class="dialog-cancel" onclick={cancelDelete}>Cancel</button>
-        <button type="button" class="dialog-confirm-danger" onclick={confirmDelete}>Delete</button>
+        <button type="button" class="dialog-cancel" onclick={cancelDelete}>{$t('post_actions.cancel')}</button>
+        <button type="button" class="dialog-confirm-danger" onclick={confirmDelete}>{$t('post_actions.delete')}</button>
       </div>
     </div>
   </div>
@@ -1520,36 +1589,36 @@
 <ShareToGroupModal bind:open={showShareToGroup} {post} />
 
 {#if showReportModal}
-  <div class="dialog-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label="Report post">
+  <div class="dialog-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label={$t('post_actions.report_aria')}>
     <div class="dialog-panel report-panel" onclick={(e) => e.stopPropagation()}>
       <button
         type="button"
         class="report-close"
         onclick={cancelReport}
-        aria-label="Close without reporting"
-        title="Close without reporting"
+        aria-label={$t('post_actions.report_close')}
+        title={$t('post_actions.report_close')}
       >
         <span class="material-symbols-outlined">close</span>
       </button>
 
       {#if reportStep === 1}
-        <h3 class="dialog-title">Report post — step 1 of 2</h3>
-        <p class="dialog-message">Why are you reporting this post?</p>
+        <h3 class="dialog-title">{$t('post_actions.report_title_1')}</h3>
+        <p class="dialog-message">{$t('post_actions.report_why')}</p>
 
         <div class="report-form">
-          <label class="report-label" for="report-category">Category</label>
+          <label class="report-label" for="report-category">{$t('post_actions.report_category')}</label>
           <select id="report-category" class="report-select" bind:value={reportCategory}>
             {#each reportCategories as cat (cat.value)}
-              <option value={cat.value}>{cat.label}</option>
+              <option value={cat.value}>{$t(cat.labelKey)}</option>
             {/each}
           </select>
 
-          <label class="report-label" for="report-description">Description <span class="report-optional">(optional)</span></label>
+          <label class="report-label" for="report-description">{$t('post_actions.report_description')} <span class="report-optional">{$t('post_actions.report_optional')}</span></label>
           <textarea
             id="report-description"
             class="report-textarea"
             bind:value={reportDescription}
-            placeholder="Give moderators context — what's wrong with this post, and anything they should know before acting on it."
+            placeholder={$t('post_actions.report_placeholder')}
             rows="4"
           ></textarea>
 
@@ -1559,29 +1628,29 @@
         </div>
 
         <div class="dialog-actions">
-          <button type="button" class="dialog-cancel" onclick={cancelReport}>Cancel</button>
+          <button type="button" class="dialog-cancel" onclick={cancelReport}>{$t('post_actions.cancel')}</button>
           <button type="button" class="dialog-confirm" onclick={reportNext}>
-            Next
+            {$t('post_actions.next')}
           </button>
         </div>
 
       {:else}
-        <h3 class="dialog-title">Report post — step 2 of 2</h3>
+        <h3 class="dialog-title">{$t('post_actions.report_title_2')}</h3>
 
         {#if reportIsRemote}
           <div class="report-remote-notice" role="note">
             <span class="material-symbols-outlined" aria-hidden="true">public</span>
             <div>
-              <strong>This account is hosted at <code>{reportRemoteDomain}</code>.</strong>
-              Our moderators can still act on your report locally (hide the post, block the account here), but the account's home instance has more authority over it.
+              <strong>{$t('post_actions.report_hosted_at')} <code>{reportRemoteDomain}</code>.</strong>
+              {$t('post_actions.report_remote_body')}
             </div>
           </div>
 
           <label class="report-checkbox">
             <input type="checkbox" bind:checked={reportForward} />
             <span>
-              <strong>Send a copy of this report to <code>{reportRemoteDomain}</code>.</strong>
-              <span class="report-hint">Their admins decide what happens to the account on their end.</span>
+              <strong>{$t('post_actions.report_forward_pre')} <code>{reportRemoteDomain}</code>.</strong>
+              <span class="report-hint">{$t('post_actions.report_forward_hint')}</span>
             </span>
           </label>
         {/if}
@@ -1589,8 +1658,8 @@
         <label class="report-checkbox">
           <input type="checkbox" bind:checked={reportBlock} />
           <span>
-            <strong>Block @{(post.account as any)?.acct || post.account?.handle}</strong>
-            <span class="report-hint">You'll stop seeing their posts, and they won't see yours. You can undo this from their profile.</span>
+            <strong>{$t('post_actions.block_user', { acct: (post.account as any)?.acct || post.account?.handle })}</strong>
+            <span class="report-hint">{$t('post_actions.report_block_hint')}</span>
           </span>
         </label>
 
@@ -1599,9 +1668,9 @@
         {/if}
 
         <div class="dialog-actions">
-          <button type="button" class="dialog-cancel" onclick={reportBack} disabled={reportSubmitting}>Back</button>
+          <button type="button" class="dialog-cancel" onclick={reportBack} disabled={reportSubmitting}>{$t('post_actions.back')}</button>
           <button type="button" class="dialog-confirm-danger" onclick={submitReport} disabled={reportSubmitting}>
-            {reportSubmitting ? 'Submitting…' : 'Submit report'}
+            {reportSubmitting ? $t('post_actions.submitting') : $t('post_actions.submit_report')}
           </button>
         </div>
       {/if}
@@ -1610,18 +1679,18 @@
 {/if}
 
 {#if confirmAction}
-  <div class="dialog-overlay" onclick={() => confirmAction = null} role="dialog" aria-modal="true" aria-label={confirmMessages[confirmAction].title}>
+  <div class="dialog-overlay" onclick={() => confirmAction = null} role="dialog" aria-modal="true" aria-label={$t(`post_actions.confirm_${confirmKeys[confirmAction]}_title`)}>
     <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-      <h3 class="dialog-title">{confirmMessages[confirmAction].title}</h3>
-      <p class="dialog-message">{confirmMessages[confirmAction].message}</p>
+      <h3 class="dialog-title">{$t(`post_actions.confirm_${confirmKeys[confirmAction]}_title`)}</h3>
+      <p class="dialog-message">{$t(`post_actions.confirm_${confirmKeys[confirmAction]}_message`)}</p>
       <div class="dialog-actions">
-        <button type="button" class="dialog-cancel" onclick={() => confirmAction = null}>Cancel</button>
+        <button type="button" class="dialog-cancel" onclick={() => confirmAction = null}>{$t('post_actions.cancel')}</button>
         <button
           type="button"
           class={confirmAction === 'block_user' || confirmAction === 'mute_user' ? 'dialog-confirm-danger' : 'dialog-confirm'}
           onclick={executeConfirmedAction}
         >
-          {confirmMessages[confirmAction].button}
+          {$t(`post_actions.confirm_${confirmKeys[confirmAction]}_button`)}
         </button>
       </div>
     </div>
@@ -1629,17 +1698,17 @@
 {/if}
 
 {#if showReactionDetail}
-  <div use:portal class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label="Reactions">
+  <div use:portal class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label={$t('post_actions.reactions_title')}>
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
-        <h3 class="reactions-modal-title">Reactions</h3>
-        <button type="button" class="reactions-modal-close" onclick={() => showReactionDetail = false} aria-label="Close">
+        <h3 class="reactions-modal-title">{$t('post_actions.reactions_title')}</h3>
+        <button type="button" class="reactions-modal-close" onclick={() => showReactionDetail = false} aria-label={$t('post_actions.close')}>
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
 
       {#if reactionDetailLoading}
-        <div class="reactions-modal-loading">Loading...</div>
+        <div class="reactions-modal-loading">{$t('post_actions.loading')}</div>
       {:else}
         <div class="reactions-modal-tabs" role="tablist">
           <button
@@ -1649,7 +1718,7 @@
             class:reactions-tab-active={reactionDetailTab === 'all'}
             onclick={() => reactionDetailTab = 'all'}
           >
-            All
+            {$t('post_actions.reactions_all')}
           </button>
           {#each reactionDetailData as group (group.type)}
             <button
@@ -1695,25 +1764,25 @@
 {/if}
 
 {#if showHistoryModal}
-  <div use:portal class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label="Edit history">
+  <div use:portal class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label={$t('post_actions.edit_history_title')}>
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
-        <h3 class="reactions-modal-title">Edit History</h3>
-        <button type="button" class="reactions-modal-close" onclick={() => showHistoryModal = false} aria-label="Close">
+        <h3 class="reactions-modal-title">{$t('post_actions.edit_history_title')}</h3>
+        <button type="button" class="reactions-modal-close" onclick={() => showHistoryModal = false} aria-label={$t('post_actions.close')}>
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
 
       {#if historyLoading}
-        <div class="reactions-modal-loading">Loading...</div>
+        <div class="reactions-modal-loading">{$t('post_actions.loading')}</div>
       {:else if historyData.length === 0}
-        <div class="reactions-modal-loading">No edit history</div>
+        <div class="reactions-modal-loading">{$t('post_actions.no_history')}</div>
       {:else}
         <div class="history-list">
           {#each historyData as rev (rev.id)}
             <div class="history-item">
               <div class="history-meta">
-                <span class="history-revision">Revision {rev.revision_number}</span>
+                <span class="history-revision">{$t('post_actions.revision', { n: rev.revision_number })}</span>
                 <span class="history-date">{new Date(rev.edited_at).toLocaleString()}</span>
               </div>
               <div class="history-content">

@@ -6,6 +6,8 @@
   import type { Group } from '$lib/api/types.js';
   import { addToast } from '$lib/stores/toast.js';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { t } from '$lib/stores/i18n.js';
+  import { t as ti } from '$lib/utils/i18n.js';
 
   // ── Auto-purge safety settings ──────────────────────────────────────
   // The 60-day permanent-deletion worker is opt-in: it only hard-deletes
@@ -35,7 +37,7 @@
       if (byKey.has('takedown_retention_days')) retentionDays = readInt(byKey.get('takedown_retention_days'), 60);
       if (byKey.has('takedown_reminder_lead_days')) reminderLeadDays = readInt(byKey.get('takedown_reminder_lead_days'), 7);
     } catch {
-      addToast('Failed to load takedown settings', 'error');
+      addToast(ti('admin_takedowns.toast_load_settings_error'), 'error');
     } finally {
       settingsLoading = false;
     }
@@ -50,9 +52,9 @@
         { key: 'takedown_retention_days', value: Math.max(1, Math.round(retentionDays)) },
         { key: 'takedown_reminder_lead_days', value: Math.max(0, Math.round(reminderLeadDays)) },
       ]);
-      addToast('Takedown settings saved', 'success');
+      addToast(ti('admin_takedowns.toast_saved'), 'success');
     } catch {
-      addToast('Failed to save settings', 'error');
+      addToast(ti('admin_takedowns.toast_save_error'), 'error');
     } finally {
       savingSettings = false;
     }
@@ -71,14 +73,14 @@
     try {
       deletedGroups = await listDeletedGroups();
     } catch {
-      addToast('Failed to load deleted groups', 'error');
+      addToast(ti('admin_takedowns.toast_load_groups_error'), 'error');
     } finally {
       groupsLoading = false;
     }
     try {
       deletedPages = await listDeletedPages();
     } catch {
-      addToast('Failed to load deleted pages', 'error');
+      addToast(ti('admin_takedowns.toast_load_pages_error'), 'error');
     } finally {
       pagesLoading = false;
     }
@@ -90,9 +92,9 @@
     try {
       await restoreGroup(g.id);
       deletedGroups = deletedGroups.filter((x) => x.id !== g.id);
-      addToast('Group restored', 'success');
+      addToast(ti('admin_takedowns.toast_group_restored'), 'success');
     } catch {
-      addToast('Could not restore group', 'error');
+      addToast(ti('admin_takedowns.toast_group_restore_error'), 'error');
     } finally {
       restoringId = null;
     }
@@ -104,16 +106,16 @@
     try {
       await restorePage(p.id);
       deletedPages = deletedPages.filter((x) => x.id !== p.id);
-      addToast('Page restored', 'success');
+      addToast(ti('admin_takedowns.toast_page_restored'), 'success');
     } catch {
-      addToast('Could not restore page', 'error');
+      addToast(ti('admin_takedowns.toast_page_restore_error'), 'error');
     } finally {
       restoringId = null;
     }
   }
 
   function pageName(p: { display_name?: string; handle?: string }): string {
-    return p.display_name || p.handle || 'Untitled page';
+    return p.display_name || p.handle || ti('admin_takedowns.untitled_page');
   }
 
   onMount(() => {
@@ -124,56 +126,48 @@
 
 <div class="tk-page">
   <header class="tk-header">
-    <h1 class="tk-title">Takedowns</h1>
-    <p class="tk-lead">
-      When staff remove a group or page, the owner is notified and can appeal. Restore appealed
-      or mistaken removals here, and control whether un-appealed takedowns are ever permanently
-      deleted.
-    </p>
+    <h1 class="tk-title">{$t('admin_takedowns.title')}</h1>
+    <p class="tk-lead">{$t('admin_takedowns.lead')}</p>
   </header>
 
   <!-- Auto-purge safety controls -->
   <section class="tk-card">
-    <h2 class="tk-card-title">Automatic permanent deletion</h2>
+    <h2 class="tk-card-title">{$t('admin_takedowns.auto_delete_title')}</h2>
     {#if settingsLoading}
       <div class="tk-center"><Spinner /></div>
     {:else}
       <label class="tk-toggle">
         <input type="checkbox" bind:checked={purgeEnabled} />
         <span>
-          <strong>Permanently delete un-appealed takedowns</strong>
+          <strong>{$t('admin_takedowns.toggle_label')}</strong>
           <span class="tk-toggle-hint">
-            When on, content still under a takedown past its window is <em>irreversibly</em> deleted
-            by the hourly worker. When off (the default), nothing is ever auto-deleted — owners
-            keep the ability to appeal indefinitely.
+            {$t('admin_takedowns.toggle_hint_pre')} <em>{$t('admin_takedowns.toggle_hint_em')}</em> {$t('admin_takedowns.toggle_hint_post')}
           </span>
         </span>
       </label>
 
       {#if purgeEnabled}
         <p class="tk-warning" role="alert">
-          ⚠ Irreversible. Once enabled, groups and pages whose owners never appealed within the
-          retention window are permanently removed — their posts and memberships cannot be
-          recovered.
+          ⚠ {$t('admin_takedowns.warning')}
         </p>
       {/if}
 
       <div class="tk-fields">
         <label class="tk-field">
-          <span>Retention window (days)</span>
+          <span>{$t('admin_takedowns.retention_label')}</span>
           <input type="number" min="1" bind:value={retentionDays} />
-          <span class="tk-field-hint">Days an owner has to appeal before a takedown can be purged.</span>
+          <span class="tk-field-hint">{$t('admin_takedowns.retention_hint')}</span>
         </label>
         <label class="tk-field">
-          <span>Reminder lead time (days)</span>
+          <span>{$t('admin_takedowns.reminder_label')}</span>
           <input type="number" min="0" bind:value={reminderLeadDays} />
-          <span class="tk-field-hint">Send the owner a “final reminder” this many days before deletion.</span>
+          <span class="tk-field-hint">{$t('admin_takedowns.reminder_hint')}</span>
         </label>
       </div>
 
       <div class="tk-actions">
         <button type="button" class="btn btn-primary" onclick={saveSettings} disabled={savingSettings}>
-          {savingSettings ? 'Saving…' : 'Save settings'}
+          {savingSettings ? $t('admin_takedowns.saving') : $t('admin_takedowns.save')}
         </button>
       </div>
     {/if}
@@ -181,11 +175,11 @@
 
   <!-- Deleted groups -->
   <section class="tk-card">
-    <h2 class="tk-card-title">Deleted groups</h2>
+    <h2 class="tk-card-title">{$t('admin_takedowns.deleted_groups')}</h2>
     {#if groupsLoading}
       <div class="tk-center"><Spinner /></div>
     {:else if deletedGroups.length === 0}
-      <p class="tk-empty">No deleted groups.</p>
+      <p class="tk-empty">{$t('admin_takedowns.no_deleted_groups')}</p>
     {:else}
       <ul class="tk-list">
         {#each deletedGroups as g (g.id)}
@@ -197,7 +191,7 @@
               onclick={() => handleRestoreGroup(g)}
               disabled={restoringId === g.id}
             >
-              {restoringId === g.id ? 'Restoring…' : 'Restore'}
+              {restoringId === g.id ? $t('admin_takedowns.restoring') : $t('admin_takedowns.restore')}
             </button>
           </li>
         {/each}
@@ -207,11 +201,11 @@
 
   <!-- Deleted pages -->
   <section class="tk-card">
-    <h2 class="tk-card-title">Deleted pages</h2>
+    <h2 class="tk-card-title">{$t('admin_takedowns.deleted_pages')}</h2>
     {#if pagesLoading}
       <div class="tk-center"><Spinner /></div>
     {:else if deletedPages.length === 0}
-      <p class="tk-empty">No deleted pages.</p>
+      <p class="tk-empty">{$t('admin_takedowns.no_deleted_pages')}</p>
     {:else}
       <ul class="tk-list">
         {#each deletedPages as p (p.id)}
@@ -223,7 +217,7 @@
               onclick={() => handleRestorePage(p)}
               disabled={restoringId === p.id}
             >
-              {restoringId === p.id ? 'Restoring…' : 'Restore'}
+              {restoringId === p.id ? $t('admin_takedowns.restoring') : $t('admin_takedowns.restore')}
             </button>
           </li>
         {/each}
@@ -232,8 +226,7 @@
   </section>
 
   <p class="tk-footnote">
-    Reviewing an owner's appeal? Approving it on the <a href="/admin/user-management/appeals">Appeals</a>
-    page restores the content automatically.
+    {$t('admin_takedowns.footnote_pre')} <a href="/admin/user-management/appeals">{$t('admin_takedowns.footnote_link')}</a> {$t('admin_takedowns.footnote_post')}
   </p>
 </div>
 

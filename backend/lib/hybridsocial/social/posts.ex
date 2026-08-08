@@ -60,7 +60,10 @@ defmodule Hybridsocial.Social.Posts do
          :ok <- check_thread_not_locked(post_attrs),
          :ok <- check_audio_allowed(attrs, limits),
          :ok <- check_target_media(post_attrs) do
-      insert_post(changeset, attrs)
+      # Media is always uploaded under the human's identity, even when the post
+      # is authored *as a page* (post.identity_id = page_id). Attach against the
+      # uploader, not the post author, or a page post silently drops its media.
+      insert_post(changeset, attrs, uploader_id(identity, identity_id))
     end
   end
 
@@ -205,7 +208,13 @@ defmodule Hybridsocial.Social.Posts do
     end
   end
 
-  defp insert_post(changeset, attrs) do
+  # The human who uploaded the media and is authoring/editing the post. When a
+  # post is authored *as a page* the scope id is the page, but media always
+  # lives under the acting human's identity — see `attach_media/3`.
+  defp uploader_id(nil, identity_id), do: identity_id
+  defp uploader_id(identity, _identity_id), do: identity.id
+
+  defp insert_post(changeset, attrs, uploader_id) do
     case Repo.insert(changeset) do
       {:ok, post} ->
         if post.content, do: extract_and_link_hashtags(post)
@@ -215,7 +224,11 @@ defmodule Hybridsocial.Social.Posts do
           Polls.create_poll(post.id, poll_attrs)
         end
 
-        attach_media(post, Map.get(attrs, "media_ids") || Map.get(attrs, :media_ids) || [])
+        attach_media(
+          post,
+          Map.get(attrs, "media_ids") || Map.get(attrs, :media_ids) || [],
+          uploader_id
+        )
 
         # Record mentions so direct-visibility posts surface in the
         # Direct tab for recipients (not just the author) and so
@@ -494,16 +507,18 @@ defmodule Hybridsocial.Social.Posts do
   # Attaches the listed media files to the post. Only media owned by the post's
   # author and not already attached to another post are linked; anything else
   # is silently skipped so a bad media_id can't fail a post insert.
-  defp attach_media(_post, []), do: :ok
-  defp attach_media(_post, nil), do: :ok
+  defp attach_media(_post, [], _uploader_id), do: :ok
+  defp attach_media(_post, nil, _uploader_id), do: :ok
 
-  defp attach_media(%Post{id: post_id, identity_id: owner_id}, media_ids)
+  # `uploader_id` is the human who uploaded the media (and is authoring the
+  # post) — NOT post.identity_id, which is the page when posting as a page.
+  defp attach_media(%Post{id: post_id}, media_ids, uploader_id)
        when is_list(media_ids) do
     query =
       from m in Hybridsocial.Media.MediaFile,
         where:
           m.id in ^media_ids and
-            m.identity_id == ^owner_id and
+            m.identity_id == ^uploader_id and
             is_nil(m.deleted_at) and
             is_nil(m.post_id)
 
@@ -520,7 +535,7 @@ defmodule Hybridsocial.Social.Posts do
   #   attached to a different post gets attached to this one.
   # The order matters: detach first so a media row that's both
   # "kept" and would re-attach doesn't land in the wrong post_id.
-  defp reconcile_media(%Post{id: post_id, identity_id: owner_id}, desired_ids)
+  defp reconcile_media(%Post{id: post_id}, desired_ids, uploader_id)
        when is_list(desired_ids) do
     now = DateTime.utc_now()
 
@@ -544,7 +559,7 @@ defmodule Hybridsocial.Social.Posts do
     end
 
     if to_add != [] do
-      attach_media(%Post{id: post_id, identity_id: owner_id}, to_add)
+      attach_media(%Post{id: post_id}, to_add, uploader_id)
     end
 
     :ok
@@ -661,7 +676,9 @@ defmodule Hybridsocial.Social.Posts do
           # accidentally detach attachments.
           case media_ids_from_attrs(attrs) do
             [] -> :ok
-            ids -> reconcile_media(post, ids)
+            # Match media by the human editor (who uploaded it), not the post's
+            # identity, so editing a page post's media works (page_id != human).
+            ids -> reconcile_media(post, ids, uploader_id(identity, identity_id))
           end
 
           # Mentions can change between versions. For a direct post

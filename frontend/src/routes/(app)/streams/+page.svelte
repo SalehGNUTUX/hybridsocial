@@ -42,9 +42,29 @@
     }
   }
 
+  // Per-user opt-in: when on, the feed also includes videos from the wider
+  // fediverse (not just local + locally-boosted). Remembered per device and
+  // re-fetches the feed on toggle. Off by default.
+  const FEDERATED_KEY = 'hs-streams-federated';
+  let showFederated = $state(false);
+
+  function toggleFederated() {
+    showFederated = !showFederated;
+    try {
+      localStorage.setItem(FEDERATED_KEY, showFederated ? '1' : '0');
+    } catch {
+      /* storage unavailable — the toggle just won't persist */
+    }
+    loadStreams();
+  }
+
   // Sort + free-text/hashtag filter. `trending` is the server default so it's
-  // omitted from the query on the happy path.
-  let sort = $state<'trending' | 'newest' | 'oldest'>('trending');
+  // omitted from the query on the happy path. The choice is remembered per
+  // device — the page component remounts on every navigation, so without this
+  // the sort snaps back to trending each visit.
+  const SORT_KEY = 'hs-streams-sort';
+  const SORT_VALUES = ['trending', 'newest', 'oldest'] as const;
+  let sort = $state<(typeof SORT_VALUES)[number]>('trending');
   let search = $state('');
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   // The immersive layout keeps the clip full-bleed; search + sort open as
@@ -52,7 +72,7 @@
   let searchOpen = $state(false);
   let sortOpen = $state(false);
 
-  const SORTS: { value: 'trending' | 'newest' | 'oldest'; label: string }[] = [
+  const SORTS: { value: (typeof SORT_VALUES)[number]; label: string }[] = [
     { value: 'trending', label: 'Trending' },
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
@@ -97,6 +117,7 @@
       // belongs here just as much as a 9:16 one.
       const params: Record<string, string> = { orientation: 'all' };
       if (sort !== 'trending') params.sort = sort;
+      if (showFederated) params.include_federated = 'true';
       const q = search.trim();
       if (q) params.q = q;
       const result = await api.get<any>('/api/v1/timelines/streams', params);
@@ -109,9 +130,14 @@
     }
   }
 
-  function changeSort(next: 'trending' | 'newest' | 'oldest') {
+  function changeSort(next: (typeof SORT_VALUES)[number]) {
     if (sort === next) return;
     sort = next;
+    try {
+      localStorage.setItem(SORT_KEY, next);
+    } catch {
+      /* storage unavailable — the choice just won't persist */
+    }
     loadStreams();
   }
 
@@ -174,6 +200,11 @@
       const v = localStorage.getItem(AUTOPLAY_KEY);
       if (v !== null) autoplay = v === '1';
       muted = localStorage.getItem(MUTED_KEY) !== '0';
+      showFederated = localStorage.getItem(FEDERATED_KEY) === '1';
+      const savedSort = localStorage.getItem(SORT_KEY);
+      if (savedSort && (SORT_VALUES as readonly string[]).includes(savedSort)) {
+        sort = savedSort as (typeof SORT_VALUES)[number];
+      }
     } catch {
       /* ignore */
     }
@@ -256,8 +287,10 @@
             video={v}
             {muted}
             {autoplay}
+            federated={showFederated}
             onmutetoggle={toggleMuted}
             onautoplaytoggle={toggleAutoplay}
+            onfederatedtoggle={toggleFederated}
             onsearch={() => { sortOpen = false; searchOpen = !searchOpen; }}
             onsort={() => { searchOpen = false; sortOpen = !sortOpen; }}
             oncomment={() => openComments(post)}

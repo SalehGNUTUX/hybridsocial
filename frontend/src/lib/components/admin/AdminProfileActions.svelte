@@ -17,6 +17,8 @@
   } from '$lib/api/admin.js';
   import { deleteGroup } from '$lib/api/groups.js';
   import { deletePage } from '$lib/api/pages.js';
+  import { t } from '$lib/stores/i18n.js';
+  import { t as ti } from '$lib/utils/i18n.js';
 
   // The component only needs the identity row's id + handle. Accept
   // a loose shape so the same panel can target a user, a page (which
@@ -42,6 +44,12 @@
   let takedownReason = $state('');
   const TAKEDOWN_MIN_REASON = 10;
 
+  // Localized noun for the target kind ("group"/"page"), reused across the
+  // trigger, dialog copy and error so they stay in sync on locale switch.
+  let takedownKind = $derived(
+    entity ? $t(entity.kind === 'group' ? 'takedown_dialog.kind_group' : 'takedown_dialog.kind_page') : '',
+  );
+
   function openTakedownDialog() {
     clearMessages();
     takedownReason = '';
@@ -63,7 +71,9 @@
       showTakedownDialog = false;
       ondeleted?.();
     } catch {
-      actionError = `Failed to take down this ${entity.kind}.`;
+      actionError = ti('takedown_dialog.err_failed', {
+        kind: ti(entity.kind === 'group' ? 'takedown_dialog.kind_group' : 'takedown_dialog.kind_page'),
+      });
     } finally {
       actionLoading = false;
     }
@@ -430,7 +440,7 @@
               onclick={openTakedownDialog}
               disabled={actionLoading}
             >
-              Take down {entity.kind}
+              {$t('takedown_dialog.button', { kind: takedownKind })}
             </button>
           {/if}
 
@@ -615,34 +625,33 @@
 
 <!-- Takedown dialog (group / page) -->
 {#if showTakedownDialog && entity}
-  <div class="admin-overlay" onclick={() => { showTakedownDialog = false; }} role="dialog" aria-modal="true" aria-label="Take down">
+  <div class="admin-overlay" onclick={() => { showTakedownDialog = false; }} role="dialog" aria-modal="true" aria-label={$t('takedown_dialog.aria')}>
     <div class="admin-dialog" onclick={(e) => e.stopPropagation()}>
-      <h3 class="admin-dialog-title">Take down {entity.name}</h3>
+      <h3 class="admin-dialog-title">{$t('takedown_dialog.title', { name: entity.name })}</h3>
       <p class="admin-dialog-message">
-        This removes the {entity.kind}. Its owner is notified with the reason below and can appeal
-        for restoration before it is permanently deleted.
+        {$t('takedown_dialog.message', { kind: takedownKind })}
       </p>
 
       <div class="admin-dialog-form">
-        <label class="admin-dialog-label" for="takedown-reason">Reason for the owner (required)</label>
+        <label class="admin-dialog-label" for="takedown-reason">{$t('takedown_dialog.reason_label')}</label>
         <textarea
           id="takedown-reason"
           class="admin-dialog-textarea"
           bind:value={takedownReason}
-          placeholder={`Explain why this ${entity.kind} is being removed…`}
+          placeholder={$t('takedown_dialog.placeholder', { kind: takedownKind })}
           rows="3"
         ></textarea>
       </div>
 
       <div class="admin-dialog-actions">
-        <button type="button" class="admin-dialog-cancel" onclick={() => { showTakedownDialog = false; }}>Cancel</button>
+        <button type="button" class="admin-dialog-cancel" onclick={() => { showTakedownDialog = false; }}>{$t('common.cancel')}</button>
         <button
           type="button"
           class="admin-dialog-confirm-danger"
           onclick={confirmTakedown}
           disabled={actionLoading || takedownReason.trim().length < TAKEDOWN_MIN_REASON}
         >
-          {actionLoading ? 'Processing...' : `Take down ${entity.kind}`}
+          {actionLoading ? $t('takedown_dialog.processing') : $t('takedown_dialog.button', { kind: takedownKind })}
         </button>
       </div>
     </div>
