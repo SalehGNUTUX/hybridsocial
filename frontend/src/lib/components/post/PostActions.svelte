@@ -128,7 +128,7 @@
   // above to fit the 2-row picker.
   let reactionTriggerEl: HTMLButtonElement | undefined = $state();
   let reactionPickerBelow = $state(false);
-  // The hover picker is portaled to <body> (so the Reels frame's overflow
+  // The hover picker is portaled to <body> (so the Streams frame's overflow
   // doesn't clip it — the same trap #136/#152 fixed); position:fixed inline
   // style anchors it to the trigger's viewport rect, centered, above or below.
   let reactionPickerStyle = $state('');
@@ -155,7 +155,7 @@
   let showReactionDetail = $state(false);
 
   // Move an overlay to <body> so `position: fixed` is relative to the
-  // viewport, not a transformed ancestor. In Reels the reel frame is
+  // viewport, not a transformed ancestor. In Streams the clip frame is
   // transformed (and clips overflow), which otherwise trapped this modal
   // inside the clip — you couldn't see or scroll the full reactor list.
   function portal(node: HTMLElement) {
@@ -687,7 +687,7 @@
   // toggle so the cap reflects the actual trigger position.
   let menuMaxHeight = $state<string>('');
   // Fixed-position anchor for the menu. It's portaled to <body> so it escapes
-  // any clipping ancestor (e.g. the Reels player's overflow-hidden frame and
+  // any clipping ancestor (e.g. the Streams player's overflow-hidden frame and
   // its overflow-x:auto action pill, which otherwise clipped it to nothing).
   // Computed from the trigger's viewport rect when the menu opens.
   let menuFixedStyle = $state('');
@@ -2261,11 +2261,11 @@
   .picker-anchor {
     /* Portaled to <body> and anchored via inline left + top/bottom (computed
        from the trigger rect, flipping below when there's no room above) so it
-       escapes the Reels frame's overflow clip — the same trap #136/#152 fixed.
+       escapes the Streams frame's overflow clip — the same trap #136/#152 fixed.
        Centered on the trigger via the transform. */
     position: fixed;
     transform: translateX(-50%);
-    /* At <body> level, clear the tab bar and reel overlays; under modals. */
+    /* At <body> level, clear the tab bar and clip overlays; under modals. */
     z-index: 1000;
   }
 
@@ -2277,7 +2277,7 @@
   .more-menu {
     /* Portaled to <body> and anchored via inline top/bottom/right (computed
        from the trigger) so it escapes any clipping/transformed ancestor —
-       e.g. the Reels player's overflow-hidden frame and overflow-x action pill. */
+       e.g. the Streams player's overflow-hidden frame and overflow-x action pill. */
     position: fixed;
     min-width: 200px;
     background: var(--color-surface-container-lowest);
@@ -2285,7 +2285,7 @@
     border-radius: 14px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
     padding: 6px;
-    /* At <body> level it must clear the BottomTabs bar and reel overlays;
+    /* At <body> level it must clear the BottomTabs bar and clip overlays;
        still below full-screen modals (9999). */
     z-index: 1000;
     overflow-y: auto;

@@ -37,7 +37,7 @@
 - **Full-text search** (PostgreSQL + OpenSearch dual backend)
 - **Trending** posts and hashtags with manipulation resistance
 - **Algorithmic feed** ("For You") alongside chronological
-- **Video Streams** — reels-like vertical video feed
+- **Video Streams** — short-form video clip feed
 - **Hashtag** timelines and exploration
 
 ### Security

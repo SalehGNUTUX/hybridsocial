@@ -2,13 +2,13 @@ defmodule Hybridsocial.Media.DimensionBackfill do
   @moduledoc """
   One-off backfill for video media that predate dimension capture.
 
-  The streams (reels) feed only surfaces videos whose width/height are
-  known (it must prove a clip is vertical). Videos uploaded before the
-  pipeline recorded dimensions have NULL width/height and are therefore
-  invisible in streams. This probes each such video's header (cheap:
-  dimensions + header duration, no full-file packet scan) and fills in
-  the media record so the live streams query can include the eligible
-  (public, local, vertical, long-enough) ones.
+  Videos uploaded before the pipeline recorded dimensions have NULL
+  width/height. The streams feed still shows them, but without dimensions
+  the player can't tell a vertical clip from a horizontal one and has to
+  letterbox every such clip; the `orientation=portrait` filter can't see
+  them at all. This probes each video's header (cheap: dimensions +
+  header duration, no full-file packet scan) and fills in the media
+  record.
 
   Idempotent + resumable: only selects rows still missing dimensions, so
   re-running continues where a prior run left off.

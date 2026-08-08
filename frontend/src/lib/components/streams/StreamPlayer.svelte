@@ -17,7 +17,7 @@
   }: {
     post: Post;
     video: MediaAttachment;
-    /** Global, shared across every reel (see the page). */
+    /** Global, shared across every clip (see the page). */
     muted: boolean;
     autoplay: boolean;
     onmutetoggle: () => void;
@@ -40,12 +40,23 @@
   let playing = $state(false);
   let duration = $state(0);
   let currentTime = $state(0);
-  // Caption is hidden by default — a reel is a video-first surface. The toggle
-  // lives in the action row so the content never covers the clip uninvited.
+  // Caption is hidden by default — a stream is a video-first surface. The
+  // toggle lives in the action row so the content never covers the clip
+  // uninvited.
   let captionOpen = $state(false);
   // A brief center play/pause glyph that flashes on tap, then fades.
   let tapGlyph = $state<'play' | 'pause' | null>(null);
   let tapGlyphTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // The feed carries clips of every orientation, but the frame stays a fixed
+  // 9:16 so the overlays anchor identically on every card. Only a clip we know
+  // to be vertical is cropped edge-to-edge (`cover`); anything horizontal,
+  // square, or of unknown dimensions is letterboxed (`contain`) so a 640x360
+  // upload isn't sliced down to a vertical sliver.
+  let portrait = $derived.by(() => {
+    const o = (video.meta?.original ?? {}) as { width?: number; height?: number };
+    return Boolean(o.width && o.height && o.height > o.width);
+  });
 
   // Keep the element's muted flag in sync with the shared state so a global
   // toggle reaches this clip even while it's mid-play.
@@ -59,7 +70,7 @@
   let lastRatio = $state(0);
 
   // React to the autoplay toggle on the already-mounted clip: turning it off
-  // pauses a playing reel; turning it on starts the one currently in view.
+  // pauses a playing clip; turning it on starts the one currently in view.
   $effect(() => {
     if (!videoEl) return;
     if (!autoplay) {
@@ -97,8 +108,8 @@
   function onTimeUpdate() {
     if (!videoEl || scrubbing) return;
     currentTime = videoEl.currentTime;
-    // Fire the impression only once we have a real duration (the backend
-    // rejects total_duration <= 0), matching the Streams guard.
+    // Fire the impression only once we have a real duration — the backend
+    // rejects total_duration <= 0.
     if (!impressionSent && Number.isFinite(videoEl.duration) && videoEl.duration > 0) {
       impressionSent = true;
       onview(0, videoEl.duration, false, false);
@@ -141,7 +152,7 @@
   }
 
   // --- Autoplay / pause on scroll, lazy metadata --------------------------
-  function reelObserver(node: HTMLVideoElement) {
+  function streamObserver(node: HTMLVideoElement) {
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -228,16 +239,16 @@
   }
 </script>
 
-<section class="reel">
- <!-- The frame is sized to the actual clip (9:16); every overlay anchors to
-      it, not to the full-width section — so the ring sits on the clip's
-      corner and the action bar matches the clip width on every screen. -->
- <div class="reel-frame">
+<section class="stream">
+ <!-- The frame is a fixed 9:16 box; every overlay anchors to it, not to the
+      full-width section — so the ring sits on the clip's corner and the action
+      bar matches the clip width on every screen. -->
+ <div class="stream-frame">
   <!-- Tapping the video area toggles play/pause. Overlays above stop their
        own taps from reaching it. -->
   <button
     type="button"
-    class="reel-stage"
+    class="stream-stage"
     aria-label={playing ? 'Pause' : 'Play'}
     onclick={togglePlay}
   >
@@ -247,9 +258,10 @@
       poster={videoPoster(video)}
       playsinline
       preload="none"
-      class="reel-video"
-      aria-label={video.description || 'Reel'}
-      use:reelObserver
+      class="stream-video"
+      class:letterboxed={!portrait}
+      aria-label={video.description || 'Video clip'}
+      use:streamObserver
       onloadedmetadata={onLoadedMetadata}
       ontimeupdate={onTimeUpdate}
       onplay={onPlayEvt}
@@ -271,10 +283,10 @@
   {/if}
 
   <!-- Feed controls overlaid on the clip, top-right: autoplay, search, sort. -->
-  <div class="reel-topbar">
+  <div class="stream-topbar">
     <button
       type="button"
-      class="reel-icon-btn"
+      class="stream-icon-btn"
       class:on={autoplay}
       aria-pressed={autoplay}
       aria-label={autoplay ? 'Autoplay on' : 'Autoplay off'}
@@ -284,16 +296,16 @@
     </button>
     <button
       type="button"
-      class="reel-icon-btn"
-      aria-label="Search reels"
+      class="stream-icon-btn"
+      aria-label="Search streams"
       onclick={(e) => { e.stopPropagation(); onsearch(); }}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
     </button>
     <button
       type="button"
-      class="reel-icon-btn"
-      aria-label="Sort reels"
+      class="stream-icon-btn"
+      aria-label="Sort streams"
       onclick={(e) => { e.stopPropagation(); onsort(); }}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M6 12h12M10 18h4" /></svg>
@@ -301,10 +313,10 @@
   </div>
 
   <!-- Mute button + circular scrubber, top-left. -->
-  <div class="reel-ring-wrap">
+  <div class="stream-ring-wrap">
     <svg
       bind:this={ringEl}
-      class="reel-ring"
+      class="stream-ring"
       class:scrubbing
       width={RING}
       height={RING}
@@ -335,7 +347,7 @@
     </svg>
     <button
       type="button"
-      class="reel-mute"
+      class="stream-mute"
       aria-label={muted ? 'Unmute' : 'Mute'}
       onclick={(e) => {
         e.stopPropagation();
@@ -349,22 +361,22 @@
       {/if}
     </button>
     {#if showTime}
-      <span class="reel-time" aria-hidden="true">{fmt(currentTime)} / {fmt(duration)}</span>
+      <span class="stream-time" aria-hidden="true">{fmt(currentTime)} / {fmt(duration)}</span>
     {/if}
   </div>
 
   <!-- Author, optional caption, and the action bar over a legibility scrim. -->
-  <div class="reel-overlay">
-    <a href="/@{post.account.handle}" class="reel-author">
+  <div class="stream-overlay">
+    <a href="/@{post.account.handle}" class="stream-author">
       <Avatar src={post.account.avatar_url} name={post.account.display_name || post.account.handle} size="sm" />
-      <span class="reel-author-name">{post.account.display_name || post.account.handle}</span>
+      <span class="stream-author-name">{post.account.display_name || post.account.handle}</span>
     </a>
 
     {#if captionOpen && post.content}
-      <p class="reel-caption" dir="auto">{post.content}</p>
+      <p class="stream-caption" dir="auto">{post.content}</p>
     {/if}
 
-    <div class="reel-actions">
+    <div class="stream-actions">
       <PostActions {post} {oncomment} />
       {#if post.content}
         <button
@@ -386,7 +398,7 @@
 </section>
 
 <style>
-  .reel {
+  .stream {
     position: relative;
     flex: 0 0 100%;
     height: 100%;
@@ -396,10 +408,10 @@
     justify-content: center;
   }
 
-  /* The actual clip box (9:16). Every overlay is positioned relative to THIS,
-     not the full-width .reel section, so controls anchor to the clip on every
-     screen. overflow:hidden clips overlays to the rounded corners. */
-  .reel-frame {
+  /* The clip box (9:16). Every overlay is positioned relative to THIS, not the
+     full-width .stream section, so controls anchor to the clip on every screen.
+     overflow:hidden clips overlays to the rounded corners. */
+  .stream-frame {
     position: relative;
     height: 100%;
     max-height: 100%;
@@ -411,7 +423,7 @@
   }
 
   /* The tap surface fills the frame; it carries no visual style of its own. */
-  .reel-stage {
+  .stream-stage {
     position: absolute;
     inset: 0;
     display: flex;
@@ -423,15 +435,21 @@
     cursor: pointer;
   }
 
-  .reel-video {
+  .stream-video {
     width: 100%;
     height: 100%;
     object-fit: cover;
     background: #000;
   }
 
+  /* Horizontal, square, or unknown-dimension clips fit inside the frame
+     instead of being cropped to it. */
+  .stream-video.letterboxed {
+    object-fit: contain;
+  }
+
   /* Feed controls overlaid on the clip's top-right (autoplay / search / sort). */
-  .reel-topbar {
+  .stream-topbar {
     position: absolute;
     inset-block-start: var(--space-3);
     inset-inline-end: var(--space-3);
@@ -440,7 +458,7 @@
     z-index: 2;
   }
 
-  .reel-icon-btn {
+  .stream-icon-btn {
     display: grid;
     place-items: center;
     width: 36px;
@@ -456,11 +474,11 @@
     transition: background 150ms ease, color 150ms ease;
   }
 
-  .reel-icon-btn:hover {
+  .stream-icon-btn:hover {
     background: rgba(0, 0, 0, 0.65);
   }
 
-  .reel-icon-btn.on {
+  .stream-icon-btn.on {
     background: var(--color-primary, #6c3edd);
   }
 
@@ -486,7 +504,7 @@
   }
 
   /* --- Top-left mute + scrubber ring --- */
-  .reel-ring-wrap {
+  .stream-ring-wrap {
     position: absolute;
     inset-block-start: var(--space-3);
     inset-inline-start: var(--space-3);
@@ -494,7 +512,7 @@
     height: 56px;
   }
 
-  .reel-ring {
+  .stream-ring {
     position: absolute;
     inset: 0;
     /* Only the handle is a drag target by default; let taps on the empty ring
@@ -515,7 +533,7 @@
     transition: stroke-dashoffset 120ms linear;
   }
 
-  .reel-ring.scrubbing .ring-progress {
+  .stream-ring.scrubbing .ring-progress {
     transition: none;
   }
 
@@ -526,11 +544,11 @@
     transition: r 120ms ease;
   }
 
-  .reel-ring.scrubbing .ring-handle {
+  .stream-ring.scrubbing .ring-handle {
     cursor: grabbing;
   }
 
-  .reel-mute {
+  .stream-mute {
     position: absolute;
     inset-block-start: 50%;
     inset-inline-start: 50%;
@@ -546,7 +564,7 @@
     cursor: pointer;
   }
 
-  .reel-time {
+  .stream-time {
     position: absolute;
     inset-block-start: calc(100% + 4px);
     inset-inline-start: 50%;
@@ -562,7 +580,7 @@
   }
 
   /* --- Bottom overlay --- */
-  .reel-overlay {
+  .stream-overlay {
     position: absolute;
     inset-inline: 0;
     bottom: 0;
@@ -574,11 +592,11 @@
     pointer-events: none;
   }
 
-  .reel-overlay > * {
+  .stream-overlay > * {
     pointer-events: auto;
   }
 
-  .reel-author {
+  .stream-author {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
@@ -588,11 +606,11 @@
     width: fit-content;
   }
 
-  .reel-author-name {
+  .stream-author-name {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   }
 
-  .reel-caption {
+  .stream-caption {
     margin: 0;
     color: #fff;
     font-size: var(--text-sm);
@@ -604,7 +622,7 @@
     overscroll-behavior: contain;
   }
 
-  .reel-actions {
+  .stream-actions {
     display: flex;
     align-items: center;
     gap: var(--space-1);
@@ -618,7 +636,7 @@
     scrollbar-width: none;
   }
 
-  .reel-actions::-webkit-scrollbar {
+  .stream-actions::-webkit-scrollbar {
     display: none;
   }
 

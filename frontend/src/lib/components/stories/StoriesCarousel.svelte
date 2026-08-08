@@ -213,7 +213,7 @@
     position: relative;
     flex: 0 0 auto;
     width: 112px;
-    /* 9:16 portrait, matching Facebook's reels-style story tiles. */
+    /* 9:16 portrait story tiles. */
     aspect-ratio: 9 / 16;
     border-radius: 14px;
     overflow: hidden;

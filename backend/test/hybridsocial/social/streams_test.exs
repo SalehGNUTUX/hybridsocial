@@ -20,9 +20,9 @@ defmodule Hybridsocial.Social.StreamsTest do
   end
 
   # Attach a qualifying video to a post so it can appear in the streams
-  # feed (which requires a non-deleted, VERTICAL video >= min_duration).
-  # Defaults are a 30s portrait clip (720x1280); pass :duration/:width/
-  # :height to exercise the duration and orientation filters.
+  # feed (which requires a non-deleted video >= min_duration). Defaults are
+  # a 30s portrait clip (720x1280); pass :duration/:width/:height to
+  # exercise the duration and orientation filters.
   defp attach_video(post, identity, opts \\ []) do
     Repo.insert!(%MediaFile{
       identity_id: identity.id,
@@ -91,17 +91,15 @@ defmodule Hybridsocial.Social.StreamsTest do
       assert {:error, _changeset} = Streams.record_view(post.id, nil, attrs)
     end
 
-    test "accepts the source values the Streams and Reels players actually send" do
+    test "accepts the source value the Streams player actually sends" do
       alice = create_user("stream_sources", "stream_sources@example.com")
       post = create_post(alice)
       base = %{"watch_duration" => 5.0, "total_duration" => 30.0}
 
-      for source <- ["streams_feed", "reels_feed"] do
-        assert {:ok, view} =
-                 Streams.record_view(post.id, alice.id, Map.put(base, "source", source))
+      assert {:ok, view} =
+               Streams.record_view(post.id, alice.id, Map.put(base, "source", "streams_feed"))
 
-        assert view.source == source
-      end
+      assert view.source == "streams_feed"
     end
 
     test "rejects an unknown source" do
@@ -164,16 +162,16 @@ defmodule Hybridsocial.Social.StreamsTest do
   end
 
   describe "streams_feed/2" do
-    test "includes any local public post with a qualifying vertical video, regardless of post_type" do
+    test "includes any local public post with a qualifying video, regardless of post_type" do
       alice = create_user("sfeed_alice", "sfeed_alice@example.com")
 
-      reel =
-        create_post(alice, %{post_type: "video_stream", content: "My reel"})
+      clip =
+        create_post(alice, %{post_type: "video_stream", content: "My clip"})
         |> attach_video(alice)
 
       # A non-video_stream local post that just happens to carry a
-      # qualifying video still belongs — membership is by "has a vertical
-      # video", not post_type.
+      # qualifying video still belongs — membership is by "has a video",
+      # not post_type.
       plain =
         create_post(alice, %{post_type: "text", content: "Plain clip"}) |> attach_video(alice)
 
@@ -181,24 +179,24 @@ defmodule Hybridsocial.Social.StreamsTest do
 
       ids = Streams.streams_feed(nil) |> Enum.map(& &1.id)
 
-      assert reel.id in ids
+      assert clip.id in ids
       assert plain.id in ids
       refute text_only.id in ids
     end
 
     test "excludes remote (federated) authors — local videos only (issue #22)" do
       remote = create_user("sfeed_remote", "sfeed_remote@example.com") |> make_remote()
-      remote_reel = create_post(remote, %{content: "Remote reel"}) |> attach_video(remote)
+      remote_clip = create_post(remote, %{content: "Remote clip"}) |> attach_video(remote)
 
       local = create_user("sfeed_local", "sfeed_local@example.com")
-      local_reel = create_post(local, %{content: "Local reel"}) |> attach_video(local)
+      local_clip = create_post(local, %{content: "Local clip"}) |> attach_video(local)
 
       ids = Streams.streams_feed(nil) |> Enum.map(& &1.id)
-      assert local_reel.id in ids
-      refute remote_reel.id in ids
+      assert local_clip.id in ids
+      refute remote_clip.id in ids
     end
 
-    test "excludes horizontal and square videos — vertical only" do
+    test "orientation: :portrait excludes horizontal and square videos" do
       alice = create_user("sfeed_orient", "sfeed_orient@example.com")
 
       vertical = create_post(alice, %{content: "Portrait"}) |> attach_video(alice)
@@ -210,13 +208,13 @@ defmodule Hybridsocial.Social.StreamsTest do
       square =
         create_post(alice, %{content: "Square"}) |> attach_video(alice, width: 1080, height: 1080)
 
-      ids = Streams.streams_feed(nil) |> Enum.map(& &1.id)
+      ids = Streams.streams_feed(nil, orientation: :portrait) |> Enum.map(& &1.id)
       assert vertical.id in ids
       refute landscape.id in ids
       refute square.id in ids
     end
 
-    test "orientation: :all includes horizontal, square, and unknown-dimension videos" do
+    test "the default includes horizontal, square, and unknown-dimension videos" do
       alice = create_user("sfeed_all", "sfeed_all@example.com")
 
       vertical = create_post(alice, %{content: "Portrait"}) |> attach_video(alice)
@@ -231,31 +229,31 @@ defmodule Hybridsocial.Social.StreamsTest do
       nodim =
         create_post(alice, %{content: "No dims"}) |> attach_video(alice, width: nil, height: nil)
 
-      ids = Streams.streams_feed(nil, orientation: :all) |> Enum.map(& &1.id)
+      ids = Streams.streams_feed(nil) |> Enum.map(& &1.id)
       assert vertical.id in ids
       assert landscape.id in ids
       assert square.id in ids
       assert nodim.id in ids
     end
 
-    test "orientation: :all still enforces the minimum duration" do
+    test "the default still enforces the minimum duration" do
       alice = create_user("sfeed_all_dur", "sfeed_all_dur@example.com")
 
       short =
         create_post(alice, %{content: "Short landscape"})
         |> attach_video(alice, width: 640, height: 360, duration: 5.0)
 
-      ids = Streams.streams_feed(nil, orientation: :all) |> Enum.map(& &1.id)
+      ids = Streams.streams_feed(nil) |> Enum.map(& &1.id)
       refute short.id in ids
     end
 
-    test "excludes videos with unknown (NULL) dimensions" do
+    test "orientation: :portrait excludes videos with unknown (NULL) dimensions" do
       alice = create_user("sfeed_nodim", "sfeed_nodim@example.com")
 
       nodim =
         create_post(alice, %{content: "No dims"}) |> attach_video(alice, width: nil, height: nil)
 
-      ids = Streams.streams_feed(nil) |> Enum.map(& &1.id)
+      ids = Streams.streams_feed(nil, orientation: :portrait) |> Enum.map(& &1.id)
       refute nodim.id in ids
     end
 
@@ -297,7 +295,7 @@ defmodule Hybridsocial.Social.StreamsTest do
     test "returns only public posts" do
       alice = create_user("sfeed_pub", "sfeed_pub@example.com")
 
-      create_post(alice, %{visibility: "followers", content: "Private reel"})
+      create_post(alice, %{visibility: "followers", content: "Private clip"})
       |> attach_video(alice)
 
       assert Streams.streams_feed(nil) == []
@@ -305,7 +303,7 @@ defmodule Hybridsocial.Social.StreamsTest do
 
     test "excludes deleted posts" do
       alice = create_user("sfeed_del", "sfeed_del@example.com")
-      post = create_post(alice, %{content: "Deleted reel"}) |> attach_video(alice)
+      post = create_post(alice, %{content: "Deleted clip"}) |> attach_video(alice)
 
       post |> Post.soft_delete_changeset() |> Repo.update!()
 
@@ -317,7 +315,7 @@ defmodule Hybridsocial.Social.StreamsTest do
       alice = create_user("sfeed_lim", "sfeed_lim@example.com")
 
       for i <- 1..5 do
-        create_post(alice, %{content: "Reel #{i}"}) |> attach_video(alice)
+        create_post(alice, %{content: "Clip #{i}"}) |> attach_video(alice)
       end
 
       posts = Streams.streams_feed(nil, limit: 3)
