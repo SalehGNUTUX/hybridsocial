@@ -761,6 +761,7 @@ defmodule HybridsocialWeb.Router do
 
     # Read for the moderation panel
     get "/users/:id", AdminController, :show_account
+    get "/users/:id/statuses", AdminController, :account_statuses
 
     # Account-level moderation actions
     post "/accounts/:id/action", AdminController, :account_action

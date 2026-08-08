@@ -348,4 +348,95 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       assert %{"data" => _} = json_response(conn, 200)
     end
   end
+
+  describe "admin account content (issue #166)" do
+    setup %{conn: conn} do
+      admin = create_user("adm_content", "adm_content@test.com") |> make_admin()
+      user = create_user("usr_content", "usr_content@test.com")
+      %{conn: admin_conn(conn, admin), user: user}
+    end
+
+    defp mk(identity, attrs) do
+      {:ok, post} =
+        Hybridsocial.Social.Posts.create_post(
+          identity.id,
+          Map.merge(%{"content" => "x", "visibility" => "public"}, attrs)
+        )
+
+      post
+    end
+
+    test "counts split posts, replies and media", %{conn: conn, user: user} do
+      parent = mk(user, %{"content" => "top level"})
+      mk(user, %{"content" => "another top level"})
+      mk(user, %{"content" => "a reply", "parent_id" => parent.id})
+
+      with_media = mk(user, %{"content" => "has media"})
+
+      Hybridsocial.Repo.insert!(%Hybridsocial.Media.MediaFile{
+        identity_id: user.id,
+        post_id: with_media.id,
+        content_type: "image/png",
+        file_size: 1_000,
+        storage_path: "test/#{with_media.id}.png",
+        width: 800,
+        height: 600
+      })
+
+      body = json_response(get(conn, "/api/v1/admin/users/#{user.id}"), 200)
+
+      assert body["post_count"] == 3
+      assert body["reply_count"] == 1
+      assert body["media_count"] == 1
+    end
+
+    test "statuses tabs return posts, replies and media separately", %{conn: conn, user: user} do
+      parent = mk(user, %{"content" => "top level"})
+      reply = mk(user, %{"content" => "a reply", "parent_id" => parent.id})
+
+      posts = json_response(get(conn, "/api/v1/admin/users/#{user.id}/statuses?type=posts"), 200)
+      ids = Enum.map(posts, & &1["id"])
+      assert parent.id in ids
+      refute reply.id in ids
+
+      replies =
+        json_response(get(conn, "/api/v1/admin/users/#{user.id}/statuses?type=replies"), 200)
+
+      reply_ids = Enum.map(replies, & &1["id"])
+      assert reply.id in reply_ids
+      refute parent.id in reply_ids
+    end
+
+    test "NEVER exposes direct-visibility statuses (those are DMs)", %{conn: conn, user: user} do
+      public_post = mk(user, %{"content" => "public"})
+      dm = mk(user, %{"content" => "a private message", "visibility" => "direct"})
+
+      for type <- ["posts", "replies", "media", "anything"] do
+        body =
+          json_response(get(conn, "/api/v1/admin/users/#{user.id}/statuses?type=#{type}"), 200)
+
+        refute dm.id in Enum.map(body, & &1["id"]),
+               "direct-visibility status leaked into the #{type} tab"
+      end
+
+      assert public_post.id in Enum.map(
+               json_response(get(conn, "/api/v1/admin/users/#{user.id}/statuses"), 200),
+               & &1["id"]
+             )
+
+      # ...and the counts don't include it either.
+      detail = json_response(get(conn, "/api/v1/admin/users/#{user.id}"), 200)
+      assert detail["post_count"] == 1
+    end
+
+    test "requires the users.view permission", %{user: user} do
+      stranger = create_user("nosy", "nosy@test.com")
+
+      conn =
+        auth_conn(Phoenix.ConnTest.build_conn(), stranger)
+        |> get("/api/v1/admin/users/#{user.id}/statuses")
+
+      assert conn.status in [401, 403]
+    end
+  end
 end
