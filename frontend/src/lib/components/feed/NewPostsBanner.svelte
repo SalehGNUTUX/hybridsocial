@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
+  import { t } from '$lib/stores/i18n.js';
 
   // Floating "N new posts" pill. Click → scroll to top + flush queue.
 
@@ -13,7 +14,9 @@
   } = $props();
 
   let display = $derived(count >= 10 ? '10+' : String(count));
-  let label = $derived(count === 1 ? 'post' : 'posts');
+  // Noun phrase only ("new posts"); the count sits in its own animated slot.
+  // Grammatical agreement still keys off `count` via the plural resolver.
+  let label = $derived($t('feed.new_posts', { count }));
 </script>
 
 {#if count > 0}
@@ -22,7 +25,7 @@
     in:fly={{ y: -24, duration: 280, easing: cubicOut }}
     out:fly={{ y: -24, duration: 180, easing: cubicOut }}
   >
-    <button type="button" class="npb" onclick={() => onclick?.()} aria-label="{display} new {label}. Scroll to top to view.">
+    <button type="button" class="npb" onclick={() => onclick?.()} aria-label={$t('feed.new_posts_aria', { count, display })}>
       {#key count}
         <span class="npb-ripple" aria-hidden="true"></span>
       {/key}
@@ -39,7 +42,7 @@
         {/key}
       </span>
 
-      <span class="npb-label">new {label}</span>
+      <span class="npb-label">{label}</span>
     </button>
   </div>
 {/if}

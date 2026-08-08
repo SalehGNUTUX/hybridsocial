@@ -5,6 +5,7 @@
   import { currentUser } from '$lib/stores/auth.js';
   import { unreadCount } from '$lib/stores/notifications.js';
   import { dmUnreadTotal } from '$lib/stores/dm-unread.js';
+  import { t } from '$lib/stores/i18n.js';
   import type { Identity } from '$lib/api/types.js';
 
   // Auto-subscribed derivations — these unsubscribe automatically when
@@ -16,42 +17,45 @@
 
   interface NavItem {
     href: string;
-    label: string;
+    labelKey: string;
     icon: string;
     badge?: () => number;
   }
 
   // Grouped so the 12 destinations read as clusters (primary / discover /
   // your content / utility) instead of one flat wall. Rendered with a
-  // thin divider between groups.
+  // thin divider between groups. Labels are i18n keys resolved at render
+  // time so they react to locale changes (see $t below).
   const navGroups: NavItem[][] = [
     [
-      { href: '/home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
-      { href: '/explore', label: 'Explore', icon: 'M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418' },
-      { href: '/notifications', label: 'Notifications', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', badge: () => notifCount },
-      { href: '/messages', label: 'Messages', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', badge: () => dmCount },
+      { href: '/home', labelKey: 'nav.home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
+      { href: '/explore', labelKey: 'nav.explore', icon: 'M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418' },
+      { href: '/notifications', labelKey: 'nav.notifications', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', badge: () => notifCount },
+      { href: '/messages', labelKey: 'nav.messages', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', badge: () => dmCount },
     ],
     [
-      { href: '/lists', label: 'Lists', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
-      { href: '/groups', label: 'Groups', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-      { href: '/pages', label: 'Pages', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
-      { href: '/streams', label: 'Streams', icon: 'M3 5h18v14H3z M3 9h18 M8 5v4 M13 5v4 M18 5v4 M10 13l4 2-4 2z' },
+      { href: '/lists', labelKey: 'nav.lists', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
+      { href: '/groups', labelKey: 'nav.groups', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
+      { href: '/pages', labelKey: 'nav.pages', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
+      { href: '/streams', labelKey: 'nav.streams', icon: 'M3 5h18v14H3z M3 9h18 M8 5v4 M13 5v4 M18 5v4 M10 13l4 2-4 2z' },
     ],
     [
-      { href: '/bookmarks', label: 'Bookmarks', icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z' },
-      { href: '/scheduled', label: 'Scheduled', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20z M12 6v6l4 2' },
-      { href: '/drafts', label: 'Drafts', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
+      { href: '/bookmarks', labelKey: 'nav.bookmarks', icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z' },
+      { href: '/scheduled', labelKey: 'nav.scheduled', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20z M12 6v6l4 2' },
+      { href: '/drafts', labelKey: 'nav.drafts', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
     ],
     [
-      { href: '/settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+      { href: '/settings', labelKey: 'nav.settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
     ],
   ];
 
   // Accessible name that folds in the unread count and survives the
-  // icon-only tablet mode where the visible label is hidden.
-  function navAriaLabel(item: NavItem): string {
+  // icon-only tablet mode where the visible label is hidden. `translate`
+  // is the reactive $t so this recomputes on locale change.
+  function navAriaLabel(item: NavItem, translate: typeof $t): string {
+    const label = translate(item.labelKey);
     const count = item.badge ? item.badge() : 0;
-    return count > 0 ? `${item.label}, ${count} unread` : item.label;
+    return count > 0 ? translate('nav.unread', { label, count }) : label;
   }
 
   function isActive(href: string): boolean {
@@ -72,7 +76,7 @@
 </script>
 
 <aside class="sidebar">
-  <nav class="sidebar-nav" aria-label="Main navigation">
+  <nav class="sidebar-nav" aria-label={$t('nav.main_label')}>
     <ul class="nav-list">
       {#each navGroups as group, gi (gi)}
         {#if gi > 0}
@@ -86,8 +90,8 @@
               class="nav-item"
               class:active
               aria-current={active ? 'page' : undefined}
-              aria-label={navAriaLabel(item)}
-              title={item.label}
+              aria-label={navAriaLabel(item, $t)}
+              title={$t(item.labelKey)}
             >
               <span class="nav-icon-wrap">
                 <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width={active ? 2.5 : 2} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -102,7 +106,7 @@
                   {/if}
                 {/if}
               </span>
-              <span class="nav-label">{item.label}</span>
+              <span class="nav-label">{$t(item.labelKey)}</span>
             </a>
           </li>
         {/each}
@@ -120,7 +124,7 @@
         type="button"
         class="nav-item nav-item-compose"
         onclick={openComposer}
-        aria-label="Compose new post"
+        aria-label={$t('nav.compose_aria')}
       >
         <span class="nav-icon-wrap">
           <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -128,7 +132,7 @@
             <path d="M18.586 3.586a2 2 0 112.828 2.828L12 16l-4 1 1-4 9.586-9.414z" />
           </svg>
         </span>
-        <span class="nav-label">New post</span>
+        <span class="nav-label">{$t('nav.compose')}</span>
       </button>
     </div>
   {/if}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { browser } from '$app/environment';
+  import { t } from '$lib/stores/i18n.js';
   import type { Announcement } from '$lib/api/types.js';
 
   const DISMISSED_KEY = 'hybridsocial_dismissed_announcements';
@@ -71,7 +72,7 @@
           type="button"
           class="announcement-dismiss"
           onclick={() => dismiss(announcement.id)}
-          aria-label="Dismiss announcement"
+          aria-label={$t('announcement.dismiss')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>

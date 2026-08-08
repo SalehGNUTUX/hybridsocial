@@ -8,6 +8,10 @@
   import { getSuggestions, follow, unfollow, unfollowTag, getRelationships } from '$lib/api/accounts.js';
   import type { Identity, PostEmoji } from '$lib/api/types.js';
   import DisplayName from '$lib/components/DisplayName.svelte';
+  import { t } from '$lib/stores/i18n.js';
+  // Plain (non-reactive) translate for imperative use in event handlers
+  // (toasts) where the $t store subscription isn't available.
+  import { t as translate } from '$lib/utils/i18n.js';
 
   // A person shown in "Recommended Accounts". Merged from promoted
   // users, the server's /suggestions endpoint, and any passed-in prop.
@@ -70,11 +74,11 @@
         await unfollow(id);
       } else {
         await follow(id);
-        addToast(`Following ${acct.display_name || acct.handle}`, 'success');
+        addToast(translate('discover.following_toast', { name: acct.display_name || acct.handle }), 'success');
       }
     } catch {
       following = { ...following, [id]: wasFollowing };
-      addToast('Could not update follow', 'error');
+      addToast(translate('discover.follow_failed'), 'error');
     } finally {
       followBusy = { ...followBusy, [id]: false };
     }
@@ -285,10 +289,6 @@
     return max > min;
   }
 
-  function plural(n: number, one: string, many: string): string {
-    return `${compact(n)} ${n === 1 ? one : many}`;
-  }
-
   // 1234 -> "1.2K", 2_500_000 -> "2.5M". Keeps count lines compact and
   // scannable instead of printing raw six-digit numbers in a tight column.
   const compactFmt = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
@@ -300,14 +300,14 @@
     try {
       await purchasePromotion();
       showPromoModal = false;
-      addToast('Profile promotion activated!', 'success');
+      addToast(translate('promo.activated'), 'success');
       promotedUsers = await getPromotedUsers().catch(() => []);
     } catch (err: unknown) {
       const error = err as { body?: { error?: string } };
       if (error?.body?.error === 'promotions.already_active') {
-        addToast('You already have an active promotion', 'error');
+        addToast(translate('promo.already_active'), 'error');
       } else {
-        addToast('Failed to purchase promotion', 'error');
+        addToast(translate('promo.purchase_failed'), 'error');
       }
     }
   }
@@ -336,14 +336,16 @@
       class:is-following={following[id]}
       onclick={(e) => toggleFollow(acct, e)}
       disabled={followBusy[id]}
-      aria-label={following[id] ? `Unfollow ${acct.display_name || acct.handle}` : `Follow ${acct.display_name || acct.handle}`}
+      aria-label={following[id]
+        ? $t('discover.unfollow_aria', { name: acct.display_name || acct.handle })
+        : $t('discover.follow_aria', { name: acct.display_name || acct.handle })}
     >
-      {following[id] ? 'Following' : 'Follow'}
+      {following[id] ? $t('profile.following') : $t('profile.follow')}
     </button>
   {/if}
 {/snippet}
 
-<aside class="right-sidebar" aria-label="Discover">
+<aside class="right-sidebar" aria-label={$t('discover.title')}>
   <section class="sidebar-section">
     <header class="section-header">
       <h3 class="section-title">
@@ -351,7 +353,7 @@
           <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
           <polyline points="16 7 22 7 22 13"/>
         </svg>
-        Trending
+        {$t('discover.trending')}
       </h3>
     </header>
     {#if !loaded}
@@ -365,7 +367,7 @@
               <div class="trend-text">
                 <span class="trend-tag">#{item.tag}</span>
                 <span class="trend-meta">
-                  {plural(item.people, 'person', 'people')} talking{#if item.posts > 0} · <span class="tnum">{compact(item.posts)}</span> posts{/if}
+                  {$t('discover.people_talking', { count: item.people, num: compact(item.people) })}{#if item.posts > 0} · <span class="tnum">{$t('discover.posts_count', { count: item.posts, num: compact(item.posts) })}</span>{/if}
                 </span>
               </div>
               {#if hasSparklineSignal(item.history)}
@@ -377,9 +379,9 @@
           </li>
         {/each}
       </ul>
-      <a href="/explore" class="section-link">View all trends</a>
+      <a href="/explore" class="section-link">{$t('discover.view_all_trends')}</a>
     {:else}
-      <p class="empty-text">No trending topics yet.</p>
+      <p class="empty-text">{$t('discover.no_trending')}</p>
     {/if}
   </section>
 
@@ -392,7 +394,7 @@
           <line x1="10" y1="3" x2="8" y2="21"/>
           <line x1="16" y1="3" x2="14" y2="21"/>
         </svg>
-        Followed hashtags
+        {$t('discover.followed_hashtags')}
       </h3>
     </header>
     {#if !loaded}
@@ -410,8 +412,8 @@
               type="button"
               class="tag-unfollow"
               onclick={(e) => handleUnfollowTag(tag, e)}
-              aria-label={`Unfollow #${tag.name}`}
-              title={`Unfollow #${tag.name}`}
+              aria-label={$t('discover.unfollow_tag', { tag: tag.name })}
+              title={$t('discover.unfollow_tag', { tag: tag.name })}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -420,9 +422,9 @@
           </li>
         {/each}
       </ul>
-      <a href="/explore" class="section-link">Find more hashtags</a>
+      <a href="/explore" class="section-link">{$t('discover.find_hashtags')}</a>
     {:else}
-      <p class="empty-text">You don't follow any hashtags yet. Click a <code class="inline-tag">#tag</code> to follow it.</p>
+      <p class="empty-text">{$t('discover.no_hashtags')}</p>
     {/if}
   </section>
 
@@ -432,7 +434,7 @@
     onmouseleave={() => rotationPaused = false}
     onfocusin={() => rotationPaused = true}
     onfocusout={() => rotationPaused = false}
-    aria-label="Recommended accounts"
+    aria-label={$t('discover.recommended')}
   >
     <header class="section-header">
       <h3 class="section-title">
@@ -442,7 +444,7 @@
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
-        Recommended Accounts
+        {$t('discover.recommended')}
       </h3>
     </header>
     {#if !loaded}
@@ -461,7 +463,7 @@
                   <span class="suggestion-name">
                     <DisplayName name={person.display_name} fallback={person.handle} emojis={person.emojis} />
                     {#if person.promoted}
-                      <span class="promoted-badge">Promoted</span>
+                      <span class="promoted-badge">{$t('discover.promoted')}</span>
                     {/if}
                   </span>
                   <span class="suggestion-handle">@{person.acct || person.handle}</span>
@@ -473,9 +475,9 @@
         {/each}
       </ul>
       {/key}
-      <a href="/directory" class="section-link">Find more people</a>
+      <a href="/directory" class="section-link">{$t('discover.find_people')}</a>
     {:else}
-      <p class="empty-text">No suggestions right now.</p>
+      <p class="empty-text">{$t('discover.no_suggestions')}</p>
     {/if}
   </section>
 
@@ -488,7 +490,7 @@
             <circle cx="9" cy="7" r="4"/>
             <line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
           </svg>
-          New Members
+          {$t('discover.new_members')}
         </h3>
       </header>
       {#if !loaded}
@@ -512,7 +514,7 @@
             </li>
           {/each}
         </ul>
-        <a href="/directory" class="section-link">See more</a>
+        <a href="/directory" class="section-link">{$t('discover.see_more')}</a>
       {/if}
     </section>
   {/if}
@@ -524,12 +526,12 @@
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
         </svg>
       </div>
-      <h4 class="promo-cta-title">Promote your profile</h4>
+      <h4 class="promo-cta-title">{$t('promo.cta_title')}</h4>
       <p class="promo-cta-text">
-        Get featured in "Recommended Accounts" for {pricing.duration_days} days.
+        {$t('promo.cta_text', { days: pricing.duration_days })}
       </p>
       <button class="promo-cta-btn" onclick={() => showPromoModal = true}>
-        Promote for {formatPrice(pricing.price_cents, pricing.currency)}
+        {$t('promo.cta_button', { price: formatPrice(pricing.price_cents, pricing.currency) })}
       </button>
     </section>
   {/if}
@@ -543,20 +545,20 @@
         {$page.data.instance.description}
       </p>
     {/if}
-    <nav class="footer-links" aria-label="Footer">
-      <a href="/legal/about" class="footer-link">About</a>
+    <nav class="footer-links" aria-label={$t('discover.footer_label')}>
+      <a href="/legal/about" class="footer-link">{$t('footer.about')}</a>
       <span class="footer-dot" aria-hidden="true">&middot;</span>
-      <a href="/legal/privacy" class="footer-link">Privacy</a>
+      <a href="/legal/privacy" class="footer-link">{$t('footer.privacy')}</a>
       <span class="footer-dot" aria-hidden="true">&middot;</span>
-      <a href="/legal/terms" class="footer-link">Terms</a>
+      <a href="/legal/terms" class="footer-link">{$t('footer.terms')}</a>
       <span class="footer-dot" aria-hidden="true">&middot;</span>
       <button
         type="button"
         class="footer-link footer-link-button"
         onclick={() => window.dispatchEvent(new CustomEvent('open-shortcuts-help'))}
-        title="Show keyboard shortcuts (?)"
+        title={$t('footer.shortcuts_title')}
       >
-        Shortcuts
+        {$t('footer.shortcuts')}
       </button>
     </nav>
     <p class="footer-text">
@@ -580,7 +582,7 @@
 {#if showPromoModal && pricing}
   <div class="modal-overlay" onclick={() => showPromoModal = false} role="presentation">
     <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="promo-modal-title">
-      <button class="modal-close" onclick={() => showPromoModal = false} aria-label="Close">
+      <button class="modal-close" onclick={() => showPromoModal = false} aria-label={$t('common.close')}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -592,42 +594,41 @@
         </svg>
       </div>
 
-      <h3 id="promo-modal-title" class="modal-title">Promote Your Profile</h3>
+      <h3 id="promo-modal-title" class="modal-title">{$t('promo.modal_title')}</h3>
       <p class="modal-desc">
-        Your profile will appear in the "Recommended Accounts" section for all users
-        on this server for <strong>{pricing.duration_days} days</strong>.
+        {$t('promo.modal_desc', { days: pricing.duration_days })}
       </p>
 
       <div class="modal-pricing">
         <div class="modal-price">{formatPrice(pricing.price_cents, pricing.currency)}</div>
-        <div class="modal-period">for {pricing.duration_days} days</div>
+        <div class="modal-period">{$t('promo.for_days', { days: pricing.duration_days })}</div>
       </div>
 
       <ul class="modal-features">
         <li>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Featured in "Recommended Accounts" sidebar
+          {$t('promo.feature_featured')}
         </li>
         <li>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          "Promoted" badge on your listing
+          {$t('promo.feature_badge')}
         </li>
         <li>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Reach new followers organically
+          {$t('promo.feature_reach')}
         </li>
         <li>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Active immediately after payment
+          {$t('promo.feature_active')}
         </li>
       </ul>
 
       <button class="modal-buy-btn" onclick={handlePurchase}>
-        Purchase Promotion
+        {$t('promo.purchase_button')}
       </button>
 
       <p class="modal-note">
-        Payment processing coming soon. Promotion activates instantly for testing.
+        {$t('promo.note')}
       </p>
     </div>
   </div>
@@ -691,16 +692,6 @@
   .section-link:hover,
   .section-link:focus-visible {
     text-decoration: underline;
-  }
-
-  .inline-tag {
-    font-weight: 600;
-    color: var(--color-primary);
-    background: var(--color-secondary-container);
-    padding: 1px 6px;
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-    font-size: 0.95em;
   }
 
   /* Entrance animations only when the user hasn't asked for reduced
@@ -1176,7 +1167,7 @@
   .modal-close {
     position: absolute;
     top: var(--space-4);
-    right: var(--space-4);
+    inset-inline-end: var(--space-4);
     background: none;
     border: none;
     color: var(--color-text-tertiary);

@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import type { MediaAttachment, Identity } from '$lib/api/types.js';
   import Avatar from '$lib/components/ui/Avatar.svelte';
+  import { t } from '$lib/stores/i18n.js';
 
   // Audio player with an iOS/macOS-style bar waveform. Idle, it shows the
   // amplitude envelope baked from the decoded PCM (real per-slice
@@ -431,7 +432,7 @@
     }
   });
 
-  let displayName = $derived(author?.display_name || author?.handle || 'Unknown');
+  let displayName = $derived(author?.display_name || author?.handle || $t('audio.unknown'));
   let displayHandle = $derived(author?.acct || author?.handle || 'unknown');
   let progressPct = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
 </script>
@@ -442,7 +443,7 @@
   onclick={swallowClick}
   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
   role="group"
-  aria-label="Audio player"
+  aria-label={$t('audio.player')}
   tabindex="-1"
 >
   <audio
@@ -455,7 +456,7 @@
     onended={onPause}
     ontimeupdate={onTimeUpdate}
     onloadedmetadata={onLoadedMetadata}
-    aria-label={media.description || 'Audio attachment'}
+    aria-label={media.description || $t('audio.attachment')}
   ></audio>
 
   <div class="ap-header">
@@ -463,7 +464,7 @@
       <Avatar src={author?.avatar_url} name={displayName} size="sm" />
     </div>
     <div class="ap-titles">
-      <span class="ap-title">Audio Broadcast</span>
+      <span class="ap-title">{$t('audio.broadcast')}</span>
       <span class="ap-handle">@{displayHandle}</span>
     </div>
   </div>
@@ -477,7 +478,7 @@
     class="ap-seek"
     onpointerdown={seekDown}
     onpointermove={seekMove}
-    aria-label="Seek"
+    aria-label={$t('audio.seek')}
   >
     <span class="ap-seek-track">
       <span class="ap-seek-fill" style:width="{progressPct}%"></span>
@@ -486,15 +487,15 @@
 
   <div class="ap-controls">
     <div class="ap-controls-center">
-      <button type="button" class="ap-btn" onclick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
+      <button type="button" class="ap-btn" onclick={togglePlay} aria-label={playing ? $t('audio.pause') : $t('audio.play')}>
         <span class="material-symbols-outlined">{playing ? 'pause' : 'play_arrow'}</span>
       </button>
-      <button type="button" class="ap-btn ap-btn-sm" onclick={stop} aria-label="Stop">
+      <button type="button" class="ap-btn ap-btn-sm" onclick={stop} aria-label={$t('audio.stop')}>
         <span class="material-symbols-outlined">stop</span>
       </button>
     </div>
     <div class="ap-meta">
-      <button type="button" class="ap-speed" onclick={cycleSpeed} aria-label="Playback speed">{speed}x</button>
+      <button type="button" class="ap-speed" onclick={cycleSpeed} aria-label={$t('audio.speed')}>{speed}x</button>
       <span class="ap-time">{formatTime(currentTime)} / {formatTime(duration)}</span>
     </div>
   </div>

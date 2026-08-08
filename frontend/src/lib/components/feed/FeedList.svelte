@@ -6,6 +6,7 @@
   import SkeletonPost from './SkeletonPost.svelte';
   import { matchFilters } from '$lib/stores/content-filters.js';
   import { setFeedPosts, clearFeedPosts } from '$lib/stores/focused-post.js';
+  import { t } from '$lib/stores/i18n.js';
 
   function isBoostEntry(entry: FeedEntry): entry is BoostEntry {
     return entry.type === 'boost';
@@ -16,7 +17,7 @@
     loading = false,
     hasMore = true,
     compact = false,
-    emptyMessage = 'No posts yet',
+    emptyMessage = '',
     filterContext = 'home',
     viewerContext = null,
     removeOnEvents = [],
@@ -263,14 +264,14 @@
   });
 </script>
 
-<div class="feed-list" role="feed" aria-label="Post feed">
+<div class="feed-list" role="feed" aria-label={$t('feed.post_feed')}>
   {#if newPostsCount > 0}
     <button
       type="button"
       class="new-posts-pill"
       onclick={showNewPosts}
     >
-      {newPostsCount} new {newPostsCount === 1 ? 'post' : 'posts'}
+      {$t('feed.show_new_posts', { count: newPostsCount })}
     </button>
   {/if}
 
@@ -282,8 +283,8 @@
           <path d="M18.5 14l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4Z" />
         </svg>
       </div>
-      <h2 class="feed-empty-title">Nothing here yet</h2>
-      <p class="feed-empty-text">{emptyMessage}</p>
+      <h2 class="feed-empty-title">{$t('feed.empty_title')}</h2>
+      <p class="feed-empty-text">{emptyMessage || $t('feed.no_posts')}</p>
     </div>
   {/if}
 
@@ -341,7 +342,7 @@
          scroll is doing something. -->
     <div class="feed-loadmore" role="status" aria-live="polite">
       <span class="feed-loadmore-spinner" aria-hidden="true"></span>
-      <span class="feed-loadmore-label">Loading more posts…</span>
+      <span class="feed-loadmore-label">{$t('feed.loading_more')}</span>
     </div>
   {/if}
 

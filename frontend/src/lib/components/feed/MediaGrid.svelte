@@ -6,13 +6,14 @@
 
   import type { Post, MediaAttachment } from '$lib/api/types.js';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     posts,
     loading = false,
     onloadmore,
     hasMore = false,
-    emptyMessage = 'No media yet.',
+    emptyMessage = '',
   }: {
     posts: Post[];
     loading?: boolean;
@@ -46,30 +47,30 @@
 
 <div class="media-grid-wrapper">
   {#if tiles.length === 0 && !loading}
-    <p class="media-empty">{emptyMessage}</p>
+    <p class="media-empty">{emptyMessage || $t('feed.no_media')}</p>
   {:else}
     <div class="media-grid">
-      {#each tiles as t (t.attachment.id)}
+      {#each tiles as tile (tile.attachment.id)}
         <a
           class="media-tile"
-          href="/post/{t.postId}"
-          aria-label="Open post"
+          href="/post/{tile.postId}"
+          aria-label={$t('feed.open_post')}
         >
-          {#if t.attachment.type === 'video' && !t.attachment.preview_url}
+          {#if tile.attachment.type === 'video' && !tile.attachment.preview_url}
             <!-- No server-generated poster for this video, so an <img> would
                  get the video URL and render a black tile. Use the <video>
                  element with a #t=0.1 fragment so the browser seeks a hair
                  past 0 and paints a real first frame as the thumbnail. -->
             <!-- svelte-ignore a11y_media_has_caption -->
-            <video src="{t.attachment.url}#t=0.1" preload="metadata" muted playsinline tabindex="-1"></video>
-          {:else if t.attachment.preview_url || t.attachment.url}
+            <video src="{tile.attachment.url}#t=0.1" preload="metadata" muted playsinline tabindex="-1"></video>
+          {:else if tile.attachment.preview_url || tile.attachment.url}
             <img
-              src={t.attachment.preview_url || t.attachment.url}
-              alt={t.attachment.description || ''}
+              src={tile.attachment.preview_url || tile.attachment.url}
+              alt={tile.attachment.description || ''}
               loading="lazy"
             />
           {/if}
-          {#if t.attachment.type === 'video' || t.attachment.type === 'gifv'}
+          {#if tile.attachment.type === 'video' || tile.attachment.type === 'gifv'}
             <!-- Play-glyph overlay so videos read as distinct from
                  still images at thumbnail size. -->
             <span class="media-tile-badge" aria-hidden="true">
@@ -87,7 +88,7 @@
     <div class="media-loading"><Spinner /></div>
   {:else if hasMore && tiles.length > 0}
     <button type="button" class="media-load-more" onclick={() => onloadmore?.()}>
-      Load more
+      {$t('common.load_more')}
     </button>
   {/if}
 </div>

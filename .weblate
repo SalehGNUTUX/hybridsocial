@@ -12,5 +12,8 @@ branch = "main"
 filemask = "frontend/src/locales/*.json"
 template = "frontend/src/locales/en.json"
 new_base = "frontend/src/locales/en.json"
-file_format = "json-nested"
+# Flat key/value JSON with dotted keys ("nav.home": "Home"). This is the
+# plain "JSON file" format — NOT json-nested, which would split keys on the
+# dot and rewrite the files as nested objects, breaking the runtime loader.
+file_format = "json"
 new_lang = "add"

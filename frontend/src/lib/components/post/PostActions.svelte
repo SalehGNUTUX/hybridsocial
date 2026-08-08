@@ -4,15 +4,16 @@
   import { authStore } from '$lib/stores/auth.js';
   import { mute, unmute, block, unblock, blockDomain } from '$lib/api/accounts.js';
   import { pinPost, unpinPost } from '$lib/api/statuses.js';
-  import { addToast } from '$lib/stores/toast.js';
-  import { t } from '$lib/stores/i18n.js';
-  import { t as ti } from '$lib/utils/i18n.js';
   import { get } from 'svelte/store';
   import { on } from 'svelte/events';
   import ReactionPicker from './ReactionPicker.svelte';
   import RadialReactionPicker from './RadialReactionPicker.svelte';
   import ShareToGroupModal from './ShareToGroupModal.svelte';
+  import { addToast } from '$lib/stores/toast.js';
   import { markSeen } from '$lib/utils/seen-posts.js';
+  import { t } from '$lib/stores/i18n.js';
+  // Plain translate for imperative use (toasts / config objects).
+  import { t as translate } from '$lib/utils/i18n.js';
 
   let {
     post,
@@ -131,10 +132,6 @@
   // above to fit the 2-row picker.
   let reactionTriggerEl: HTMLButtonElement | undefined = $state();
   let reactionPickerBelow = $state(false);
-  // The hover picker is portaled to <body> (so the Streams frame's overflow
-  // doesn't clip it — the same trap #136/#152 fixed); position:fixed inline
-  // style anchors it to the trigger's viewport rect, centered, above or below.
-  let reactionPickerStyle = $state('');
   const REACTION_PICKER_ESTIMATED_HEIGHT = 130;
 
   $effect(() => {
@@ -145,30 +142,13 @@
     // Prefer above (existing behavior). Only flip if above is too
     // tight AND below has more room — keeps the popover stable when
     // both sides are roomy.
-    const below = spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
-    reactionPickerBelow = below;
-    const centerX = Math.round(rect.left + rect.width / 2);
-    reactionPickerStyle = below
-      ? `left:${centerX}px; top:${Math.round(rect.bottom + 8)}px;`
-      : `left:${centerX}px; bottom:${Math.round(window.innerHeight - rect.top + 8)}px;`;
+    reactionPickerBelow =
+      spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
   });
   let showMoreMenu = $state(false);
   let bounceReaction = $state(false);
   let floatingEmoji = $state<string | null>(null);
   let showReactionDetail = $state(false);
-
-  // Move an overlay to <body> so `position: fixed` is relative to the
-  // viewport, not a transformed ancestor. In Streams the clip frame is
-  // transformed (and clips overflow), which otherwise trapped this modal
-  // inside the clip — you couldn't see or scroll the full reactor list.
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node);
-    return {
-      destroy() {
-        node.remove();
-      },
-    };
-  }
   let reactionDetailData = $state<{type: string; count: number; accounts: {id: string; handle: string; acct?: string; display_name: string | null; avatar_url: string | null}[]}[]>([]);
   let reactionDetailLoading = $state(false);
   let reactionDetailTab = $state('all');
@@ -218,11 +198,7 @@
 
   let isOwnPost = $derived(() => {
     const state = get(authStore);
-    // A post authored *as a page* has the page (not you) as its account, so a
-    // strict author match fails even though you can edit/delete it. The
-    // serializer sets page.can_edit for viewers the backend's Pages.can_edit?
-    // accepts (owner/admin/editor) — trust it here so Edit/Delete show.
-    return state.user?.id === post.account.id || post.page?.can_edit === true;
+    return state.user?.id === post.account.id;
   });
 
   let isRemotePost = $derived(() => {
@@ -232,7 +208,7 @@
 
   // The source domain of a remote post's author (user@host → host), used by
   // the "Block domain" action so a viewer can shut out a whole instance —
-  // most useful for unwanted federated video in Streams/Reels.
+  // most useful for unwanted federated video in Streams.
   let postDomain = $derived(() => {
     const acct = post.account.acct || post.account.handle;
     return acct.includes('@') ? acct.split('@')[1] || '' : '';
@@ -253,14 +229,13 @@
   // Confirmation dialog state
   let confirmAction: 'mute_user' | 'unmute_user' | 'block_user' | 'unblock_user' | null = $state(null);
 
-  // Each confirm action maps to a `post_actions.confirm_<key>_{title,message,button}`
-  // trio so the dialog copy re-resolves on locale switch.
-  const confirmKeys: Record<string, string> = {
-    mute_user: 'mute',
-    unmute_user: 'unmute',
-    block_user: 'block',
-    unblock_user: 'unblock',
-  };
+  // $derived so the copy re-resolves when the locale changes.
+  let confirmMessages = $derived<Record<string, { title: string; message: string; button: string }>>({
+    mute_user: { title: $t('post.mute_user_title'), message: $t('post.mute_user_msg'), button: $t('profile.mute') },
+    unmute_user: { title: $t('post.unmute_user_title'), message: $t('post.unmute_user_msg'), button: $t('profile.unmute') },
+    block_user: { title: $t('post.block_user_title'), message: $t('post.block_user_msg'), button: $t('profile.block') },
+    unblock_user: { title: $t('post.unblock_user_title'), message: $t('post.unblock_user_msg'), button: $t('profile.unblock') },
+  });
 
   // Report modal state
   let showReportModal = $state(false);
@@ -281,14 +256,15 @@
     reportIsRemote ? ((post.account as any).acct.split('@')[1] || '') : ''
   );
 
-  const reportCategories = [
-    { value: 'spam', labelKey: 'post_actions.report_cat_spam' },
-    { value: 'harassment', labelKey: 'post_actions.report_cat_harassment' },
-    { value: 'hate_speech', labelKey: 'post_actions.report_cat_hate_speech' },
-    { value: 'illegal', labelKey: 'post_actions.report_cat_illegal' },
-    { value: 'misinformation', labelKey: 'post_actions.report_cat_misinformation' },
-    { value: 'other', labelKey: 'post_actions.report_cat_other' },
-  ];
+  // Values are the enum sent to the backend — keep them; translate labels.
+  let reportCategories = $derived([
+    { value: 'spam', label: $t('report.spam') },
+    { value: 'harassment', label: $t('report.harassment') },
+    { value: 'hate_speech', label: $t('report.hate_speech') },
+    { value: 'illegal', label: $t('report.illegal') },
+    { value: 'misinformation', label: $t('report.misinformation') },
+    { value: 'other', label: $t('report.other') },
+  ]);
 
   async function handleReply(e: MouseEvent) {
     e.stopPropagation();
@@ -393,15 +369,15 @@
   // The default 7 reactions every user can pick. Mirrors the canonical
   // list in ReactionPicker.svelte / reactionEmojis above — keep all
   // three in sync.
-  const defaultRadialReactions: Array<{ type: string; emoji: string; labelKey: string; image?: string | null }> = [
-    { type: 'like', emoji: '\u{1F44D}', labelKey: 'reactions.like' },
-    { type: 'love', emoji: '\u{2764}\u{FE0F}', labelKey: 'reactions.love' },
-    { type: 'wow', emoji: '\u{1F92F}', labelKey: 'reactions.wow' },
-    { type: 'care', emoji: '\u{1F970}', labelKey: 'reactions.care' },
-    { type: 'angry', emoji: '\u{1F621}', labelKey: 'reactions.angry' },
-    { type: 'sad', emoji: '\u{1F622}', labelKey: 'reactions.sad' },
-    { type: 'lol', emoji: '\u{1F602}', labelKey: 'reactions.lol' },
-  ];
+  let defaultRadialReactions = $derived<Array<{ type: string; emoji: string; label: string; image?: string | null }>>([
+    { type: 'like', emoji: '\u{1F44D}', label: $t('reaction.like') },
+    { type: 'love', emoji: '\u{2764}\u{FE0F}', label: $t('reaction.love') },
+    { type: 'wow', emoji: '\u{1F92F}', label: $t('reaction.wow') },
+    { type: 'care', emoji: '\u{1F970}', label: $t('reaction.care') },
+    { type: 'angry', emoji: '\u{1F621}', label: $t('reaction.angry') },
+    { type: 'sad', emoji: '\u{1F622}', label: $t('reaction.sad') },
+    { type: 'lol', emoji: '\u{1F602}', label: $t('reaction.lol') },
+  ]);
 
   // Premium reactions get appended for tiers whose limits include
   // `custom_emoji` — same gate the desktop ReactionPicker uses. The
@@ -410,16 +386,7 @@
   const RADIAL_MAX = 14;
   let isPremiumUser = $derived(!!$currentUser?.limits?.custom_emoji);
   let radialReactions = $derived.by(() => {
-    // Resolve the default labels through $t here (reactive to locale) so the
-    // tray keeps receiving ready-to-render `label` strings. Premium extras keep
-    // their admin-defined shortcode as the label — not translatable.
-    const defaults = defaultRadialReactions.map((r) => ({
-      type: r.type,
-      emoji: r.emoji,
-      label: $t(r.labelKey),
-      image: r.image ?? null,
-    }));
-    if (!isPremiumUser) return defaults;
+    if (!isPremiumUser) return defaultRadialReactions;
     const extras: Array<{ type: string; emoji: string; label: string; image?: string | null }> = [];
     for (const [type, glyph] of $premiumCatalog) {
       extras.push({
@@ -429,7 +396,7 @@
         image: glyph.image_url ?? null,
       });
     }
-    return [...defaults, ...extras].slice(0, RADIAL_MAX);
+    return [...defaultRadialReactions, ...extras].slice(0, RADIAL_MAX);
   });
 
   // Suppress the one click a nonconformant UA may still synthesize
@@ -708,12 +675,6 @@
   // which sits below --z-sticky (20). Set as inline style when we
   // toggle so the cap reflects the actual trigger position.
   let menuMaxHeight = $state<string>('');
-  // Fixed-position anchor for the menu. It's portaled to <body> so it escapes
-  // any clipping ancestor (e.g. the Streams player's overflow-hidden frame and
-  // its overflow-x:auto action pill, which otherwise clipped it to nothing).
-  // Computed from the trigger's viewport rect when the menu opens.
-  let menuFixedStyle = $state('');
-  let menuEl: HTMLDivElement | undefined = $state();
 
   // A unique tag per PostActions instance so the global `openMenuId`
   // store can identify which menu is currently expanded across the
@@ -805,10 +766,8 @@
     if (!showMoreMenu) return;
     function onDocClick(e: MouseEvent) {
       const t = e.target as Node | null;
-      // Click inside the trigger, or inside the (body-portaled) menu itself?
-      // Leave it open.
+      // Click inside the menu or its trigger? Leave it open.
       if (t && menuRootEl && menuRootEl.contains(t)) return;
-      if (t && menuEl && menuEl.contains(t)) return;
       openMenuId.set(null);
     }
     function onKey(e: KeyboardEvent) {
@@ -857,14 +816,6 @@
     const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
     menuMaxHeight = `${Math.min(available, 360)}px`;
 
-    // The menu is portaled to <body> with position:fixed, so anchor it to the
-    // trigger's viewport rect: right edge aligned to the trigger, opening up or
-    // down per the space check above.
-    const rightInset = Math.max(8, Math.round(window.innerWidth - rect.right));
-    menuFixedStyle = menuOpenUpward
-      ? `right:${rightInset}px; bottom:${Math.round(window.innerHeight - rect.top + 4)}px;`
-      : `right:${rightInset}px; top:${Math.round(rect.bottom + 4)}px;`;
-
     // Claim the global slot — every other PostActions instance sees
     // the change via $openMenuId and closes its own menu.
     openMenuId.set(menuTag);
@@ -876,7 +827,7 @@
     showMoreMenu = false;
 
     const url = `${window.location.origin}/post/${post.id}`;
-    const title = `Post by ${post.account.display_name || post.account.handle}`;
+    const title = translate('post.share_title', { name: post.account.display_name || post.account.handle });
     const text = (post.content || '').slice(0, 200);
 
     // Only invoke the native share sheet on touch devices, where it's the
@@ -898,9 +849,9 @@
     // Desktop (or no native share): copy the link and confirm.
     try {
       await navigator.clipboard.writeText(url);
-      window.dispatchEvent(new CustomEvent('toast', { detail: { message: 'Link copied', type: 'success' } }));
+      window.dispatchEvent(new CustomEvent('toast', { detail: { message: translate('post.link_copied'), type: 'success' } }));
     } catch {
-      window.dispatchEvent(new CustomEvent('toast', { detail: { message: 'Could not copy link', type: 'error' } }));
+      window.dispatchEvent(new CustomEvent('toast', { detail: { message: translate('post.link_copy_failed'), type: 'error' } }));
     }
   }
 
@@ -921,18 +872,18 @@
           new CustomEvent('bookmark-removed', { detail: { id: post.id } }),
         );
         window.dispatchEvent(
-          new CustomEvent('toast', { detail: { message: 'Bookmark removed', type: 'success' } }),
+          new CustomEvent('toast', { detail: { message: translate('post.bookmark_removed'), type: 'success' } }),
         );
       } else {
         await api.post(`/api/v1/statuses/${post.id}/bookmark`);
         window.dispatchEvent(
-          new CustomEvent('toast', { detail: { message: 'Saved to bookmarks', type: 'success' } }),
+          new CustomEvent('toast', { detail: { message: translate('post.bookmark_saved'), type: 'success' } }),
         );
       }
     } catch {
       isBookmarked = wasBookmarked;
       window.dispatchEvent(
-        new CustomEvent('toast', { detail: { message: 'Could not update bookmark', type: 'error' } }),
+        new CustomEvent('toast', { detail: { message: translate('post.bookmark_failed'), type: 'error' } }),
       );
     }
   }
@@ -965,16 +916,10 @@
       // "Pinned in group" rather than the confusing "Pinned to
       // profile".
       const scope = post.group ? 'group' : post.page ? 'page' : 'profile';
-      const verb = isPinned ? 'Pinned' : 'Unpinned';
-      const where =
-        scope === 'group'
-          ? isPinned ? 'in group' : 'from group'
-          : scope === 'page'
-            ? isPinned ? 'on page' : 'from page'
-            : isPinned ? 'to profile' : 'from profile';
+      const message = translate(`post.${isPinned ? 'pinned' : 'unpinned'}_${scope}`);
       window.dispatchEvent(
         new CustomEvent('toast', {
-          detail: { message: `${verb} ${where}`, type: 'success' },
+          detail: { message, type: 'success' },
         }),
       );
     } catch (err: unknown) {
@@ -986,15 +931,14 @@
         body?: { error?: string; max?: number; scope?: string };
         message?: string;
       };
-      let message = 'Could not update pin';
+      let message = translate('post.pin_failed');
       if (apiErr?.body?.error === 'limits.max_pinned_posts') {
         const max = apiErr.body.max ?? 1;
         const scope = apiErr.body.scope ?? 'profile';
-        const noun =
-          scope === 'group' ? 'this group' : scope === 'page' ? 'this page' : 'your profile';
-        message = `Pin limit reached for ${noun} (${max}). Unpin another post first.`;
+        const noun = translate(`post.pin_noun_${scope === 'group' || scope === 'page' ? scope : 'profile'}`);
+        message = translate('post.pin_limit', { noun, max });
       } else if (apiErr?.body?.error === 'status.forbidden') {
-        message = 'You do not have permission to pin posts here.';
+        message = translate('post.pin_no_permission');
       }
       window.dispatchEvent(
         new CustomEvent('toast', { detail: { message, type: 'error' } }),
@@ -1040,7 +984,7 @@
       });
       showReportModal = false;
     } catch {
-      reportError = ti('post_actions.report_error');
+      reportError = translate('report.submit_failed');
     } finally {
       reportSubmitting = false;
     }
@@ -1054,17 +998,6 @@
     e.stopPropagation();
     showMoreMenu = false;
     window.dispatchEvent(new CustomEvent('open-composer', { detail: { quotePost: post } }));
-  }
-
-  // Share into one of the viewer's groups: opens a picker that lists the
-  // groups they've joined, then hands off to the composer (quote + group
-  // scope). Kept as a separate menu entry from plain Quote so "share to a
-  // group" is a first-class action rather than a hidden composer option.
-  let showShareToGroup = $state(false);
-  function handleShareToGroup(e: MouseEvent) {
-    e.stopPropagation();
-    showMoreMenu = false;
-    showShareToGroup = true;
   }
 
   // Edit history
@@ -1177,7 +1110,7 @@
     e.stopPropagation();
     showMoreMenu = false;
     dismissClip();
-    addToast(ti('block.hidden'), 'info');
+    addToast(translate('block.hidden'), 'info');
   }
 
   async function handleBlockDomain(e: MouseEvent) {
@@ -1188,10 +1121,20 @@
     try {
       await blockDomain(domain);
       dismissClip();
-      addToast(ti('block.domain_blocked', { domain }), 'success');
+      addToast(translate('block.domain_blocked', { domain }), 'success');
     } catch {
-      addToast(ti('block.domain_error'), 'error');
+      addToast(translate('block.domain_error'), 'error');
     }
+  }
+
+  // Share-to-group: picks from the groups the viewer has joined, then hands off
+  // to the composer (quote + group scope). A first-class menu entry rather than
+  // a hidden composer option.
+  let showShareToGroup = $state(false);
+  function handleShareToGroup(e: MouseEvent) {
+    e.stopPropagation();
+    showMoreMenu = false;
+    showShareToGroup = true;
   }
 
   let showDeleteConfirm = $state(false);
@@ -1283,7 +1226,7 @@
   {/if}
 {/snippet}
 
-<div class="post-actions" role="group" aria-label={$t('post_actions.group_aria')}>
+<div class="post-actions" role="group" aria-label={$t('post.actions_label')}>
   <div class="post-actions-left">
     <!-- Like / React -->
     <div
@@ -1302,7 +1245,7 @@
         ontouchend={reactionTouchEnd}
         ontouchcancel={reactionTouchCancel}
         oncontextmenu={(e) => e.preventDefault()}
-        aria-label={$t('post_actions.react_aria')}
+        aria-label={$t('post.react_aria')}
         aria-expanded={showReactionPicker}
       >
         {#if currentReaction}
@@ -1338,13 +1281,7 @@
       </button>
 
       {#if showReactionPicker}
-        <div
-          use:portal
-          class="picker-anchor"
-          style={reactionPickerStyle}
-          onpointerenter={() => { if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; } }}
-          onpointerleave={(e) => { if (e.pointerType === 'mouse') handleReactionHoverOut(); }}
-        >
+        <div class="picker-anchor" class:picker-anchor-below={reactionPickerBelow}>
           <ReactionPicker
             selected={currentReaction}
             onselect={handleReaction}
@@ -1373,11 +1310,11 @@
         type="button"
         class="action-btn action-reply action-reply-locked"
         disabled
-        aria-label={$t('post_actions.replies_disabled_aria')}
-        title={$t('post_actions.replies_disabled_aria')}
+        aria-label={$t('post.replies_disabled_aria')}
+        title={$t('post.replies_disabled_aria')}
       >
         <span class="material-symbols-outlined action-icon">speaker_notes_off</span>
-        <span class="action-locked-label">{$t('post_actions.replies_disabled')}</span>
+        <span class="action-locked-label">{$t('post.replies_disabled')}</span>
       </button>
     {:else}
       <button
@@ -1385,7 +1322,7 @@
         class="action-btn action-reply"
         onclick={handleReply}
         onkeydown={(e) => handleActionKeydown(e, () => handleReply(new MouseEvent('click')))}
-        aria-label={$t('post_actions.reply_aria', { count: replyCount })}
+        aria-label={$t('post.reply_aria', { count: replyCount })}
       >
         <svg
           class="action-icon"
@@ -1414,7 +1351,7 @@
       class="action-btn action-boost"
       class:active-boost={isBoosted}
       onclick={handleBoost}
-      aria-label="{isBoosted ? $t('post_actions.undo_boost') : $t('post_actions.boost')} ({boostCount})"
+      aria-label="{isBoosted ? $t('post.undo_boost') : $t('post.boost')} ({boostCount})"
       aria-pressed={isBoosted}
     >
       <span class="material-symbols-outlined action-icon">cached</span>
@@ -1432,7 +1369,7 @@
         type="button"
         class="reaction-stack"
         onclick={(e) => { e.stopPropagation(); fetchReactionDetail(); }}
-        aria-label={$t('post_actions.view_reactions')}
+        aria-label={$t('post.view_reactions')}
       >
         <span class="reaction-stack-emojis">
           {#each sorted.slice(0, 3) as r, i (r.name)}
@@ -1450,7 +1387,7 @@
       type="button"
       class="action-btn action-options"
       onclick={toggleMoreMenu}
-      aria-label={$t('post_actions.more_options')}
+      aria-label={$t('post.more_options')}
       aria-expanded={showMoreMenu}
       aria-haspopup="menu"
     >
@@ -1458,24 +1395,16 @@
     </button>
 
     {#if showMoreMenu}
-      <div
-        use:portal
-        bind:this={menuEl}
-        class="more-menu"
-        class:more-menu-upward={menuOpenUpward}
-        role="menu"
-        style={menuFixedStyle}
-        style:max-height={menuMaxHeight}
-      >
+      <div class="more-menu" class:more-menu-upward={menuOpenUpward} role="menu" style:max-height={menuMaxHeight}>
         {#if isRemotePost()}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleDisplayOnInstance}>
             <span class="material-symbols-outlined menu-icon">open_in_new</span>
-            {$t('post_actions.display_original')}
+            {$t('post.display_on_instance')}
           </button>
         {/if}
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleQuote}>
           <span class="material-symbols-outlined menu-icon">format_quote</span>
-          {$t('post_actions.quote')}
+          {$t('post.quote_post')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShareToGroup}>
           <span class="material-symbols-outlined menu-icon">group_add</span>
@@ -1483,74 +1412,69 @@
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleShare}>
           <span class="material-symbols-outlined menu-icon">share</span>
-          {$t('post_actions.share')}
+          {$t('post.share')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleBookmark}>
           <span class="material-symbols-outlined menu-icon">{isBookmarked ? 'bookmark_remove' : 'bookmark'}</span>
-          {isBookmarked ? $t('post_actions.remove_bookmark') : $t('post_actions.bookmark')}
+          {isBookmarked ? $t('post.remove_bookmark') : $t('post.bookmark')}
         </button>
         <button type="button" class="more-menu-item" role="menuitem" onclick={handleMuteNotifications}>
           <span class="material-symbols-outlined menu-icon">{isPostMuted ? 'notifications_active' : 'notifications_off'}</span>
-          {isPostMuted ? $t('post_actions.unmute_notifications') : $t('post_actions.mute_notifications')}
+          {isPostMuted ? $t('post.unmute_notifications') : $t('post.mute_notifications')}
         </button>
         {#if isOwnPost()}
           {#if !isPinned || viewerContext === null || viewerContext === pinScope}
-            {@const pinName =
-              pinScope === 'group' ? post.group?.name : pinScope === 'page' ? post.page?.name : ''}
+            {@const pinLabel = isPinned
+              ? (pinScope === 'group'
+                  ? (post.group?.name ? $t('post.unpin_from_named', { name: post.group.name }) : $t('post.unpin_from_group'))
+                  : pinScope === 'page'
+                    ? (post.page?.name ? $t('post.unpin_from_named', { name: post.page.name }) : $t('post.unpin_from_page'))
+                    : $t('post.unpin_from_profile'))
+              : (pinScope === 'group'
+                  ? (post.group?.name ? $t('post.pin_in_named', { name: post.group.name }) : $t('post.pin_in_group'))
+                  : pinScope === 'page'
+                    ? (post.page?.name ? $t('post.pin_on_named', { name: post.page.name }) : $t('post.pin_on_page'))
+                    : $t('post.pin_to_profile'))}
             <button type="button" class="more-menu-item" role="menuitem" onclick={handlePinToggle}>
               <span class="material-symbols-outlined menu-icon">{isPinned ? 'keep_off' : 'push_pin'}</span>
-              {#if isPinned}
-                {#if pinScope === 'group'}
-                  {pinName ? $t('post_actions.unpin_from', { name: pinName }) : $t('post_actions.unpin_from_group')}
-                {:else if pinScope === 'page'}
-                  {pinName ? $t('post_actions.unpin_from', { name: pinName }) : $t('post_actions.unpin_from_page')}
-                {:else}
-                  {$t('post_actions.unpin_from_profile')}
-                {/if}
-              {:else if pinScope === 'group'}
-                {pinName ? $t('post_actions.pin_in', { name: pinName }) : $t('post_actions.pin_in_group')}
-              {:else if pinScope === 'page'}
-                {pinName ? $t('post_actions.pin_on', { name: pinName }) : $t('post_actions.pin_on_page')}
-              {:else}
-                {$t('post_actions.pin_to_profile')}
-              {/if}
+              {pinLabel}
             </button>
           {/if}
           {#if !post.edit_expires_at || new Date(post.edit_expires_at) > new Date()}
             <button type="button" class="more-menu-item" role="menuitem" onclick={handleEdit}>
               <span class="material-symbols-outlined menu-icon">edit</span>
-              {$t('post_actions.edit')}
+              {$t('post.edit')}
             </button>
           {/if}
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleDelete}>
             <span class="material-symbols-outlined menu-icon">delete</span>
-            {$t('post_actions.delete')}
+            {$t('post.delete')}
           </button>
         {/if}
         {#if post.edited_at}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleViewHistory}>
             <span class="material-symbols-outlined menu-icon">history</span>
-            {$t('post_actions.edit_history')}
+            {$t('post.edit_history')}
           </button>
         {/if}
         {#if !isOwnPost()}
           <div class="more-menu-divider"></div>
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleMentionUser}>
             <span class="material-symbols-outlined menu-icon">alternate_email</span>
-            {$t('post_actions.mention', { acct: post.account.acct || post.account.handle })}
+            {$t('post.mention_user', { handle: post.account.acct || post.account.handle })}
           </button>
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleChatWithUser}>
             <span class="material-symbols-outlined menu-icon">chat</span>
-            {$t('post_actions.chat', { acct: post.account.acct || post.account.handle })}
+            {$t('post.chat_with', { handle: post.account.acct || post.account.handle })}
           </button>
           <div class="more-menu-divider"></div>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleMuteUser}>
             <span class="material-symbols-outlined menu-icon">volume_off</span>
-            {$t('post_actions.mute_user', { acct: post.account.acct || post.account.handle })}
+            {$t('post.mute_user_named', { handle: post.account.acct || post.account.handle })}
           </button>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleBlockUser}>
             <span class="material-symbols-outlined menu-icon">block</span>
-            {$t('post_actions.block_user', { acct: post.account.acct || post.account.handle })}
+            {$t('post.block_user_named', { handle: post.account.acct || post.account.handle })}
           </button>
           {#if isRemotePost() && postDomain()}
             <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleBlockDomain}>
@@ -1564,7 +1488,7 @@
           </button>
           <button type="button" class="more-menu-item more-menu-danger" role="menuitem" onclick={handleReport}>
             <span class="material-symbols-outlined menu-icon">flag</span>
-            {$t('post_actions.report')}
+            {$t('post.report')}
           </button>
         {/if}
       </div>
@@ -1573,52 +1497,52 @@
   </div>
 </div>
 
+<ShareToGroupModal bind:open={showShareToGroup} {post} />
+
 {#if showDeleteConfirm}
-  <div class="dialog-overlay" onclick={cancelDelete} role="dialog" aria-modal="true" aria-label={$t('post_actions.delete_confirm_aria')}>
+  <div class="dialog-overlay" onclick={cancelDelete} role="dialog" aria-modal="true" aria-label={$t('post.confirm_delete_label')}>
     <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-      <h3 class="dialog-title">{$t('post_actions.delete_title')}</h3>
-      <p class="dialog-message">{$t('post_actions.delete_message')}</p>
+      <h3 class="dialog-title">{$t('post.delete_title')}</h3>
+      <p class="dialog-message">{$t('post.delete_message')}</p>
       <div class="dialog-actions">
-        <button type="button" class="dialog-cancel" onclick={cancelDelete}>{$t('post_actions.cancel')}</button>
-        <button type="button" class="dialog-confirm-danger" onclick={confirmDelete}>{$t('post_actions.delete')}</button>
+        <button type="button" class="dialog-cancel" onclick={cancelDelete}>{$t('common.cancel')}</button>
+        <button type="button" class="dialog-confirm-danger" onclick={confirmDelete}>{$t('post.delete')}</button>
       </div>
     </div>
   </div>
 {/if}
 
-<ShareToGroupModal bind:open={showShareToGroup} {post} />
-
 {#if showReportModal}
-  <div class="dialog-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label={$t('post_actions.report_aria')}>
+  <div class="dialog-overlay" onclick={cancelReport} role="dialog" aria-modal="true" aria-label={$t('report.modal_label')}>
     <div class="dialog-panel report-panel" onclick={(e) => e.stopPropagation()}>
       <button
         type="button"
         class="report-close"
         onclick={cancelReport}
-        aria-label={$t('post_actions.report_close')}
-        title={$t('post_actions.report_close')}
+        aria-label={$t('report.close')}
+        title={$t('report.close')}
       >
         <span class="material-symbols-outlined">close</span>
       </button>
 
       {#if reportStep === 1}
-        <h3 class="dialog-title">{$t('post_actions.report_title_1')}</h3>
-        <p class="dialog-message">{$t('post_actions.report_why')}</p>
+        <h3 class="dialog-title">{$t('report.step1_title')}</h3>
+        <p class="dialog-message">{$t('report.step1_question')}</p>
 
         <div class="report-form">
-          <label class="report-label" for="report-category">{$t('post_actions.report_category')}</label>
+          <label class="report-label" for="report-category">{$t('report.category')}</label>
           <select id="report-category" class="report-select" bind:value={reportCategory}>
             {#each reportCategories as cat (cat.value)}
-              <option value={cat.value}>{$t(cat.labelKey)}</option>
+              <option value={cat.value}>{cat.label}</option>
             {/each}
           </select>
 
-          <label class="report-label" for="report-description">{$t('post_actions.report_description')} <span class="report-optional">{$t('post_actions.report_optional')}</span></label>
+          <label class="report-label" for="report-description">{$t('report.description')} <span class="report-optional">{$t('report.optional')}</span></label>
           <textarea
             id="report-description"
             class="report-textarea"
             bind:value={reportDescription}
-            placeholder={$t('post_actions.report_placeholder')}
+            placeholder={$t('report.description_placeholder')}
             rows="4"
           ></textarea>
 
@@ -1628,29 +1552,29 @@
         </div>
 
         <div class="dialog-actions">
-          <button type="button" class="dialog-cancel" onclick={cancelReport}>{$t('post_actions.cancel')}</button>
+          <button type="button" class="dialog-cancel" onclick={cancelReport}>{$t('common.cancel')}</button>
           <button type="button" class="dialog-confirm" onclick={reportNext}>
-            {$t('post_actions.next')}
+            {$t('common.next')}
           </button>
         </div>
 
       {:else}
-        <h3 class="dialog-title">{$t('post_actions.report_title_2')}</h3>
+        <h3 class="dialog-title">{$t('report.step2_title')}</h3>
 
         {#if reportIsRemote}
           <div class="report-remote-notice" role="note">
             <span class="material-symbols-outlined" aria-hidden="true">public</span>
             <div>
-              <strong>{$t('post_actions.report_hosted_at')} <code>{reportRemoteDomain}</code>.</strong>
-              {$t('post_actions.report_remote_body')}
+              <strong>{$t('report.remote_hosted', { domain: reportRemoteDomain })}</strong>
+              {$t('report.remote_hosted_detail')}
             </div>
           </div>
 
           <label class="report-checkbox">
             <input type="checkbox" bind:checked={reportForward} />
             <span>
-              <strong>{$t('post_actions.report_forward_pre')} <code>{reportRemoteDomain}</code>.</strong>
-              <span class="report-hint">{$t('post_actions.report_forward_hint')}</span>
+              <strong>{$t('report.forward', { domain: reportRemoteDomain })}</strong>
+              <span class="report-hint">{$t('report.forward_hint')}</span>
             </span>
           </label>
         {/if}
@@ -1658,8 +1582,8 @@
         <label class="report-checkbox">
           <input type="checkbox" bind:checked={reportBlock} />
           <span>
-            <strong>{$t('post_actions.block_user', { acct: (post.account as any)?.acct || post.account?.handle })}</strong>
-            <span class="report-hint">{$t('post_actions.report_block_hint')}</span>
+            <strong>{$t('post.block_user_named', { handle: (post.account as any)?.acct || post.account?.handle })}</strong>
+            <span class="report-hint">{$t('report.block_hint')}</span>
           </span>
         </label>
 
@@ -1668,9 +1592,9 @@
         {/if}
 
         <div class="dialog-actions">
-          <button type="button" class="dialog-cancel" onclick={reportBack} disabled={reportSubmitting}>{$t('post_actions.back')}</button>
+          <button type="button" class="dialog-cancel" onclick={reportBack} disabled={reportSubmitting}>{$t('common.back')}</button>
           <button type="button" class="dialog-confirm-danger" onclick={submitReport} disabled={reportSubmitting}>
-            {reportSubmitting ? $t('post_actions.submitting') : $t('post_actions.submit_report')}
+            {reportSubmitting ? $t('report.submitting') : $t('report.submit')}
           </button>
         </div>
       {/if}
@@ -1679,18 +1603,18 @@
 {/if}
 
 {#if confirmAction}
-  <div class="dialog-overlay" onclick={() => confirmAction = null} role="dialog" aria-modal="true" aria-label={$t(`post_actions.confirm_${confirmKeys[confirmAction]}_title`)}>
+  <div class="dialog-overlay" onclick={() => confirmAction = null} role="dialog" aria-modal="true" aria-label={confirmMessages[confirmAction].title}>
     <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-      <h3 class="dialog-title">{$t(`post_actions.confirm_${confirmKeys[confirmAction]}_title`)}</h3>
-      <p class="dialog-message">{$t(`post_actions.confirm_${confirmKeys[confirmAction]}_message`)}</p>
+      <h3 class="dialog-title">{confirmMessages[confirmAction].title}</h3>
+      <p class="dialog-message">{confirmMessages[confirmAction].message}</p>
       <div class="dialog-actions">
-        <button type="button" class="dialog-cancel" onclick={() => confirmAction = null}>{$t('post_actions.cancel')}</button>
+        <button type="button" class="dialog-cancel" onclick={() => confirmAction = null}>{$t('common.cancel')}</button>
         <button
           type="button"
           class={confirmAction === 'block_user' || confirmAction === 'mute_user' ? 'dialog-confirm-danger' : 'dialog-confirm'}
           onclick={executeConfirmedAction}
         >
-          {$t(`post_actions.confirm_${confirmKeys[confirmAction]}_button`)}
+          {confirmMessages[confirmAction].button}
         </button>
       </div>
     </div>
@@ -1698,17 +1622,17 @@
 {/if}
 
 {#if showReactionDetail}
-  <div use:portal class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label={$t('post_actions.reactions_title')}>
+  <div class="reactions-modal-overlay" onclick={() => showReactionDetail = false} role="dialog" aria-modal="true" aria-label={$t('post.reactions')}>
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
-        <h3 class="reactions-modal-title">{$t('post_actions.reactions_title')}</h3>
-        <button type="button" class="reactions-modal-close" onclick={() => showReactionDetail = false} aria-label={$t('post_actions.close')}>
+        <h3 class="reactions-modal-title">{$t('post.reactions')}</h3>
+        <button type="button" class="reactions-modal-close" onclick={() => showReactionDetail = false} aria-label={$t('common.close')}>
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
 
       {#if reactionDetailLoading}
-        <div class="reactions-modal-loading">{$t('post_actions.loading')}</div>
+        <div class="reactions-modal-loading">{$t('common.loading')}</div>
       {:else}
         <div class="reactions-modal-tabs" role="tablist">
           <button
@@ -1718,7 +1642,7 @@
             class:reactions-tab-active={reactionDetailTab === 'all'}
             onclick={() => reactionDetailTab = 'all'}
           >
-            {$t('post_actions.reactions_all')}
+            {$t('post.reactions_all')}
           </button>
           {#each reactionDetailData as group (group.type)}
             <button
@@ -1764,25 +1688,25 @@
 {/if}
 
 {#if showHistoryModal}
-  <div use:portal class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label={$t('post_actions.edit_history_title')}>
+  <div class="reactions-modal-overlay" onclick={() => showHistoryModal = false} role="dialog" aria-modal="true" aria-label={$t('post.edit_history')}>
     <div class="reactions-modal" onclick={(e) => e.stopPropagation()}>
       <div class="reactions-modal-header">
-        <h3 class="reactions-modal-title">{$t('post_actions.edit_history_title')}</h3>
-        <button type="button" class="reactions-modal-close" onclick={() => showHistoryModal = false} aria-label={$t('post_actions.close')}>
+        <h3 class="reactions-modal-title">{$t('post.edit_history_title')}</h3>
+        <button type="button" class="reactions-modal-close" onclick={() => showHistoryModal = false} aria-label={$t('common.close')}>
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
 
       {#if historyLoading}
-        <div class="reactions-modal-loading">{$t('post_actions.loading')}</div>
+        <div class="reactions-modal-loading">{$t('common.loading')}</div>
       {:else if historyData.length === 0}
-        <div class="reactions-modal-loading">{$t('post_actions.no_history')}</div>
+        <div class="reactions-modal-loading">{$t('post.no_edit_history')}</div>
       {:else}
         <div class="history-list">
           {#each historyData as rev (rev.id)}
             <div class="history-item">
               <div class="history-meta">
-                <span class="history-revision">{$t('post_actions.revision', { n: rev.revision_number })}</span>
+                <span class="history-revision">{$t('post.revision', { number: rev.revision_number })}</span>
                 <span class="history-date">{new Date(rev.edited_at).toLocaleString()}</span>
               </div>
               <div class="history-content">
@@ -2205,13 +2129,8 @@
   /* User list */
   .reactions-modal-list {
     flex: 1;
-    /* Without min-height:0 a flex child won't shrink below its content, so
-       the list grew past the modal's max-height and got clipped instead of
-       scrolling — you couldn't reach the reactors past the first screenful. */
-    min-height: 0;
     overflow-y: auto;
     padding: 8px 12px 16px;
-    -webkit-overflow-scrolling: touch;
   }
 
   .reactions-user {
@@ -2328,14 +2247,22 @@
   }
 
   .picker-anchor {
-    /* Portaled to <body> and anchored via inline left + top/bottom (computed
-       from the trigger rect, flipping below when there's no room above) so it
-       escapes the Streams frame's overflow clip — the same trap #136/#152 fixed.
-       Centered on the trigger via the transform. */
-    position: fixed;
+    position: absolute;
+    inset-block-end: 100%;
+    inset-inline-start: 50%;
     transform: translateX(-50%);
-    /* At <body> level, clear the tab bar and clip overlays; under modals. */
-    z-index: 1000;
+    margin-block-end: 8px;
+    z-index: var(--z-dropdown);
+  }
+
+  /* Flip below the trigger when there isn't enough room above —
+     keeps the picker fully visible on posts pinned near the top of
+     the viewport (a single post page, the first feed item, etc.). */
+  .picker-anchor-below {
+    inset-block-end: auto;
+    inset-block-start: 100%;
+    margin-block-end: 0;
+    margin-block-start: 8px;
   }
 
   .action-more-wrapper {
@@ -2344,19 +2271,20 @@
 
   /* ---- More Menu ---- */
   .more-menu {
-    /* Portaled to <body> and anchored via inline top/bottom/right (computed
-       from the trigger) so it escapes any clipping/transformed ancestor —
-       e.g. the Streams player's overflow-hidden frame and overflow-x action pill. */
-    position: fixed;
+    position: absolute;
+    inset-block-start: 100%;
+    inset-inline-end: 0;
+    margin-block-start: 4px;
     min-width: 200px;
     background: var(--color-surface-container-lowest);
     border: 1px solid var(--color-border);
     border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
     padding: 6px;
-    /* At <body> level it must clear the BottomTabs bar and clip overlays;
-       still below full-screen modals (9999). */
-    z-index: 1000;
+    /* Above --z-sticky (20) so the menu paints over the BottomTabs
+       bar on mobile instead of behind it — the runtime cap on
+       max-height keeps the menu from running into the bar visually. */
+    z-index: 25;
     overflow-y: auto;
     overscroll-behavior: contain;
     animation: menu-roll-down 0.2s ease;
@@ -2364,6 +2292,10 @@
   }
 
   .more-menu-upward {
+    inset-block-start: auto;
+    inset-block-end: 100%;
+    margin-block-start: 0;
+    margin-block-end: 4px;
     animation: menu-roll-up 0.2s ease;
     transform-origin: bottom right;
   }
@@ -2602,14 +2534,6 @@
     margin-top: 1px;
   }
 
-  .report-remote-notice code {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.8em;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--scrim-soft);
-  }
-
   .report-checkbox {
     display: flex;
     gap: 10px;
@@ -2638,13 +2562,6 @@
     color: var(--color-text);
   }
 
-  .report-checkbox code {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.8em;
-    padding: 1px 4px;
-    border-radius: 4px;
-    background: var(--color-surface);
-  }
 
   .report-hint {
     display: block;
