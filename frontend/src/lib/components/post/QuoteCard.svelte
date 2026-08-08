@@ -4,6 +4,7 @@
   import { relativeTime, fullDateTime } from '$lib/utils/time.js';
   import AccountTypeIndicator from '$lib/components/ui/AccountTypeIndicator.svelte';
   import LazyMedia from '$lib/components/post/LazyMedia.svelte';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     post,
@@ -61,7 +62,7 @@
   tabindex="0"
   onclick={navigateToQuote}
   onkeydown={handleKeydown}
-  aria-label="Quoted post by {displayName}"
+  aria-label={$t('quote.by_aria', { name: displayName })}
 >
   <div class="quote-header">
     <img src={post.account.avatar_url || '/images/default-avatar.svg'} alt="" class="quote-avatar" loading="lazy" />
@@ -103,7 +104,7 @@
   {/if}
 
   {#if poll}
-    <div class="quote-poll" aria-label="Quoted poll">
+    <div class="quote-poll" aria-label={$t('quote.poll_aria')}>
       {#each poll.options as option, i (i)}
         {@const pct = pollVotesTotal > 0 ? Math.round(((option.votes_count || 0) / pollVotesTotal) * 100) : 0}
         <div class="quote-poll-option">

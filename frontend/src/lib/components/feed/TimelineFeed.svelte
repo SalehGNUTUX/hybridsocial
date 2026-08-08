@@ -369,7 +369,7 @@
     loading={feed.loading}
     hasMore={feed.hasMore}
     onloadmore={feed.loadMore}
-    emptyMessage={activeTab?.emptyMessage ?? 'Nothing here yet'}
+    emptyMessage={activeTab?.emptyMessage ?? ''}
     {filterContext}
   />
 </div>

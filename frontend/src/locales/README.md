@@ -18,6 +18,36 @@ runtime for any missing key, so an empty `{}` is a perfectly valid locale file.
 2. Run `npm run check:i18n` from `frontend/` to confirm nothing else is stale.
 3. Commit. Translators will pick up the new key the next time Weblate polls.
 
+## Plurals
+
+Counting strings must use plural variants, because languages disagree on how
+many forms they need (English has 2, Arabic has 6). Store one key per CLDR
+category as sibling keys with a suffix, and call `t()` with a numeric `count`:
+
+```jsonc
+// en.json — English only needs one/other
+"feed.replies.one":   "{count} reply",
+"feed.replies.other": "{count} replies"
+```
+```jsonc
+// ar.json — Arabic uses zero/one/two/few/many/other
+"feed.replies.zero":  "لا ردود",
+"feed.replies.one":   "رد واحد",
+"feed.replies.two":   "ردان",
+"feed.replies.few":   "{count} ردود",
+"feed.replies.many":  "{count} ردًا",
+"feed.replies.other": "{count} رد"
+```
+```ts
+t('feed.replies', { count: n }) // picks the category via Intl.PluralRules
+```
+
+`t()` resolves the active locale's category (falling back category → `.other`
+→ English). The linter accepts categories a target adds beyond the source, as
+long as the source defines the plural set (an `.other` or `.one` sibling).
+`{count}` is optional in a variant (e.g. Arabic `two` reads naturally without
+echoing the number).
+
 ## Adding a locale
 
 1. Add a `{code}.json` file (empty `{}` is fine).

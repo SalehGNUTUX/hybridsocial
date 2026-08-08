@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client.js';
   import { EMOJI_GROUPS, type EmojiEntry } from '$lib/data/emoji-catalog.js';
+  import { t } from '$lib/stores/i18n.js';
 
   let {
     onselect,
@@ -82,14 +83,14 @@
   // user — server returns the full catalog regardless of tier.
   let customCategories = $derived.by(() => {
     const cats = new Set<string>();
-    for (const ce of customEmojis) cats.add(ce.category || 'Custom');
+    for (const ce of customEmojis) cats.add(ce.category || $t('emoji.custom'));
     return Array.from(cats).sort();
   });
 
   let customByCategory = $derived.by(() => {
     const map = new Map<string, CustomEmoji[]>();
     for (const ce of customEmojis) {
-      const key = ce.category || 'Custom';
+      const key = ce.category || $t('emoji.custom');
       const list = map.get(key) ?? [];
       list.push(ce);
       map.set(key, list);
@@ -167,15 +168,15 @@
   }
 </script>
 
-<div use:portal bind:this={pickerEl} class="emoji-picker" style={posStyle} onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Emoji picker">
+<div use:portal bind:this={pickerEl} class="emoji-picker" style={posStyle} onclick={(e) => e.stopPropagation()} role="dialog" aria-label={$t('emoji.picker')}>
   <div class="emoji-search">
     <span class="material-symbols-outlined emoji-search-icon" aria-hidden="true">search</span>
     <input
       type="search"
       class="emoji-search-input"
       bind:value={query}
-      placeholder="Search emojis"
-      aria-label="Search emojis"
+      placeholder={$t('emoji.search')}
+      aria-label={$t('emoji.search')}
     />
   </div>
 
@@ -214,7 +215,7 @@
   <div class="emoji-grid-container">
     {#if query}
       {#if filteredResults.length === 0}
-        <p class="emoji-empty">No matches.</p>
+        <p class="emoji-empty">{$t('emoji.no_matches')}</p>
       {:else}
         <div class="emoji-grid">
           {#each filteredResults as item (item.kind === 'native' ? item.entry.char : item.entry.shortcode)}
@@ -257,7 +258,7 @@
         {/each}
       </div>
     {:else if loadingCustom}
-      <div class="emoji-loading">Loading…</div>
+      <div class="emoji-loading">{$t('common.loading')}</div>
     {:else if activeCustomList && activeCustomList.length > 0}
       <div class="emoji-grid">
         {#each activeCustomList as ce (ce.shortcode)}
@@ -273,7 +274,7 @@
         {/each}
       </div>
     {:else}
-      <p class="emoji-empty">No emojis in this category.</p>
+      <p class="emoji-empty">{$t('emoji.no_category')}</p>
     {/if}
   </div>
 </div>

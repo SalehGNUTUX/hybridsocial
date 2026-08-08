@@ -19,11 +19,44 @@ let loadedLocales: Record<string, Translations> = {};
 let availableLocales: { code: string; name: string; nativeName: string; rtl?: boolean }[] = [];
 
 /**
+ * CLDR plural categories, widest → narrowest. English uses one/other;
+ * Arabic uses all six. Plural strings are stored as sibling keys with a
+ * category suffix, e.g. "feed.replies.one" / "feed.replies.other" (and
+ * "…zero/two/few/many" as a locale needs them). See locales/README.md.
+ */
+const PLURAL_CATEGORIES = ['zero', 'one', 'two', 'few', 'many', 'other'] as const;
+
+/**
+ * Resolve a pluralized key for the given count using the active locale's
+ * CLDR rules, falling back category → "other" and active → English.
+ * Returns undefined if `key` has no plural variants (so a plain string key
+ * that happens to be called with a `count` param still works normally).
+ */
+function resolvePlural(key: string, count: number): string | undefined {
+  let category: string;
+  try {
+    category = new Intl.PluralRules(currentLocale).select(count);
+  } catch {
+    category = count === 1 ? 'one' : 'other';
+  }
+  const candidates = [`${key}.${category}`, `${key}.other`];
+  for (const c of candidates) if (translations[c] != null) return translations[c];
+  for (const c of candidates) if (englishTranslations[c] != null) return englishTranslations[c];
+  return undefined;
+}
+
+/**
  * Translate a key, with English fallback.
  * Supports interpolation: t("hello", { name: "Ahmad" }) → "Hello, Ahmad"
+ * When a numeric `count` param is present, resolves CLDR plural variants:
+ * t("feed.replies", { count: 3 }) → picks feed.replies.{one,few,…}.
  */
 export function t(key: string, params?: Record<string, string | number>): string {
-  let value = translations[key] || englishTranslations[key] || key;
+  let value: string | undefined;
+  if (params && typeof params.count === 'number') {
+    value = resolvePlural(key, params.count);
+  }
+  if (value == null) value = translations[key] || englishTranslations[key] || key;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       value = value.replaceAll(`{${k}}`, String(v));
@@ -31,6 +64,8 @@ export function t(key: string, params?: Record<string, string | number>): string
   }
   return value;
 }
+
+export { PLURAL_CATEGORIES };
 
 /**
  * Translate a backend error key into user-friendly message.

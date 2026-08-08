@@ -15,15 +15,15 @@
   // The fixed 7 default reactions every user can pick. The user-asked
   // canonical set: thumbs-up Like, ❤ Love, 🤯 Wow, 🥰 Care, 😡 Angry,
   // 😢 Sad, 😂 LOL.
-  const defaultReactions = [
-    { emoji: '\u{1F44D}', type: 'like', labelKey: 'reactions.like' },
-    { emoji: '\u{2764}\u{FE0F}', type: 'love', labelKey: 'reactions.love' },
-    { emoji: '\u{1F92F}', type: 'wow', labelKey: 'reactions.wow' },
-    { emoji: '\u{1F970}', type: 'care', labelKey: 'reactions.care' },
-    { emoji: '\u{1F621}', type: 'angry', labelKey: 'reactions.angry' },
-    { emoji: '\u{1F622}', type: 'sad', labelKey: 'reactions.sad' },
-    { emoji: '\u{1F602}', type: 'lol', labelKey: 'reactions.lol' },
-  ];
+  let defaultReactions = $derived([
+    { emoji: '\u{1F44D}', type: 'like', label: $t('reaction.like') },
+    { emoji: '\u{2764}\u{FE0F}', type: 'love', label: $t('reaction.love') },
+    { emoji: '\u{1F92F}', type: 'wow', label: $t('reaction.wow') },
+    { emoji: '\u{1F970}', type: 'care', label: $t('reaction.care') },
+    { emoji: '\u{1F621}', type: 'angry', label: $t('reaction.angry') },
+    { emoji: '\u{1F622}', type: 'sad', label: $t('reaction.sad') },
+    { emoji: '\u{1F602}', type: 'lol', label: $t('reaction.lol') },
+  ]);
 
   // Premium reactions come from the admin-curated catalog
   // (/api/v1/premium_reactions). They render alongside the defaults
@@ -41,8 +41,6 @@
     }
   });
 
-  // Defaults carry a `labelKey` (translated); premium custom reactions keep a
-  // raw `label` (their admin-defined shortcode — not translatable).
   let reactions = $derived(
     [
       ...defaultReactions,
@@ -53,7 +51,7 @@
         image: p.image_url,
         premium: true,
       })),
-    ] as Array<{ emoji: string; type: string; labelKey?: string; label?: string; image?: string | null; premium?: boolean }>,
+    ] as Array<{ emoji: string; type: string; label: string; image?: string | null; premium?: boolean }>,
   );
 
   function handleClick(e: MouseEvent, type: string, isPremium?: boolean) {
@@ -75,11 +73,10 @@
 <div
   class="reaction-picker"
   role="group"
-  aria-label={$t('reactions.picker_aria')}
+  aria-label={$t('post.reactions')}
   onclick={(e) => e.stopPropagation()}
 >
   {#each reactions as reaction, i (reaction.type)}
-    {@const lbl = reaction.labelKey ? $t(reaction.labelKey) : (reaction.label ?? '')}
     <button
       type="button"
       class="reaction-btn"
@@ -88,13 +85,13 @@
       style="animation-delay: {80 + i * 40}ms"
       onclick={(e) => handleClick(e, reaction.type, reaction.premium)}
       onkeydown={(e) => handleKeydown(e, reaction.type, reaction.premium)}
-      aria-label={reaction.premium && !isPremiumUser ? $t('reactions.aria_premium', { label: lbl }) : lbl}
+      aria-label={reaction.premium && !isPremiumUser ? $t('reaction.premium_aria', { label: reaction.label }) : reaction.label}
       aria-pressed={selected === reaction.type}
-      title={reaction.premium && !isPremiumUser ? $t('reactions.title_premium', { label: lbl }) : lbl}
+      title={reaction.premium && !isPremiumUser ? $t('reaction.premium_title', { label: reaction.label }) : reaction.label}
       disabled={reaction.premium && !isPremiumUser}
     >
       {#if reaction.image}
-        <img class="reaction-image" src={reaction.image} alt={lbl} />
+        <img class="reaction-image" src={reaction.image} alt={reaction.label} />
       {:else}
         <span class="reaction-emoji">{reaction.emoji}</span>
       {/if}
