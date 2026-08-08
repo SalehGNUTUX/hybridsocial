@@ -20,6 +20,7 @@ defmodule Hybridsocial.Feeds.Algorithms.Trending do
   import Ecto.Query
 
   alias Hybridsocial.Repo
+  alias Hybridsocial.Accounts.Identity
   alias Hybridsocial.Social.{Follow, Post}
   alias Hybridsocial.Feeds.Visibility
 
@@ -93,6 +94,7 @@ defmodule Hybridsocial.Feeds.Algorithms.Trending do
       |> where([p], is_nil(p.parent_id))
       |> where([p], p.inserted_at >= ^cutoff)
       |> where([p], p.reaction_count + p.boost_count + p.reply_count >= 1)
+      |> maybe_local(Keyword.get(opts, :local_only, false))
       |> apply_post_cursor(cursor)
       |> Visibility.apply_block_filter(identity_id)
       |> Visibility.apply_mute_filter(identity_id)
@@ -116,6 +118,19 @@ defmodule Hybridsocial.Feeds.Algorithms.Trending do
     |> Enum.map(fn post -> {score_post(post, context), post} end)
     |> Enum.sort_by(fn {score, _} -> score end, :desc)
     |> apply_author_diversity(limit)
+  end
+
+  # Scope trending to locally-hosted authors (Explore's Local tab). Uses the
+  # `is_local` flag, not an actor-URL prefix, so imported legacy local users
+  # (who live at /users/<nick>, not the native /actors/<uuid>) aren't dropped —
+  # matching Feeds.maybe_filter_local/2.
+  defp maybe_local(query, false), do: query
+
+  defp maybe_local(query, true) do
+    from p in query,
+      join: i in Identity,
+      on: i.id == p.identity_id,
+      where: i.is_local == true
   end
 
   # --- Author diversity ---

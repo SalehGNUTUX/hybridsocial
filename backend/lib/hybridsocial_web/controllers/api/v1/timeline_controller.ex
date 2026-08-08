@@ -102,9 +102,10 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
             local_only: Map.get(params, "local", "true") == "true",
             viewer_id: viewer_id
           )
+          |> maybe_put_public_sort(params["sort"] || params["algorithm"])
 
         cache_key =
-          "feed:public:ser:#{viewer_id || "anon"}:#{opts[:local_only]}:#{opts[:include_replies]}"
+          "feed:public:ser:#{viewer_id || "anon"}:#{opts[:local_only]}:#{opts[:include_replies]}:#{Keyword.get(opts, :sort, "newest")}"
 
         serialized =
           cached_feed(cache_key, first_page?(params), fn ->
@@ -238,9 +239,14 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
         opts =
           parse_pagination_params(params)
           |> Keyword.merge(include_replies: include_replies, viewer_id: viewer_id)
+          |> maybe_put_public_sort(params["sort"] || params["algorithm"])
+
+        # The prewarmed snapshot is the default newest order only — a sorted
+        # request (oldest/trending) must compute fresh even on the first page.
+        default_order? = Keyword.get(opts, :sort) in [nil, "newest"]
 
         serialized =
-          if first_page?(params) do
+          if default_order? and first_page?(params) do
             # Serve the prewarmed, viewer-independent snapshot (kept hot by
             # Feeds.PrewarmWorker) and layer this viewer's interaction
             # state on top. Anonymous viewers get the base unchanged.
@@ -343,6 +349,17 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
     do: Keyword.put(opts, :orientation, :portrait)
 
   defp maybe_put_streams_orientation(opts, _), do: opts
+
+  # Explore's Local/Global sort control: "trending" (engagement-ranked),
+  # "newest" (default chronological), or "oldest" (ascending). `Feeds`
+  # dispatches on `:sort`. `?algorithm=trending` is accepted as a legacy alias
+  # for `?sort=trending` (the standalone Trending tab). Unknown values fall
+  # through to the default order.
+  @public_sorts ~w(trending newest oldest)
+  defp maybe_put_public_sort(opts, sort) when sort in @public_sorts,
+    do: Keyword.put(opts, :sort, sort)
+
+  defp maybe_put_public_sort(opts, _), do: opts
 
   defp maybe_put_streams_query(opts, q) when is_binary(q) and q != "",
     do: Keyword.put(opts, :q, q)
