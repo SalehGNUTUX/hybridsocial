@@ -196,7 +196,7 @@ defmodule Hybridsocial.Social.Streams do
       i.is_local == true or is_nil(i.ap_actor_url) or
         not fragment(
           "EXISTS (SELECT 1 FROM user_domain_blocks udb WHERE udb.identity_id = ? AND udb.domain = lower(split_part(split_part(?, '/', 3), ':', 1)))",
-          ^viewer_id,
+          type(^viewer_id, Ecto.UUID),
           i.ap_actor_url
         )
     )

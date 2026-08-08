@@ -57,7 +57,7 @@
   "mod_appeal.note_restored": "استُعيد هذا وأصبح متاحاً من جديد.",
   "mod_appeal.note_purged": "حُذف هذا نهائياً ولا يمكن استرجاعه.",
   "mod_appeal.modal_title": "التظلّم على هذه الإزالة",
-  "mod_appeal.modal_lead": "أخبِر المشرفين لماذا ينبغي استعادة هذا العنصر. كن محدَّداً — سيصل طلبك إلى شخص سيراجعه.",
+  "mod_appeal.modal_lead": "أخبِر المشرفين لماذا ينبغي استعادة هذا الـ{target}. كن محدَّداً — سيصل طلبك إلى شخص سيراجعه.",
   "mod_appeal.placeholder": "اشرح وجهة نظرك…",
   "mod_appeal.textarea_label": "سبب التظلّم",
   "mod_appeal.min_chars": "{min} أحرف على الأقل",

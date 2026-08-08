@@ -63,8 +63,7 @@ defmodule Hybridsocial.Social.Posts do
       # Media is always uploaded under the human's identity, even when the post
       # is authored *as a page* (post.identity_id = page_id). Attach against the
       # uploader, not the post author, or a page post silently drops its media.
-      uploader_id = if identity, do: identity.id, else: identity_id
-      insert_post(changeset, attrs, uploader_id)
+      insert_post(changeset, attrs, uploader_id(identity, identity_id))
     end
   end
 
@@ -209,6 +208,12 @@ defmodule Hybridsocial.Social.Posts do
     end
   end
 
+  # The human who uploaded the media and is authoring/editing the post. When a
+  # post is authored *as a page* the scope id is the page, but media always
+  # lives under the acting human's identity — see `attach_media/3`.
+  defp uploader_id(nil, identity_id), do: identity_id
+  defp uploader_id(identity, _identity_id), do: identity.id
+
   defp insert_post(changeset, attrs, uploader_id) do
     case Repo.insert(changeset) do
       {:ok, post} ->
@@ -219,7 +224,11 @@ defmodule Hybridsocial.Social.Posts do
           Polls.create_poll(post.id, poll_attrs)
         end
 
-        attach_media(post, Map.get(attrs, "media_ids") || Map.get(attrs, :media_ids) || [], uploader_id)
+        attach_media(
+          post,
+          Map.get(attrs, "media_ids") || Map.get(attrs, :media_ids) || [],
+          uploader_id
+        )
 
         # Record mentions so direct-visibility posts surface in the
         # Direct tab for recipients (not just the author) and so
@@ -669,7 +678,7 @@ defmodule Hybridsocial.Social.Posts do
             [] -> :ok
             # Match media by the human editor (who uploaded it), not the post's
             # identity, so editing a page post's media works (page_id != human).
-            ids -> reconcile_media(post, ids, if(identity, do: identity.id, else: identity_id))
+            ids -> reconcile_media(post, ids, uploader_id(identity, identity_id))
           end
 
           # Mentions can change between versions. For a direct post

@@ -215,7 +215,11 @@ defmodule Hybridsocial.Social.StreamsTest do
       remote_clip = create_post(remote, %{content: "Remote clip"}) |> attach_video(remote)
 
       other_remote = create_user("sfeed_rb2_o", "sfeed_rb2_o@example.com") |> make_remote()
-      Repo.insert!(%Hybridsocial.Social.Boost{post_id: remote_clip.id, identity_id: other_remote.id})
+
+      Repo.insert!(%Hybridsocial.Social.Boost{
+        post_id: remote_clip.id,
+        identity_id: other_remote.id
+      })
 
       refute remote_clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
     end
@@ -226,7 +230,9 @@ defmodule Hybridsocial.Social.StreamsTest do
 
       # Default (curated) excludes it; the opt-in includes it.
       refute remote_clip.id in (Streams.streams_feed(nil) |> Enum.map(& &1.id))
-      assert remote_clip.id in (Streams.streams_feed(nil, include_federated: true) |> Enum.map(& &1.id))
+
+      assert remote_clip.id in (Streams.streams_feed(nil, include_federated: true)
+                                |> Enum.map(& &1.id))
     end
 
     test "excludes clips from an account the viewer has blocked" do
@@ -268,14 +274,14 @@ defmodule Hybridsocial.Social.StreamsTest do
       clip = create_post(remote, %{content: "Remote clip"}) |> attach_video(remote)
 
       # With the fediverse opt-in the viewer normally sees the remote clip…
-      assert clip.id in
-               (Streams.streams_feed(viewer.id, include_federated: true) |> Enum.map(& &1.id))
+      assert clip.id in (Streams.streams_feed(viewer.id, include_federated: true)
+                         |> Enum.map(& &1.id))
 
       {:ok, _} = Hybridsocial.Social.block_domain(viewer.id, "evil.example")
 
       # …but once its domain is blocked, it's gone for this viewer.
-      refute clip.id in
-               (Streams.streams_feed(viewer.id, include_federated: true) |> Enum.map(& &1.id))
+      refute clip.id in (Streams.streams_feed(viewer.id, include_federated: true)
+                         |> Enum.map(& &1.id))
     end
 
     test "orientation: :portrait excludes horizontal and square videos" do
