@@ -59,8 +59,12 @@
   }
 
   // Sort + free-text/hashtag filter. `trending` is the server default so it's
-  // omitted from the query on the happy path.
-  let sort = $state<'trending' | 'newest' | 'oldest'>('trending');
+  // omitted from the query on the happy path. The choice is remembered per
+  // device — the page component remounts on every navigation, so without this
+  // the sort snaps back to trending each visit.
+  const SORT_KEY = 'hs-streams-sort';
+  const SORT_VALUES = ['trending', 'newest', 'oldest'] as const;
+  let sort = $state<(typeof SORT_VALUES)[number]>('trending');
   let search = $state('');
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   // The immersive layout keeps the clip full-bleed; search + sort open as
@@ -68,7 +72,7 @@
   let searchOpen = $state(false);
   let sortOpen = $state(false);
 
-  const SORTS: { value: 'trending' | 'newest' | 'oldest'; label: string }[] = [
+  const SORTS: { value: (typeof SORT_VALUES)[number]; label: string }[] = [
     { value: 'trending', label: 'Trending' },
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
@@ -126,9 +130,14 @@
     }
   }
 
-  function changeSort(next: 'trending' | 'newest' | 'oldest') {
+  function changeSort(next: (typeof SORT_VALUES)[number]) {
     if (sort === next) return;
     sort = next;
+    try {
+      localStorage.setItem(SORT_KEY, next);
+    } catch {
+      /* storage unavailable — the choice just won't persist */
+    }
     loadStreams();
   }
 
@@ -192,6 +201,10 @@
       if (v !== null) autoplay = v === '1';
       muted = localStorage.getItem(MUTED_KEY) !== '0';
       showFederated = localStorage.getItem(FEDERATED_KEY) === '1';
+      const savedSort = localStorage.getItem(SORT_KEY);
+      if (savedSort && (SORT_VALUES as readonly string[]).includes(savedSort)) {
+        sort = savedSort as (typeof SORT_VALUES)[number];
+      }
     } catch {
       /* ignore */
     }
