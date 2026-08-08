@@ -28,8 +28,10 @@
     loading = true;
     loadError = false;
     try {
+      // The groups index returns a bare array (not a { data } envelope);
+      // handle both, same as the Groups page.
       const res = await getGroups('member');
-      groups = res.data ?? [];
+      groups = Array.isArray(res) ? res : ((res as any).data ?? []);
     } catch {
       loadError = true;
     } finally {

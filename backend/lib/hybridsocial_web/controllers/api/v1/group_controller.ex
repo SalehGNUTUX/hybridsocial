@@ -25,15 +25,34 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
   # GET /api/v1/groups
   def index(conn, params) do
     groups =
-      if params["q"] do
-        Groups.search_groups(params["q"])
-      else
-        opts =
-          []
-          |> maybe_add_opt(:visibility, params["visibility"])
-          |> maybe_add_limit(params["limit"])
+      cond do
+        params["q"] ->
+          Groups.search_groups(params["q"])
 
-        Groups.list_groups(opts)
+        # `filter=member` → only the groups the viewer has actually joined
+        # (share-to-group picker / "My groups" tab). Requires auth; anonymous
+        # callers have no memberships, so an empty list.
+        params["filter"] == "member" ->
+          case viewer_id(conn) do
+            nil ->
+              []
+
+            vid ->
+              opts =
+                []
+                |> maybe_add_limit(params["limit"])
+                |> maybe_add_opt(:cursor, params["cursor"])
+
+              Groups.list_member_groups(vid, opts)
+          end
+
+        true ->
+          opts =
+            []
+            |> maybe_add_opt(:visibility, params["visibility"])
+            |> maybe_add_limit(params["limit"])
+
+          Groups.list_groups(opts)
       end
 
     conn

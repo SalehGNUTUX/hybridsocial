@@ -300,6 +300,33 @@ defmodule Hybridsocial.GroupsTest do
     end
   end
 
+  describe "list_member_groups/2" do
+    test "returns only groups the identity has actually joined", %{alice: alice, bob: bob} do
+      {:ok, joined} = Groups.create_group(alice.id, %{"name" => "Joined"})
+      {:ok, _} = Groups.join_group(joined.id, bob.id)
+      {:ok, other} = Groups.create_group(alice.id, %{"name" => "Not joined"})
+
+      bob_ids = Groups.list_member_groups(bob.id) |> Enum.map(& &1.id)
+      assert joined.id in bob_ids
+      refute other.id in bob_ids
+
+      # The owner is an approved member of both groups they created.
+      alice_ids = Groups.list_member_groups(alice.id) |> Enum.map(& &1.id)
+      assert joined.id in alice_ids
+      assert other.id in alice_ids
+    end
+
+    test "excludes pending (not-yet-approved) memberships", %{alice: alice, bob: bob} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{"name" => "Approval", "join_policy" => "approval"})
+
+      # An approval-gated join leaves bob pending, not approved.
+      Groups.join_group(group.id, bob.id)
+
+      refute group.id in (Groups.list_member_groups(bob.id) |> Enum.map(& &1.id))
+    end
+  end
+
   describe "search_groups/1" do
     test "searches by name and description", %{alice: alice} do
       {:ok, _} =

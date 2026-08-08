@@ -370,6 +370,35 @@ defmodule Hybridsocial.Groups do
     Repo.all(query)
   end
 
+  @doc """
+  Groups the identity is an APPROVED member of — the `?filter=member` list
+  (the Groups "My groups" tab and the share-to-group picker). Scoped by the
+  membership row, not by visibility: `list_groups/1` is viewer-independent and
+  never knew who had joined, so `filter=member` was silently returning every
+  group. Newest group first, cursor-paginated on the group's `inserted_at`.
+  """
+  def list_member_groups(identity_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, @default_page_size)
+    cursor = Keyword.get(opts, :cursor)
+
+    query =
+      Group
+      |> join(:inner, [g], m in GroupMember, on: m.group_id == g.id)
+      |> where([g, m], m.identity_id == ^identity_id and m.status == :approved)
+      |> where([g], is_nil(g.deleted_at))
+      |> order_by([g], desc: g.inserted_at)
+      |> limit(^limit)
+
+    query =
+      if cursor do
+        where(query, [g], g.inserted_at < ^cursor)
+      else
+        query
+      end
+
+    Repo.all(query)
+  end
+
   def search_groups(query_string) do
     pattern = "%#{query_string}%"
 
