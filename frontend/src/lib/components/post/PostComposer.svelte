@@ -1251,7 +1251,7 @@
           // free, the POST returns 403 with audio_not_allowed.
           body.post_type = 'audio';
         } else if (uploadedMedia.every(isVideo)) {
-          // All-video → Streams (reels) feed.
+          // All-video → Streams feed.
           body.post_type = 'video_stream';
         } else if (!content.trim()) {
           // Image-only post with no caption — mark as "media" so the

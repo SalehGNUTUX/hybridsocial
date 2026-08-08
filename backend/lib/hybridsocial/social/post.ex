@@ -215,7 +215,7 @@ defmodule Hybridsocial.Social.Post do
     post_type = get_field(changeset, :post_type)
 
     # media, video_stream and audio posts can be caption-less — a photo,
-    # reel, or voice memo doesn't need text. A post that HAS media is also
+    # clip, or voice memo doesn't need text. A post that HAS media is also
     # exempt regardless of post_type: a captioned image is stored as
     # post_type "text", so clearing its caption on edit must not demand
     # content when there's still an image (issue #26). Everything else

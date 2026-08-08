@@ -1,6 +1,6 @@
 defmodule Hybridsocial.Social.Streams do
   @moduledoc """
-  Context for video stream (reels) view tracking and streams feed.
+  Context for video stream view tracking and the streams feed.
   """
   import Ecto.Query
 
@@ -10,7 +10,7 @@ defmodule Hybridsocial.Social.Streams do
 
   @default_limit 20
   @max_limit 40
-  # Default minimum clip length (seconds) for the streams/reels feed when the
+  # Default minimum clip length (seconds) for the streams feed when the
   # `streams_min_duration_seconds` setting isn't configured.
   @default_min_duration 10
 
@@ -94,10 +94,11 @@ defmodule Hybridsocial.Social.Streams do
     limit = parse_limit(opts)
     min_duration = Keyword.get(opts, :min_duration_seconds) || min_duration_seconds()
     search = normalize_search(Keyword.get(opts, :q))
-    # :portrait (default) keeps the strictly-vertical Reels feed; :all lets the
-    # Streams page surface clips of any orientation/size (issue: a 640x360
-    # horizontal upload never appeared because only height > width qualified).
-    orientation = Keyword.get(opts, :orientation, :portrait)
+    # :all (the default) surfaces clips of any orientation/size — a 640x360
+    # horizontal upload belongs in the feed just as much as a 9:16 one, and
+    # defaulting the other way is what hid them (only height > width qualified).
+    # :portrait is an explicit opt-in for a strictly-vertical feed.
+    orientation = Keyword.get(opts, :orientation, :all)
 
     # Streams surfaces public video to everyone, including signed-out
     # viewers. Membership is defined by "a LOCAL author posted a public
@@ -107,9 +108,9 @@ defmodule Hybridsocial.Social.Streams do
     #   - sensitive (NSFW) posts
     #   - posts with a content warning (spoiler_text)
     #   - by orientation (see `filter_by_qualifying_video`): the default
-    #     `:portrait` keeps the Reels feed strictly vertical (height > width,
-    #     known dimensions); `:all` — what the Streams page requests — accepts
-    #     any clip: horizontal, square, portrait, or unknown dimensions.
+    #     `:all` accepts any clip — horizontal, square, portrait, or unknown
+    #     dimensions; `:portrait` narrows to strictly vertical clips with
+    #     known dimensions (height > width).
     #   - posts whose video attachment is shorter than `min_duration`
     #     seconds (admin-tunable via `streams_min_duration_seconds`, default
     #     10) — the format is meant for short *clips*, not micro-bursts that
@@ -138,7 +139,7 @@ defmodule Hybridsocial.Social.Streams do
 
   # --- Private helpers ---
 
-  # Minimum clip length (seconds) for the streams/reels feed — admin-tunable
+  # Minimum clip length (seconds) for the streams feed — admin-tunable
   # via the `streams_min_duration_seconds` setting so an instance can include
   # shorter clips or require longer ones. Values are stored untyped in Config,
   # so coerce a stored string back to a number.
@@ -158,7 +159,7 @@ defmodule Hybridsocial.Social.Streams do
     end
   end
 
-  # Portrait (Reels): strictly vertical clips with known dimensions.
+  # Portrait: strictly vertical clips with known dimensions. Opt-in only.
   defp filter_by_qualifying_video(query, :portrait, min_duration) do
     where(
       query,
@@ -171,7 +172,7 @@ defmodule Hybridsocial.Social.Streams do
     )
   end
 
-  # All orientations (Streams): any video clip, regardless of dimensions —
+  # All orientations (the default): any video clip, regardless of dimensions —
   # horizontal, square, portrait, or dimensions we never captured.
   defp filter_by_qualifying_video(query, _all, min_duration) do
     where(

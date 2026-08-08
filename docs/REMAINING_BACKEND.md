@@ -63,9 +63,9 @@ Date: 2026-03-22
 
 ## Priority 2: Important Features
 
-### 6. Video Streams (Reels)
+### 6. Video Streams
 - `stream_views` table (post_id, identity_id, watch_duration, total_duration, completed, replayed, source)
-- Enforce 9:16 aspect ratio for video_stream post type
+- Accept clips of any orientation for the video_stream post type
 - Max duration configurable (default 90s)
 - Discovery algorithm: watch completion rate, replay rate, engagement, freshness
 - `GET /api/v1/timelines/streams` — video streams feed

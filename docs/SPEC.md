@@ -1336,7 +1336,7 @@ Client upload → API
   - Always create 240p preview for low-bandwidth
 - Container: MP4 (H.264 video, AAC audio) for maximum compatibility
 - Extract thumbnail at 1-second mark (or configurable timestamp)
-- Video streams (reels): enforce 9:16 aspect ratio, max configurable duration (default 90s)
+- Video streams: clips of any orientation, max configurable duration (default 90s)
 
 ### 8.4 Storage
 
@@ -1466,7 +1466,8 @@ Every feed query MUST:
 
 ### 12.1 What They Are
 
-Short-form vertical video feed (like Reels/TikTok). Internally, a post with `post_type: video_stream`.
+Short-form video clip feed. Internally, a post with `post_type: video_stream`. Clips of any
+orientation qualify; the feed's `orientation=portrait` query param narrows it to vertical only.
 
 ### 12.2 Constraints
 
@@ -2214,7 +2215,7 @@ All settings stored in database, editable at runtime via admin panel.
 | Limits | Max image file size | 10 MB |
 | Limits | Max video file size | 100 MB |
 | Limits | Max video duration | 300 seconds |
-| Limits | Max stream (reel) duration | 90 seconds |
+| Limits | Max stream duration | 90 seconds |
 | Limits | Post edit window | 86400 seconds (24h) |
 | Media | Storage backend | "local" |
 | Media | Video resolutions | ["720p", "480p", "240p"] |

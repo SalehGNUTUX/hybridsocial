@@ -266,7 +266,7 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
     end
   end
 
-  @doc "GET /api/v1/timelines/streams - Video streams (reels) timeline"
+  @doc "GET /api/v1/timelines/streams - Video streams timeline"
   def streams(conn, params) do
     identity = conn.assigns[:current_identity]
     viewer_id = if identity, do: identity.id, else: nil
@@ -336,11 +336,11 @@ defmodule HybridsocialWeb.Api.V1.TimelineController do
 
   defp maybe_put_streams_sort(opts, _), do: opts
 
-  # Streams passes `orientation=all` to surface clips of every size; Reels
-  # (and any other caller) omits it and keeps the vertical-only default.
-  # Only the explicit "all" opts in — anything else falls through to portrait.
-  defp maybe_put_streams_orientation(opts, "all"),
-    do: Keyword.put(opts, :orientation, :all)
+  # Clips of every size are the default; only the explicit "portrait" narrows
+  # the feed to vertical-only, so a caller that omits the param never gets a
+  # silently partial feed.
+  defp maybe_put_streams_orientation(opts, "portrait"),
+    do: Keyword.put(opts, :orientation, :portrait)
 
   defp maybe_put_streams_orientation(opts, _), do: opts
 

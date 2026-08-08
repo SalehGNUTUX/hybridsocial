@@ -428,7 +428,7 @@ defmodule Hybridsocial.Social.PostsTest do
     end
 
     test "accepts a caption-less video_stream post with a video attachment" do
-      identity = create_user("reel_poster", "reel@test.com")
+      identity = create_user("clip_poster", "clip@test.com")
       media = upload_media(identity.id, "video/mp4", "mp4")
 
       # Pretend it's valid video bytes enough to pass. Media.upload will
