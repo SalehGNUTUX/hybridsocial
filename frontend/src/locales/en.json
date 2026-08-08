@@ -137,5 +137,14 @@
 
   "error.page.not_found": "This page could not be found",
   "error.rate_limit.exceeded": "Slow down — too many requests. Please wait a moment.",
-  "error.unknown": "Something went wrong. Please try again."
+  "error.unknown": "Something went wrong. Please try again.",
+
+  "notifications.title": "Notifications",
+  "notifications.mark_all_read": "Mark all read",
+  "notifications.view_all": "All notifications",
+  "notifications.empty": "You're all caught up.",
+  "notifications.loading": "Loading…",
+  "notifications.load_error": "Couldn't load notifications.",
+  "notifications.retry": "Retry",
+  "notifications.dismiss": "Dismiss notification"
 }

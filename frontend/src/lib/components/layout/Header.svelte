@@ -3,7 +3,7 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import Dropdown from '$lib/components/ui/Dropdown.svelte';
   import { currentUser, isLoggedIn, clearAuth } from '$lib/stores/auth.js';
-  import { unreadCount } from '$lib/stores/notifications.js';
+  import NotificationsBell from '$lib/components/notification/NotificationsBell.svelte';
   import { dmUnreadTotal } from '$lib/stores/dm-unread.js';
   import { api } from '$lib/api/client.js';
   import type { Identity } from '$lib/api/types.js';
@@ -18,12 +18,10 @@
   let searchExpanded = $state(false);
   let searchInputEl: HTMLInputElement | undefined = $state();
   let searchHoverTimer: ReturnType<typeof setTimeout> | null = null;
-  let notifCount = $state(0);
   let dmCount = $state(0);
 
   currentUser.subscribe((v) => (user = v));
   isLoggedIn.subscribe((v) => (authenticated = v));
-  unreadCount.subscribe((v) => (notifCount = v));
   dmUnreadTotal.subscribe((v) => (dmCount = v));
 
   // Other accounts this browser has signed in as (current one excluded) — for
@@ -187,16 +185,8 @@
     <!-- Actions -->
     <div class="header-actions">
       {#if authenticated && user}
-        <!-- Notifications -->
-        <a href="/notifications" class="header-icon-btn header-quick-link" aria-label="Notifications">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          {#if notifCount > 0}
-            <span class="icon-badge">{notifCount > 99 ? '99+' : notifCount}</span>
-          {/if}
-        </a>
+        <!-- Notifications — bell opens a peek popover, not the full page -->
+        <NotificationsBell />
 
         <!-- Messages -->
         <a href="/messages" class="header-icon-btn header-quick-link" aria-label="Messages">
