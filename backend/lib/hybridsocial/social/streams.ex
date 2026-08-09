@@ -349,7 +349,6 @@ defmodule Hybridsocial.Social.Streams do
     |> String.replace("_", "\\_")
   end
 
-
   defp to_float(value) when is_float(value), do: value
   defp to_float(value) when is_integer(value), do: value / 1
   defp to_float(%Decimal{} = value), do: Decimal.to_float(value)
