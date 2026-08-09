@@ -58,6 +58,22 @@
     loadStreams();
   }
 
+  // Aspect-ratio filter. Default is vertical 9:16 (`orientation=portrait`, the
+  // native Streams format); toggling on asks the server for clips of every
+  // orientation (`orientation=all`). Remembered per device.
+  const ASPECT_KEY = 'hs-streams-aspect';
+  let showAllAspect = $state(false);
+
+  function toggleAspect() {
+    showAllAspect = !showAllAspect;
+    try {
+      localStorage.setItem(ASPECT_KEY, showAllAspect ? '1' : '0');
+    } catch {
+      /* storage unavailable — the toggle just won't persist */
+    }
+    loadStreams();
+  }
+
   // Sort + free-text/hashtag filter. `trending` is the server default so it's
   // omitted from the query on the happy path. The choice is remembered per
   // device — the page component remounts on every navigation, so without this
@@ -113,9 +129,9 @@
     loading = true;
     error = '';
     try {
-      // Surface clips of every orientation/size — a 640x360 horizontal upload
-      // belongs here just as much as a 9:16 one.
-      const params: Record<string, string> = { orientation: 'all' };
+      // Default to the native 9:16 vertical format; the aspect toggle opts into
+      // clips of every orientation/size.
+      const params: Record<string, string> = { orientation: showAllAspect ? 'all' : 'portrait' };
       if (sort !== 'trending') params.sort = sort;
       if (showFederated) params.include_federated = 'true';
       const q = search.trim();
@@ -201,6 +217,7 @@
       if (v !== null) autoplay = v === '1';
       muted = localStorage.getItem(MUTED_KEY) !== '0';
       showFederated = localStorage.getItem(FEDERATED_KEY) === '1';
+      showAllAspect = localStorage.getItem(ASPECT_KEY) === '1';
       const savedSort = localStorage.getItem(SORT_KEY);
       if (savedSort && (SORT_VALUES as readonly string[]).includes(savedSort)) {
         sort = savedSort as (typeof SORT_VALUES)[number];
@@ -288,9 +305,11 @@
             {muted}
             {autoplay}
             federated={showFederated}
+            allAspect={showAllAspect}
             onmutetoggle={toggleMuted}
             onautoplaytoggle={toggleAutoplay}
             onfederatedtoggle={toggleFederated}
+            onaspecttoggle={toggleAspect}
             onsearch={() => { sortOpen = false; searchOpen = !searchOpen; }}
             onsort={() => { searchOpen = false; sortOpen = !sortOpen; }}
             oncomment={() => openComments(post)}
