@@ -38,8 +38,21 @@ defmodule Hybridsocial.Feeds.Algorithms.TrendingTest do
       ctx = %{now: now, follower_counts: %{}}
       at = DateTime.add(now, -3 * 3600, :second)
 
-      more = %Post{identity_id: "a", reaction_count: 20, boost_count: 2, reply_count: 4, inserted_at: at}
-      less = %Post{identity_id: "b", reaction_count: 2, boost_count: 0, reply_count: 0, inserted_at: at}
+      more = %Post{
+        identity_id: "a",
+        reaction_count: 20,
+        boost_count: 2,
+        reply_count: 4,
+        inserted_at: at
+      }
+
+      less = %Post{
+        identity_id: "b",
+        reaction_count: 2,
+        boost_count: 0,
+        reply_count: 0,
+        inserted_at: at
+      }
 
       assert Trending.score_post(more, ctx) > Trending.score_post(less, ctx)
     end
