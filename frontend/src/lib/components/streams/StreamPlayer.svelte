@@ -414,7 +414,7 @@
     {/if}
 
     <div class="stream-actions">
-      <PostActions {post} {oncomment} />
+      <PostActions {post} {oncomment} menuFixed />
       {#if post.content}
         <button
           type="button"

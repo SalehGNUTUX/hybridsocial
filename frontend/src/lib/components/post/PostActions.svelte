@@ -20,9 +20,17 @@
     onedit,
     oncomment,
     viewerContext = null,
+    menuFixed = false,
   }: {
     post: Post;
     onedit?: () => void;
+    /**
+     * Render the ⋯ menu into <body> with fixed positioning instead of
+     * absolutely inside the action bar. Needed where an ancestor clips overflow
+     * (the Streams clip frame + its scrollable action row) — otherwise the menu
+     * opens but is clipped to nothing. The feed leaves this off.
+     */
+    menuFixed?: boolean;
     // When provided, the reply/comment button calls this instead of opening
     // the global composer. Streams uses it to open an in-place comments sheet
     // (view + reply) rather than only launching a reply composer. Other call
@@ -675,6 +683,27 @@
   // which sits below --z-sticky (20). Set as inline style when we
   // toggle so the cap reflects the actual trigger position.
   let menuMaxHeight = $state<string>('');
+  // Full inline style for the fixed/portaled menu (position + coords + cap),
+  // computed from the trigger rect in toggleMoreMenu. Only used when menuFixed.
+  let menuFixedStyle = $state<string>('');
+  // The menu element itself — tracked so the outside-click handler treats a
+  // portaled (out-of-tree) menu as "inside" and doesn't close on its own items.
+  let menuEl = $state<HTMLDivElement>();
+
+  // Move the node to <body> so no clipping ancestor can hide it. A no-op (stays
+  // in place) when `enabled` is false — the feed keeps its absolute menu.
+  function portal(node: HTMLElement, enabled: boolean) {
+    let moved = false;
+    if (enabled) {
+      document.body.appendChild(node);
+      moved = true;
+    }
+    return {
+      destroy() {
+        if (moved) node.remove();
+      },
+    };
+  }
 
   // A unique tag per PostActions instance so the global `openMenuId`
   // store can identify which menu is currently expanded across the
@@ -766,8 +795,10 @@
     if (!showMoreMenu) return;
     function onDocClick(e: MouseEvent) {
       const t = e.target as Node | null;
-      // Click inside the menu or its trigger? Leave it open.
+      // Click inside the trigger, or inside the menu (which may be portaled to
+      // <body>, i.e. outside menuRootEl)? Leave it open.
       if (t && menuRootEl && menuRootEl.contains(t)) return;
+      if (t && menuEl && menuEl.contains(t)) return;
       openMenuId.set(null);
     }
     function onKey(e: KeyboardEvent) {
@@ -814,7 +845,21 @@
     // long lists scroll inside the menu instead of overflowing.
     menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
     const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
-    menuMaxHeight = `${Math.min(available, 360)}px`;
+    const cap = Math.min(available, 360);
+    menuMaxHeight = `${cap}px`;
+
+    if (menuFixed) {
+      // Fixed coords from the trigger, aligned to the button's inline-end edge
+      // (right in LTR, left in RTL) so it reads the same as the absolute menu.
+      const rtl = document.documentElement.dir === 'rtl' || document.dir === 'rtl';
+      const horiz = rtl
+        ? `left: ${Math.round(rect.left)}px`
+        : `right: ${Math.round(window.innerWidth - rect.right)}px`;
+      const vert = menuOpenUpward
+        ? `bottom: ${Math.round(window.innerHeight - rect.top + 4)}px`
+        : `top: ${Math.round(rect.bottom + 4)}px`;
+      menuFixedStyle = `position: fixed; ${vert}; ${horiz}; max-height: ${cap}px; z-index: 9999;`;
+    }
 
     // Claim the global slot — every other PostActions instance sees
     // the change via $openMenuId and closes its own menu.
@@ -1395,7 +1440,14 @@
     </button>
 
     {#if showMoreMenu}
-      <div class="more-menu" class:more-menu-upward={menuOpenUpward} role="menu" style:max-height={menuMaxHeight}>
+      <div
+        bind:this={menuEl}
+        use:portal={menuFixed}
+        class="more-menu"
+        class:more-menu-upward={menuOpenUpward && !menuFixed}
+        role="menu"
+        style={menuFixed ? menuFixedStyle : `max-height: ${menuMaxHeight}`}
+      >
         {#if isRemotePost()}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleDisplayOnInstance}>
             <span class="material-symbols-outlined menu-icon">open_in_new</span>
