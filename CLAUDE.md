@@ -191,13 +191,13 @@ Cross-cutting systems worth knowing before editing UI:
   post immediately, then `post-replace` once the server returns the real one. Toasts come from
   `stores/toast.ts` (`addToast`). Feeds also listen for `post-deleted {id}` on `window` to drop
   a row — the shared convention for optimistic removal (delete, block, dismiss).
-- **Streams & Reels share one backend feed**: both call `GET /api/v1/timelines/streams`
-  (`social/streams.ex` `streams_feed/2`) — there is no separate Reels endpoint. Reels is the
-  Streams feed filtered **client-side** to portrait clips (`reelVideo()`) and tags its view
-  events with `source: 'reels_feed'`. The feed is public video only, gated on `orientation`
-  (`:portrait` for Reels vs `:all` for Streams) and a `min_duration` from the admin-tunable
-  `streams_min_duration_seconds`. When editing one surface, check whether the change belongs in
-  the shared query or only the client filter.
+- **Streams** is the single vertical short-video feed (Reels was consolidated into it —
+  one `/streams` route, `StreamPlayer.svelte`; no separate Reels route/component). Served by
+  `GET /api/v1/timelines/streams` (`social/streams.ex` `streams_feed/2`): public video only,
+  ordered by the `sort` param (trending/newest/oldest), gated on `orientation`, a per-viewer
+  `include_federated` opt-in (otherwise local + locally-boosted only), the viewer's
+  block/mute/domain filters, and a `min_duration` from the admin-tunable
+  `streams_min_duration_seconds`. View events tag `source: 'streams_feed'`.
 - **PWA**: `static/sw.js` (service worker, push) + `static/manifest.json`.
 
 ## Testing
