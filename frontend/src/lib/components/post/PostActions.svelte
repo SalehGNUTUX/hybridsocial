@@ -141,6 +141,9 @@
   let reactionTriggerEl: HTMLButtonElement | undefined = $state();
   let reactionPickerBelow = $state(false);
   const REACTION_PICKER_ESTIMATED_HEIGHT = 130;
+  // When menuFixed (Streams), the anchored hover/tap grid would be clipped by
+  // the clip's overflow, so it's portaled to <body> with these fixed coords.
+  let reactionPickerFixedStyle = $state('');
 
   $effect(() => {
     if (!showReactionPicker || !reactionTriggerEl) return;
@@ -152,6 +155,16 @@
     // both sides are roomy.
     reactionPickerBelow =
       spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
+
+    if (menuFixed) {
+      // Center over the trigger; sit above it, or below when the top is tight.
+      const cx = Math.round(rect.left + rect.width / 2);
+      const vert = reactionPickerBelow
+        ? `top: ${Math.round(rect.bottom + 8)}px`
+        : `bottom: ${Math.round(window.innerHeight - rect.top + 8)}px`;
+      reactionPickerFixedStyle =
+        `position: fixed; left: ${cx}px; transform: translateX(-50%); ${vert}; z-index: 9999;`;
+    }
   });
   let showMoreMenu = $state(false);
   let bounceReaction = $state(false);
@@ -1326,7 +1339,12 @@
       </button>
 
       {#if showReactionPicker}
-        <div class="picker-anchor" class:picker-anchor-below={reactionPickerBelow}>
+        <div
+          use:portal={menuFixed}
+          class="picker-anchor"
+          class:picker-anchor-below={reactionPickerBelow && !menuFixed}
+          style={menuFixed ? reactionPickerFixedStyle : ''}
+        >
           <ReactionPicker
             selected={currentReaction}
             onselect={handleReaction}
