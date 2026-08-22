@@ -799,7 +799,6 @@ defmodule Hybridsocial.Messaging do
     end
   end
 
-  @doc "Edit a message. Only the sender can edit."
   @doc """
   Translate a message's text into `target_lang` for a conversation participant.
 
@@ -831,6 +830,7 @@ defmodule Hybridsocial.Messaging do
     end
   end
 
+  @doc "Edit a message. Only the sender can edit."
   def edit_message(message_id, sender_id, new_content) do
     case Repo.get(Message, message_id) do
       nil ->
