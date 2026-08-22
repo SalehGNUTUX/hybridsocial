@@ -812,6 +812,10 @@ defmodule HybridsocialWeb.Router do
     put "/email", AdminController, :update_email_config
     post "/email/test", AdminController, :send_test_email
 
+    # Post translation backend (LibreTranslate / DeepL)
+    get "/translation", AdminController, :get_translation_config
+    put "/translation", AdminController, :update_translation_config
+
     # Theme
     get "/theme", AdminController, :get_theme
     put "/theme", AdminController, :update_theme
