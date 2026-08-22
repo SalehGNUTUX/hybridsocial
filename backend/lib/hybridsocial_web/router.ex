@@ -526,6 +526,7 @@ defmodule HybridsocialWeb.Router do
     get "/:id/messages", ConversationController, :messages
     put "/:id/messages/:mid", ConversationController, :edit_message
     delete "/:id/messages/:mid", ConversationController, :delete_message
+    post "/:id/messages/:mid/translate", ConversationController, :translate_message
     post "/:id/read", ConversationController, :mark_read
     post "/:id/typing", ConversationController, :typing
     patch "/:id/settings", ConversationController, :update_settings
