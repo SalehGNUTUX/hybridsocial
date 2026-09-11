@@ -551,7 +551,6 @@
         >
           <MessageBubble
             {message}
-            {conversationId}
             isOwn={message.sender.id === userId}
             showAvatar={shouldShowAvatar(i)}
             replyTo={message.reply_to_id ? messagesById.get(message.reply_to_id) ?? null : null}

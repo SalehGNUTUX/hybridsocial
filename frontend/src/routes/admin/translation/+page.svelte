@@ -69,6 +69,12 @@
         and post text never leaves a server you control); <strong>DeepL</strong> offers higher quality
         via a paid API key.
       </p>
+      <p class="section-desc">
+        <strong>Applies to posts only.</strong> Direct messages are never sent to a translation
+        provider, whichever backend you choose. Translating a post sends that post's text to the
+        configured provider, so if the post is not public, its text still leaves this server unless
+        you are running your own LibreTranslate.
+      </p>
 
       <div class="form-fields">
         <div class="form-field">
