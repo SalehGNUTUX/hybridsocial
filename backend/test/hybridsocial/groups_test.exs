@@ -720,4 +720,84 @@ defmodule Hybridsocial.GroupsTest do
       assert updated.role == :moderator
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Posting / reacting authorization
+  #
+  # `group_id` is a cast field on Post, so without an explicit guard any
+  # authenticated identity could attribute a post to any group. These lock the
+  # guard down at the context level, where every local creation path funnels.
+  # ---------------------------------------------------------------------------
+
+  describe "authorize_group_post/2" do
+    setup %{alice: alice, bob: bob} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{
+          "name" => "Private Club",
+          "handle" => "privclub",
+          "visibility" => "private",
+          "join_policy" => "open"
+        })
+
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+      %{group: group}
+    end
+
+    test "an approved member may post", %{group: group, bob: bob} do
+      assert :ok = Groups.authorize_group_post(%{"group_id" => group.id}, bob.id)
+    end
+
+    test "the owner may post", %{group: group, alice: alice} do
+      assert :ok = Groups.authorize_group_post(%{"group_id" => group.id}, alice.id)
+    end
+
+    test "a non-member may NOT post into the group", %{group: group, carol: carol} do
+      assert {:error, :group_forbidden} =
+               Groups.authorize_group_post(%{"group_id" => group.id}, carol.id)
+    end
+
+    test "a banned member may NOT post", %{group: group, alice: alice, bob: bob} do
+      {:ok, _} = Groups.ban_member(group.id, alice.id, membership_id(group.id, bob.id))
+
+      assert {:error, :group_forbidden} =
+               Groups.authorize_group_post(%{"group_id" => group.id}, bob.id)
+    end
+
+    test "a pending applicant may NOT post", %{alice: alice, carol: carol} do
+      {:ok, gated} =
+        Groups.create_group(alice.id, %{
+          "name" => "Gated",
+          "handle" => "gatedclub",
+          "visibility" => "private",
+          "join_policy" => "approval"
+        })
+
+      {:ok, _} = Groups.join_group(gated.id, carol.id)
+
+      assert {:error, :group_forbidden} =
+               Groups.authorize_group_post(%{"group_id" => gated.id}, carol.id)
+    end
+
+    test "nobody may post into a soft-deleted group", %{group: group, alice: alice, bob: bob} do
+      {:ok, _} = Groups.delete_group(group.id, alice.id)
+
+      # Membership rows survive the soft delete; they must not stay writable.
+      assert {:error, :group_forbidden} =
+               Groups.authorize_group_post(%{"group_id" => group.id}, bob.id)
+
+      assert {:error, :group_forbidden} =
+               Groups.authorize_group_post(%{"group_id" => group.id}, alice.id)
+    end
+
+    test "a status with no group_id is unaffected", %{carol: carol} do
+      assert :ok = Groups.authorize_group_post(%{"content" => "hi"}, carol.id)
+      assert :ok = Groups.authorize_group_post(%{"group_id" => nil}, carol.id)
+      assert :ok = Groups.authorize_group_post(%{"group_id" => ""}, carol.id)
+    end
+
+    test "atom-keyed attrs are checked too, not silently skipped", %{group: group, carol: carol} do
+      assert {:error, :group_forbidden} =
+               Groups.authorize_group_post(%{group_id: group.id}, carol.id)
+    end
+  end
 end

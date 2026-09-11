@@ -57,6 +57,7 @@ defmodule Hybridsocial.Social.Posts do
       |> maybe_put_edit_expires_at(edit_expires_at)
 
     with :ok <- validate_premium_emojis(attrs["content"], identity),
+         :ok <- Hybridsocial.Groups.authorize_group_post(post_attrs, identity_id),
          :ok <- check_thread_not_locked(post_attrs),
          :ok <- check_audio_allowed(attrs, limits),
          :ok <- check_target_media(post_attrs) do
@@ -1006,12 +1007,17 @@ defmodule Hybridsocial.Social.Posts do
 
   defp group_member?(nil, _viewer_id), do: false
 
-  defp group_member?(group_id, viewer_id) do
-    Repo.exists?(
-      from gm in Hybridsocial.Groups.GroupMember,
-        where: gm.group_id == ^group_id and gm.identity_id == ^viewer_id
-    )
+  # Delegates to `Groups.member?/2`, which filters `status == :approved`.
+  # This used to test only (group_id, identity_id), so every non-approved row
+  # still satisfied it — a **banned** member kept read access to the group's
+  # posts, as did a pending or rejected applicant to a private group. The
+  # membership row survives a ban by design (it's what records the ban), so
+  # the status filter is the whole check.
+  defp group_member?(group_id, viewer_id) when is_binary(viewer_id) do
+    Hybridsocial.Groups.member?(group_id, viewer_id)
   end
+
+  defp group_member?(_group_id, _viewer_id), do: false
 
   defp mentioned?(post_id, identity_id) do
     Repo.exists?(
@@ -1095,10 +1101,28 @@ defmodule Hybridsocial.Social.Posts do
 
   # --- Reactions ---
 
+  # Reacting to a group-scoped post requires approved membership — a banned
+  # member could otherwise keep reacting to the group's content indefinitely.
+  #
+  # Deliberately narrow: this checks group membership only, not general
+  # readability via `viewer_can_read?/2`. `react/4` is also the federation
+  # inbox's entry point for remote Likes (inbox.ex), and gating those on a
+  # local readability predicate would drop legitimate remote reactions. A
+  # remote actor who *is* an approved member still passes.
+  defp check_group_reaction_allowed(%Post{group_id: gid, visibility: "group"}, identity_id)
+       when is_binary(gid) do
+    if Hybridsocial.Groups.can_post_in?(gid, identity_id),
+      do: :ok,
+      else: {:error, :group_forbidden}
+  end
+
+  defp check_group_reaction_allowed(_post, _identity_id), do: :ok
+
   def react(post_id, identity_id, type, opts \\ []) do
     target_media_id = Keyword.get(opts, :target_media_id)
 
     with {:ok, post} <- get_existing_post(post_id),
+         :ok <- check_group_reaction_allowed(post, identity_id),
          :ok <- validate_target_media(post_id, target_media_id) do
       case get_existing_reaction(post_id, identity_id, target_media_id) do
         nil ->

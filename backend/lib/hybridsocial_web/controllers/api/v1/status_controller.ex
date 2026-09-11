@@ -60,6 +60,11 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
           |> put_status(:unprocessable_entity)
           |> json(%{error: "target_media.requires_parent"})
 
+        {:error, :group_forbidden} ->
+          conn
+          |> put_status(:forbidden)
+          |> json(%{error: "group.forbidden"})
+
         {:error, changeset} ->
           conn
           |> put_status(:unprocessable_entity)
@@ -354,6 +359,11 @@ defmodule HybridsocialWeb.Api.V1.StatusController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "status.not_found"})
+
+      {:error, :group_forbidden} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "group.forbidden"})
 
       {:error, :target_media_not_found} ->
         conn

@@ -605,6 +605,56 @@ defmodule Hybridsocial.Groups do
   end
 
   @doc """
+  Authorizes posting into a group.
+
+  A status carrying a `group_id` must come from an **approved** member of a
+  live group. Everything else — a non-member, a pending applicant, a rejected
+  one, and crucially a **banned** member — is refused with
+  `{:error, :group_forbidden}`. A status with no `group_id` is unaffected.
+
+  Mirrors `Pages.resolve_post_author/2` and is called from the same place:
+  `Posts.create_post/3`, the single chokepoint every *local* post-creation
+  path funnels through (the API, quote posts, scheduled posts). Putting it in
+  the context rather than the controller is deliberate — `group_id` is a cast
+  field on `Post`, so a check that lives only in `StatusController` is one new
+  caller away from being bypassed. Federation builds its posts separately and
+  does not route through here; inbound group posts are the inbox's problem.
+  """
+  def authorize_group_post(attrs, identity_id) do
+    case group_id_from(attrs) do
+      nil ->
+        :ok
+
+      group_id ->
+        if can_post_in?(group_id, identity_id), do: :ok, else: {:error, :group_forbidden}
+    end
+  end
+
+  @doc """
+  True when the identity may create content (posts, reactions) in the group.
+
+  Approved membership in a group that still exists. Deliberately stricter than
+  `member?/2` alone: a soft-deleted group keeps its membership rows, and those
+  must not remain writable.
+  """
+  def can_post_in?(group_id, identity_id) when is_binary(group_id) and is_binary(identity_id) do
+    not is_nil(get_group(group_id)) and member?(group_id, identity_id)
+  end
+
+  def can_post_in?(_group_id, _identity_id), do: false
+
+  # Attrs reach us string-keyed from the controllers and atom-keyed from a few
+  # internal callers; accept both rather than silently skipping the check.
+  defp group_id_from(attrs) when is_map(attrs) do
+    case Map.get(attrs, "group_id") || Map.get(attrs, :group_id) do
+      id when is_binary(id) and id != "" -> id
+      _ -> nil
+    end
+  end
+
+  defp group_id_from(_attrs), do: nil
+
+  @doc """
   True when the identity may take moderator-tier actions in the group:
   pin/unpin posts, ban members, approve / reject join applications.
   Owners and admins are always considered moderators; instance staff
