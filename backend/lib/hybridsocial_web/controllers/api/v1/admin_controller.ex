@@ -1055,6 +1055,27 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
   # ── Reports ──────────────────────────────────────────────────────────
 
+  # GET /api/v1/admin/reports/group_overview
+  #
+  # Metadata only: how many open group-tier reports each group is holding and
+  # how old the oldest is. Deliberately no contents — this exists so staff can
+  # notice a group sitting on complaints (the capture case) without reading
+  # every group's internal business by default.
+  def group_report_overview(conn, params) do
+    with :ok <- require_permission(conn, "reports.view") do
+      rows = Moderation.group_report_overview(limit: clamp_limit(params["limit"]))
+
+      conn
+      |> put_status(:ok)
+      |> json(%{
+        data: rows,
+        escalation_hours: Moderation.group_report_escalation_hours()
+      })
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   def list_reports(conn, params) do
     with :ok <- require_permission(conn, "reports.view") do
       opts = [

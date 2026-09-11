@@ -1147,10 +1147,24 @@
     reportStep = 1;
   }
 
+  // Two-tier reporting (#86). Only offered for a post that lives in a group;
+  // everything else goes to instance staff as before.
+  //
+  // The instance option is always available and never requires the group's
+  // agreement — a group must not be able to funnel complaints about itself
+  // into its own queue. The backend independently re-routes `illegal` and
+  // `hate_speech` to instance staff whatever is chosen here, because a
+  // reporter under stress isn't making a legal classification.
+  let reportTier = $state<'group' | 'instance'>('instance');
+  let postGroupId = $derived(post.group?.id ?? null);
+  let canReportToGroup = $derived(!!postGroupId);
+
   async function submitReport() {
     reportSubmitting = true;
     reportError = '';
     try {
+      const toGroup = canReportToGroup && reportTier === 'group';
+
       await api.post('/api/v1/reports', {
         reported_id: post.account.id,
         target_type: 'post',
@@ -1159,6 +1173,8 @@
         description: reportDescription,
         block_account: reportBlock,
         forward: reportIsRemote && reportForward,
+        tier: toGroup ? 'group' : 'instance',
+        group_id: toGroup ? postGroupId : null,
       });
       showReportModal = false;
     } catch {
@@ -1756,6 +1772,28 @@
 
       {:else}
         <h3 class="dialog-title">{$t('report.step2_title')}</h3>
+
+        {#if canReportToGroup}
+          <fieldset class="report-tier">
+            <legend class="report-tier-legend">{$t('report.where_legend')}</legend>
+
+            <label class="report-radio">
+              <input type="radio" value="group" bind:group={reportTier} />
+              <span>
+                <strong>{$t('report.to_group')}</strong>
+                <span class="report-hint">{$t('report.to_group_hint')}</span>
+              </span>
+            </label>
+
+            <label class="report-radio">
+              <input type="radio" value="instance" bind:group={reportTier} />
+              <span>
+                <strong>{$t('report.to_instance')}</strong>
+                <span class="report-hint">{$t('report.to_instance_hint')}</span>
+              </span>
+            </label>
+          </fieldset>
+        {/if}
 
         {#if reportIsRemote}
           <div class="report-remote-notice" role="note">
@@ -2728,6 +2766,45 @@
     font-size: 20px;
     flex-shrink: 0;
     margin-top: 1px;
+  }
+
+  /* Two-tier report destination. Radios rather than a select so both options
+     are visible at once — the instance route must never look like it's
+     hidden behind an interaction. */
+  .report-tier {
+    border: none;
+    padding: 0;
+    margin: 0 0 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .report-tier-legend {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    margin-block-end: 8px;
+    padding: 0;
+  }
+
+  .report-radio {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+
+  .report-radio:hover {
+    background: var(--color-surface);
+  }
+
+  .report-radio span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .report-checkbox {

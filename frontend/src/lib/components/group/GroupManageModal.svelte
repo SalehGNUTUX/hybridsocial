@@ -11,6 +11,9 @@
     banMember,
     restrictMember,
     unrestrictMember,
+    getGroupReports,
+    escalateReport,
+    type GroupReport,
     type GroupRestriction,
     inviteToGroup,
     getGroupApplications,
@@ -45,7 +48,7 @@
   // Section names mirror the historical /settings tabs but layered as
   // a sidebar so the admin sees every available action at a glance.
   // "general" stays selected on reopen — most edits live there.
-  let section = $state<'general' | 'members' | 'applications' | 'invites' | 'danger'>('general');
+  let section = $state<'general' | 'members' | 'applications' | 'invites' | 'reports' | 'danger'>('general');
 
   // General — form-bound copies of the group fields so cancel-without-save
   // doesn't leak edits back to the parent's `group` prop.
@@ -118,6 +121,7 @@
     if (section === 'members') void loadMembers();
     if (section === 'applications') void loadApplications();
     if (section === 'invites') void loadInvites();
+    if (section === 'reports') void loadReports();
   });
 
   // The members + applications endpoints currently return bare arrays
@@ -221,6 +225,40 @@
       addToast('Role updated', 'success');
     } catch {
       addToast('Could not change role', 'error');
+    }
+  }
+
+  // --- Group moderation queue (#86 item 3) ------------------------------
+  // Reports routed to this group rather than to instance staff. The site
+  // route always exists alongside this one and is never gated on the group
+  // agreeing — a group must not be able to funnel complaints about itself
+  // into its own queue.
+  let reports = $state<GroupReport[]>([]);
+  let reportsLoading = $state(false);
+  // Mirrors the backend's `group_report_escalation_hours` default; only used
+  // for the explanatory copy, not for any decision.
+  const reportEscalationHours = 72;
+
+  async function loadReports() {
+    reportsLoading = true;
+    try {
+      reports = await getGroupReports(groupId);
+    } catch {
+      addToast('Could not load reports', 'error');
+    } finally {
+      reportsLoading = false;
+    }
+  }
+
+  async function handleEscalate(reportId: string) {
+    try {
+      await escalateReport(reportId);
+      reports = reports.map((r) =>
+        r.id === reportId ? { ...r, escalated_at: new Date().toISOString() } : r,
+      );
+      addToast('Sent to the site moderators', 'success');
+    } catch {
+      addToast('Could not send this to the site moderators', 'error');
     }
   }
 
@@ -459,6 +497,15 @@
       >
         <span class="material-symbols-outlined">person_add</span>
         Invites
+      </button>
+      <button
+        type="button"
+        class="sidebar-item"
+        class:sidebar-item-active={section === 'reports'}
+        onclick={() => (section = 'reports')}
+      >
+        <span class="material-symbols-outlined">flag</span>
+        Reports
       </button>
       {#if canDelete}
         <button
@@ -794,6 +841,51 @@
                 >
                   Cancel
                 </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {:else if section === 'reports'}
+        <h3 class="section-title">Reports</h3>
+        <p class="section-help">
+          Things members reported as breaking this group's rules. Anything reported as breaking
+          the site's rules goes to the site moderators instead — and a report left unhandled here
+          becomes visible to them after {reportEscalationHours}h.
+        </p>
+
+        {#if reportsLoading}
+          <div class="section-loading"><Spinner /></div>
+        {:else if reports.length === 0}
+          <p class="section-empty">No reports.</p>
+        {:else}
+          <ul class="people-list">
+            {#each reports as r (r.id)}
+              <li class="people-row report-row">
+                <div class="people-meta">
+                  <span class="people-name">
+                    {r.category}
+                    {#if r.escalated_at}
+                      <span class="report-flag">with site moderators</span>
+                    {/if}
+                  </span>
+                  {#if r.description}
+                    <span class="people-handle">{r.description}</span>
+                  {/if}
+                  <span class="people-handle">
+                    reported by @{r.reporter?.handle ?? 'unknown'} · {new Date(
+                      r.created_at,
+                    ).toLocaleString()}
+                  </span>
+                </div>
+                {#if !r.escalated_at}
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline"
+                    onclick={() => handleEscalate(r.id)}
+                  >
+                    Send to site moderators
+                  </button>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -1168,6 +1260,20 @@
   .restrict-buttons {
     display: flex;
     gap: var(--space-2);
+  }
+
+  .report-row {
+    align-items: flex-start;
+  }
+
+  .report-flag {
+    margin-inline-start: var(--space-2);
+    padding: 1px 8px;
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
   }
 
   .sanction-note {

@@ -228,3 +228,33 @@ export function searchGroups(query: string, cursor?: string): Promise<PaginatedR
   if (cursor) params.cursor = cursor;
   return api.get('/api/v1/groups/search', params);
 }
+
+/** A report routed to a group's own moderation queue (#86). */
+export interface GroupReport {
+  id: string;
+  category: string;
+  description: string | null;
+  status: string;
+  tier: 'group' | 'instance';
+  target_type: string | null;
+  target_id: string | null;
+  /** Set once it has gone to instance staff, by escalation or by category. */
+  escalated_at: string | null;
+  created_at: string;
+  reporter: { id: string; handle: string; display_name: string | null; avatar_url: string | null } | null;
+  reported: { id: string; handle: string; display_name: string | null; avatar_url: string | null } | null;
+}
+
+/** The group's own moderation queue. Moderator-tier; 403 otherwise. */
+export function getGroupReports(groupId: string, status?: string): Promise<GroupReport[]> {
+  return api.get(`/api/v1/groups/${groupId}/reports`, status ? { status } : undefined);
+}
+
+/**
+ * Hand a group report up to instance staff. Open to the reporter and to the
+ * group's own moderators — a group mod who is out of their depth shouldn't
+ * need to make an accusation to get help.
+ */
+export function escalateReport(reportId: string): Promise<{ id: string; tier: string }> {
+  return api.post(`/api/v1/reports/${reportId}/escalate`);
+}
