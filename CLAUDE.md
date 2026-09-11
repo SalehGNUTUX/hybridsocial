@@ -54,6 +54,29 @@ Frontend: `node scripts/check-i18n.mjs`. (CI does not build the frontend beyond 
 check, but run `npm run check` locally — it must report 0 errors.) `mix precommit` covers
 the core backend gates in one shot.
 
+## Deploying a migration
+
+Migrations do **not** run at boot — the backend container starts `bin/hybridsocial start`.
+They run via the one-shot `backend-migrate` compose service
+(`eval "Hybridsocial.Release.migrate()"`).
+
+**`backend-migrate` has its own `build:` entry, so `build backend` does not rebuild it.**
+Skip it and the migrate container runs a stale image and prints `Migrations already up` —
+true of *that image*, while production stays un-migrated. It reports success and does
+nothing. (Same failure shape as the single-file bind mount: the tool succeeds against a
+stale copy. Hit on 2026-09-11.)
+
+```bash
+# after rsyncing backend/ to the host
+docker compose -f docker-compose-production.yml build backend backend-migrate   # BOTH
+docker compose -f docker-compose-production.yml run --rm backend-migrate
+docker compose -f docker-compose-production.yml up -d --no-deps backend
+```
+
+Verify against the database, not the migrator's output:
+`docker exec hs_db psql -U hybridsocial -d hybridsocial_prod -tAc "\d <table>"` (or query
+`information_schema.columns`) before and after.
+
 ## Backend architecture
 
 Two OTP trees under `backend/lib/`:
