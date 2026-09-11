@@ -3,6 +3,7 @@ defmodule Hybridsocial.Media do
   The Media context. Manages file uploads, validation, storage, and retrieval.
   """
   import Ecto.Query
+  require Logger
 
   alias Hybridsocial.Antivirus
   alias Hybridsocial.Repo
@@ -99,6 +100,7 @@ defmodule Hybridsocial.Media do
             duration: duration,
             width: width,
             height: height,
+            thumbnail_path: maybe_video_poster(final_path, final_content_type, identity_id),
             metadata: metadata
           }
 
@@ -112,6 +114,43 @@ defmodule Hybridsocial.Media do
         if final_path != path, do: File.rm(final_path)
       end
     end
+  end
+
+  @doc false
+  # Stores a poster frame for a video upload and returns its storage path, or
+  # nil. Best-effort throughout: a video with no poster still uploads fine and
+  # the grid falls back to an inline <video>, so nothing here may raise.
+  #
+  # Reuses Storage.store/2 by wrapping the extracted JPEG in a Plug.Upload,
+  # which keeps posters on whatever backend (local / S3 / R2) the instance is
+  # configured for rather than special-casing a second path.
+  def maybe_video_poster(path, content_type, identity_id) do
+    if Validator.video?(content_type) do
+      case Video.poster(path) do
+        {:ok, poster_path} ->
+          try do
+            upload = %Plug.Upload{
+              path: poster_path,
+              content_type: "image/jpeg",
+              filename: "poster.jpg"
+            }
+
+            case Storage.store(upload, identity_id) do
+              {:ok, stored} -> stored
+              _ -> nil
+            end
+          after
+            File.rm(poster_path)
+          end
+
+        {:error, _} ->
+          nil
+      end
+    end
+  rescue
+    e ->
+      Logger.warning("poster storage failed: #{Exception.message(e)}")
+      nil
   end
 
   @doc """
