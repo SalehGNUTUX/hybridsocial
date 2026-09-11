@@ -13,7 +13,11 @@ admin panel — env vars are for infrastructure only, and there are no hardcoded
 
 - `backend/` — Elixir/Phoenix JSON API + the full ActivityPub federation stack (no LiveView UI)
 - `frontend/` — SvelteKit web app (Svelte 5 runes), a Mastodon-compatible REST client
-- infra — `Caddyfile` + `caddy/` (Coraza WAF), `crowdsec/`, `docker/`, `docker-compose*.yml`, `federation-test/`
+- infra — `caddy-conf/Caddyfile` + `caddy/` (Coraza WAF image), `crowdsec/`, `docker/`,
+  `docker-compose*.yml`, `federation-test/`. The Caddyfile is mounted as a **directory**
+  (`./caddy-conf:/etc/caddy/conf`), never as a single file — Docker binds a single-file mount
+  by inode, so an rsync/scp update never reaches the container and `caddy validate`/`reload`
+  then succeed against the stale copy (#186).
 - `docs/SPEC.md` — the authoritative product/architecture spec (32 sections)
 
 ## Commands
