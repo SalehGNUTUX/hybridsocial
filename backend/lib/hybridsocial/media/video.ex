@@ -198,4 +198,75 @@ defmodule Hybridsocial.Media.Video do
   end
 
   defp parse_fps(_), do: nil
+
+  @doc """
+  Extracts a poster frame from a video, returning `{:ok, jpeg_path}`.
+
+  Videos had no server-side poster: `thumbnail_path` was declared on
+  `MediaFile`, read by the serializer and cleaned up on delete, but nothing
+  ever wrote it. So `preview_url` was always null for video and the media
+  grid fell back to a bare `<video preload="metadata">`, which loads metadata
+  without painting a frame — every video tile rendered blank.
+
+  Seeks to `at_seconds` (1s by default) rather than frame 0: the first frame
+  of a clip is very often black or a fade-in, which makes a grid of posters
+  look just as broken as no posters at all. Falls back to frame 0 for clips
+  shorter than the seek point.
+
+  Best-effort by design, like `probe/1` — a missing ffmpeg or an undecodable
+  file must never fail the upload itself.
+  """
+  def poster(path, at_seconds \\ 1) when is_binary(path) do
+    out = Path.join(System.tmp_dir!(), "poster_#{:erlang.unique_integer([:positive])}.jpg")
+
+    case extract_frame(path, at_seconds, out) do
+      :ok ->
+        {:ok, out}
+
+      :error when at_seconds > 0 ->
+        # Clip shorter than the seek point — take the very first frame.
+        case extract_frame(path, 0, out) do
+          :ok -> {:ok, out}
+          :error -> cleanup_and_error(out)
+        end
+
+      :error ->
+        cleanup_and_error(out)
+    end
+  end
+
+  defp extract_frame(path, at_seconds, out) do
+    args = [
+      # -ss before -i seeks by keyframe, which is much cheaper than decoding
+      # up to the timestamp and is plenty accurate for a thumbnail.
+      "-ss",
+      to_string(at_seconds),
+      "-i",
+      path,
+      "-frames:v",
+      "1",
+      # Cap the long edge: a poster only ever renders in a grid tile, and a
+      # 4K still would cost more to serve than the tile is worth.
+      "-vf",
+      "scale='min(640,iw)':'min(640,ih)':force_original_aspect_ratio=decrease",
+      "-q:v",
+      "4",
+      "-y",
+      out
+    ]
+
+    case System.cmd("ffmpeg", args, stderr_to_stdout: true) do
+      {_, 0} -> if File.exists?(out) and File.stat!(out).size > 0, do: :ok, else: :error
+      {_out, _code} -> :error
+    end
+  rescue
+    e ->
+      Logger.warning("video poster extraction failed: #{Exception.message(e)}")
+      :error
+  end
+
+  defp cleanup_and_error(out) do
+    File.rm(out)
+    {:error, :poster_failed}
+  end
 end

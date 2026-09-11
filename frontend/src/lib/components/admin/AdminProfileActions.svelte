@@ -517,8 +517,12 @@
           </div>
         {/if}
 
-        <!-- View in admin link -->
-        <a href="/admin/user-management/users?q={account.handle}" class="admin-view-link">
+        <!-- View in admin link. Links to the detail view by id, not a handle
+             search: the search lands on a list the admin still has to pick
+             from, and a handle is neither unique across instances nor stable
+             (users can change theirs), so it could match several rows or
+             none. The id is what the detail route wants. -->
+        <a href="/admin/user-management/users/{account.id}" class="admin-view-link">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
           </svg>
