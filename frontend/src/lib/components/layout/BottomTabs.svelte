@@ -33,10 +33,15 @@
     // Streams takes the notifications slot: the header already carries a
     // notifications bell, so a second one here was pure duplication. The bell
     // (and its unread badge) still lives in the "More" sheet for reachability.
-    { href: '/streams', labelKey: 'nav.streams', icon: 'M3 5h18v14H3z M3 9h18 M8 5v4 M13 5v4 M18 5v4 M10 13l4 2-4 2z' },
+    // Icon must stay identical to the Sidebar's Streams entry.
+    { href: '/streams', labelKey: 'nav.streams', icon: 'M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M10.5 9.5l4 2.5-4 2.5z' },
     // Profile moved into the "More" sheet so Compose sits dead-centre
     // with two tabs on each side (5 total — within the ≤5 nav guideline).
-    { href: '#more', labelKey: 'nav.more', icon: 'M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z', isMore: true, badge: () => dmCount },
+    // The badge sums DMs and notifications: both now live *inside* the sheet,
+    // and this badge's job is to say "there's something in here". Counting
+    // only DMs would leave unread notifications with no bottom-bar signal at
+    // all once they moved off the bar.
+    { href: '#more', labelKey: 'nav.more', icon: 'M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z', isMore: true, badge: () => dmCount + notifCount },
   ]);
 
   // The "More" sheet lists every Sidebar destination that doesn't

@@ -439,4 +439,76 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       assert conn.status in [401, 403]
     end
   end
+
+  describe "admin translation config" do
+    setup %{conn: conn} do
+      # Config.Store isn't started in the test env, so start one per test and
+      # share the sandbox connection so it can read/write the settings table.
+      Ecto.Adapters.SQL.Sandbox.mode(Hybridsocial.Repo, {:shared, self()})
+      start_supervised!(Hybridsocial.Config.Store)
+
+      admin = create_user("tcfg_admin", "tcfg_admin@test.com") |> make_admin()
+      %{conn: admin_conn(conn, admin), admin: admin}
+    end
+
+    test "is disabled by default and reports no key", %{conn: conn} do
+      body = json_response(get(conn, "/api/v1/admin/translation"), 200)
+
+      assert body["backend"] == "none"
+      assert body["api_key"] == ""
+    end
+
+    test "round-trips the backend and url", %{conn: conn} do
+      conn =
+        put(conn, "/api/v1/admin/translation", %{
+          "backend" => "libretranslate",
+          "api_url" => "https://lt.internal.example"
+        })
+
+      body = json_response(conn, 200)
+      assert body["backend"] == "libretranslate"
+      assert body["api_url"] == "https://lt.internal.example"
+      assert Hybridsocial.Config.get("translation_backend") == "libretranslate"
+    end
+
+    test "never returns the raw api key", %{conn: conn} do
+      secret = "super-secret-translation-key"
+      put(conn, "/api/v1/admin/translation", %{"api_key" => secret})
+
+      body = json_response(get(conn, "/api/v1/admin/translation"), 200)
+
+      refute body["api_key"] == secret
+      assert body["api_key"] =~ "****"
+      # The real value is still stored — only the response is masked.
+      assert Hybridsocial.Config.get("translation_api_key") == secret
+    end
+
+    # Saving the form without touching the key field sends the mask back.
+    # Writing that through would silently destroy the admin's real key.
+    test "saving a masked key leaves the stored secret intact", %{conn: conn} do
+      secret = "super-secret-translation-key"
+      put(conn, "/api/v1/admin/translation", %{"api_key" => secret})
+
+      masked = json_response(get(conn, "/api/v1/admin/translation"), 200)["api_key"]
+      put(conn, "/api/v1/admin/translation", %{"api_key" => masked, "backend" => "deepl"})
+
+      assert Hybridsocial.Config.get("translation_api_key") == secret
+      assert Hybridsocial.Config.get("translation_backend") == "deepl"
+    end
+
+    test "an explicit new key replaces the old one", %{conn: conn} do
+      put(conn, "/api/v1/admin/translation", %{"api_key" => "old-key-value"})
+      put(conn, "/api/v1/admin/translation", %{"api_key" => "new-key-value"})
+
+      assert Hybridsocial.Config.get("translation_api_key") == "new-key-value"
+    end
+
+    test "requires the settings.manage permission" do
+      stranger = create_user("tcfg_nosy", "tcfg_nosy@test.com")
+      conn = auth_conn(Phoenix.ConnTest.build_conn(), stranger)
+
+      assert get(conn, "/api/v1/admin/translation").status in [401, 403]
+      assert put(conn, "/api/v1/admin/translation", %{"backend" => "deepl"}).status in [401, 403]
+    end
+  end
 end
