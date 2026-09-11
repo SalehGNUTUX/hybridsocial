@@ -221,5 +221,71 @@ defmodule Hybridsocial.AccountsTest do
       assert Enum.find_index(ranked, &(&1 == hot.id)) < cold_idx
       assert Enum.find_index(ranked, &(&1 == pop.id)) < cold_idx
     end
+
+    # This list is public, so only public engagement may feed it. Otherwise a
+    # burst of reactions inside a private group — or on a DM-visibility post —
+    # silently promotes its author to the top of Explore for everyone.
+    #
+    # Discriminating setup: a barely-engaged PUBLIC post (1 reaction) against a
+    # hugely-engaged NON-PUBLIC one (500). Scores differ either way, so the
+    # recency tiebreak can't mask the result. If non-public engagement counted,
+    # 500 would beat 1 and the private author would rank first.
+    for {handle, visibility} <- [
+          {"foll", "followers"},
+          {"grp", "group"},
+          {"list", "list"},
+          {"dm", "direct"},
+          {"unl", "unlisted"}
+        ] do
+      test "engagement on a #{visibility} post does not count toward the ranking" do
+        visibility = unquote(visibility)
+
+        public_small = create_user("tr_vis_pub_#{unquote(handle)}")
+        add_post(public_small, "public", 1)
+
+        private_huge = create_user("tr_vis_priv_#{unquote(handle)}")
+        add_post(private_huge, visibility, 500)
+
+        ranked = Accounts.list_trending_accounts() |> Enum.map(& &1.id)
+        pub_idx = Enum.find_index(ranked, &(&1 == public_small.id))
+        priv_idx = Enum.find_index(ranked, &(&1 == private_huge.id))
+
+        assert pub_idx < priv_idx,
+               "a #{visibility} post's 500 reactions outranked a public post's 1 — " <>
+                 "non-public engagement is leaking into a public ranking"
+      end
+    end
+
+    test "a silenced account is excluded" do
+      silenced = create_user("tr_silenced")
+      add_post(silenced, "public", 500)
+
+      assert silenced.id in (Accounts.list_trending_accounts() |> Enum.map(& &1.id))
+
+      silenced |> Ecto.Changeset.change(is_silenced: true) |> Repo.update!()
+
+      # Silencing exists to cut public reach; topping Explore is the opposite.
+      refute silenced.id in (Accounts.list_trending_accounts() |> Enum.map(& &1.id))
+    end
+
+    test "a suspended account is excluded" do
+      suspended = create_user("tr_suspended")
+      assert suspended.id in (Accounts.list_trending_accounts() |> Enum.map(& &1.id))
+
+      suspended |> Ecto.Changeset.change(is_suspended: true) |> Repo.update!()
+      refute suspended.id in (Accounts.list_trending_accounts() |> Enum.map(& &1.id))
+    end
+
+    defp add_post(author, visibility, reactions) do
+      %Hybridsocial.Social.Post{}
+      |> Hybridsocial.Social.Post.create_changeset(%{
+        identity_id: author.id,
+        content: "post by #{author.handle}",
+        visibility: visibility
+      })
+      |> Repo.insert!()
+      |> Ecto.Changeset.change(reaction_count: reactions)
+      |> Repo.update!()
+    end
   end
 end

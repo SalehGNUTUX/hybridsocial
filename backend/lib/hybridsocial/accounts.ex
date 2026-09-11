@@ -1242,6 +1242,10 @@ defmodule Hybridsocial.Accounts do
   of recent post engagement (reactions + boosts + replies over the last week)
   and follower count, newest breaking ties. Distinct from `suggested_users/2`
   (which is an admin-curated list), this is computed from real activity.
+
+  The list is shown to everyone, so it only ever counts **public** post
+  engagement and excludes suspended and silenced accounts — silencing exists
+  to cut public reach, and topping Explore is the opposite of that.
   """
   def list_trending_accounts(opts \\ []) do
     limit = Keyword.get(opts, :limit, 20)
@@ -1250,7 +1254,12 @@ defmodule Hybridsocial.Accounts do
 
     engagement =
       from(p in Hybridsocial.Social.Post,
-        where: is_nil(p.deleted_at) and p.inserted_at >= ^cutoff,
+        # Public posts only. Without this, engagement on a followers-only,
+        # group, list, or direct post feeds a ranking shown to everyone —
+        # activity inside a private group could put its author at the top of
+        # Explore. Mirrors `Feeds.Algorithms.Trending`, which scores only
+        # `visibility == "public"` posts.
+        where: is_nil(p.deleted_at) and p.inserted_at >= ^cutoff and p.visibility == "public",
         group_by: p.identity_id,
         select: %{
           identity_id: p.identity_id,
@@ -1268,7 +1277,7 @@ defmodule Hybridsocial.Accounts do
     from(i in Identity,
       where:
         i.type == "user" and is_nil(i.parent_identity_id) and is_nil(i.deleted_at) and
-          i.is_suspended == false,
+          i.is_suspended == false and i.is_silenced == false,
       left_join: e in subquery(engagement),
       on: e.identity_id == i.id,
       left_join: fo in subquery(followers),
