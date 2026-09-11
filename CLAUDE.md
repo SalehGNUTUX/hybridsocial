@@ -80,10 +80,18 @@ Rollback is the same sequence with an older SHA.
 **Caddy still builds on the host** (`build: ./caddy`, the Coraza WAF image) and is not
 published, so WAF changes still need the source there and `build caddy`.
 
-**Config is still rsynced**: `caddy-conf/`, `docker-compose-production.yml`, `crowdsec/`.
-Scope rsync to what changed, always `--dry-run --itemize-changes` first, and exclude
-`.env*`, `priv/uploads/`, `priv/backups/`, `tmp/` — rsync mirrors the working directory,
-not what git tracks, and each of those has reached the host by accident at least once.
+**Config comes from git, not rsync.** The host has a sparse checkout at
+`/root/hs-config` (`caddy caddy-conf crowdsec docker scripts` + root files), so a config
+change is `git pull` there and nothing else. `git rev-parse HEAD` tells you which config
+commit is deployed and `git status` shows local drift — neither was knowable under rsync.
+
+`.env` is gitignored and lives only on the host; it also pins
+`COMPOSE_PROJECT_NAME=hybridsocial` so the stack identity doesn't depend on the directory
+name (compose derives it from the dir otherwise, and moving the checkout would silently
+create a parallel stack instead of adopting the running one).
+
+Application source is no longer on the host at all — `backend/` and `frontend/` ship as
+images. The only build left there is `caddy` (Coraza WAF).
 
 **Migrations do not run at boot** — the backend container starts `bin/hybridsocial start`.
 They run via the one-shot `backend-migrate` service. That service now shares one pulled
