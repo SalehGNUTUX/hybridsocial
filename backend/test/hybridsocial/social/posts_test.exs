@@ -612,4 +612,135 @@ defmodule Hybridsocial.Social.PostsTest do
       assert Enum.map(post.media_attachments, & &1.id) == [media.id]
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Group scoping
+  #
+  # `group_id` is a cast field, so before these guards existed any identity
+  # could attribute a post to any group — including a private one they had
+  # never joined — and the post showed up in that group's timeline. A banned
+  # member likewise kept full posting, reacting and read access. Each test
+  # here fails without the corresponding guard.
+  # ---------------------------------------------------------------------------
+
+  describe "group post authorization" do
+    alias Hybridsocial.Groups
+
+    setup do
+      owner = create_user("grp_owner", "grp_owner@test.com")
+      member = create_user("grp_member", "grp_member@test.com")
+      outsider = create_user("grp_outsider", "grp_outsider@test.com")
+
+      {:ok, group} =
+        Groups.create_group(owner.id, %{
+          "name" => "Members Only",
+          "handle" => "membersonly",
+          "visibility" => "private",
+          "join_policy" => "open"
+        })
+
+      {:ok, _} = Groups.join_group(group.id, member.id)
+
+      %{owner: owner, member: member, outsider: outsider, group: group}
+    end
+
+    defp group_post(identity_id, group_id, content) do
+      Posts.create_post(identity_id, %{
+        "content" => content,
+        "visibility" => "group",
+        "group_id" => group_id
+      })
+    end
+
+    defp membership_row(group_id, identity_id) do
+      Hybridsocial.Repo.get_by(Hybridsocial.Groups.GroupMember,
+        group_id: group_id,
+        identity_id: identity_id
+      )
+    end
+
+    test "an approved member can post in the group", %{member: member, group: group} do
+      assert {:ok, post} = group_post(member.id, group.id, "hello group")
+      assert post.group_id == group.id
+    end
+
+    test "a non-member cannot inject a post into a private group", %{
+      outsider: outsider,
+      group: group
+    } do
+      assert {:error, :group_forbidden} =
+               group_post(outsider.id, group.id, "I do not belong here")
+    end
+
+    test "a banned member cannot keep posting", %{owner: owner, member: member, group: group} do
+      assert {:ok, _} = group_post(member.id, group.id, "before the ban")
+
+      {:ok, _} = Groups.ban_member(group.id, owner.id, membership_row(group.id, member.id).id)
+
+      assert {:error, :group_forbidden} = group_post(member.id, group.id, "after the ban")
+    end
+
+    test "a banned member cannot keep reacting to group content", %{
+      owner: owner,
+      member: member,
+      group: group
+    } do
+      {:ok, post} = group_post(owner.id, group.id, "group content")
+      assert {:ok, _} = Posts.react(post.id, member.id, "like")
+      {:ok, _} = Posts.unreact(post.id, member.id)
+
+      {:ok, _} = Groups.ban_member(group.id, owner.id, membership_row(group.id, member.id).id)
+
+      assert {:error, :group_forbidden} = Posts.react(post.id, member.id, "like")
+    end
+
+    test "a non-member cannot react to a group post", %{
+      owner: owner,
+      outsider: outsider,
+      group: group
+    } do
+      {:ok, post} = group_post(owner.id, group.id, "group content")
+      assert {:error, :group_forbidden} = Posts.react(post.id, outsider.id, "like")
+    end
+
+    test "a banned member loses read access to the group's posts", %{
+      owner: owner,
+      member: member,
+      group: group
+    } do
+      {:ok, post} = group_post(owner.id, group.id, "members only")
+      reloaded = Hybridsocial.Repo.get!(Hybridsocial.Social.Post, post.id)
+
+      assert Posts.viewer_can_read?(reloaded, member.id)
+
+      {:ok, _} = Groups.ban_member(group.id, owner.id, membership_row(group.id, member.id).id)
+
+      # The membership row survives the ban by design — it is what records the
+      # ban — so a status-blind membership check leaves read access intact.
+      refute Posts.viewer_can_read?(reloaded, member.id)
+    end
+
+    test "a quote post cannot smuggle itself into a group either", %{
+      owner: owner,
+      outsider: outsider,
+      group: group
+    } do
+      {:ok, target} =
+        Posts.create_post(owner.id, %{"content" => "quote me", "visibility" => "public"})
+
+      assert {:error, :group_forbidden} =
+               Posts.quote_post(outsider.id, target.id, %{
+                 "content" => "sneaking in",
+                 "visibility" => "group",
+                 "group_id" => group.id
+               })
+    end
+
+    test "an ordinary post with no group_id is unaffected", %{outsider: outsider} do
+      assert {:ok, post} =
+               Posts.create_post(outsider.id, %{"content" => "normal", "visibility" => "public"})
+
+      assert is_nil(post.group_id)
+    end
+  end
 end
