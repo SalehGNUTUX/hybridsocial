@@ -21,6 +21,10 @@
   // Email-verification filter only applies to local accounts — remote
   // users go through their origin instance's verification flow.
   let emailFilter = $state<'all' | 'verified' | 'unverified'>('all');
+  // Pages and groups are Identity rows, so they were always in this list —
+  // just indistinguishable from users. Filtered client-side like the others,
+  // since the endpoint returns the full set and the page slices locally.
+  let typeFilter = $state<'all' | 'user' | 'page' | 'group' | 'bot'>('all');
   let sortKey = $state('created_at');
   let sortDir = $state<'asc' | 'desc'>('desc');
 
@@ -155,14 +159,15 @@
         isSubaccountUser ||
         (emailFilter === 'verified' && (u as any).email_confirmed === true) ||
         (emailFilter === 'unverified' && (u as any).email_confirmed === false);
-      return matchesSearch && matchesStatus && matchesLocation && matchesEmail;
+      const matchesType = typeFilter === 'all' || u.type === typeFilter;
+      return matchesSearch && matchesStatus && matchesLocation && matchesEmail && matchesType;
     })
   );
 
   // Reset to page 1 whenever a filter changes — pagination keyed off a
   // larger result set is meaningless once the result set shrinks.
   $effect(() => {
-    void search; void statusFilter; void locationFilter; void emailFilter; void exactIdFilter;
+    void search; void statusFilter; void locationFilter; void emailFilter; void typeFilter; void exactIdFilter;
     currentPage = 1;
   });
 
@@ -364,6 +369,13 @@
       <option value="all">All emails</option>
       <option value="verified">Verified email</option>
       <option value="unverified">Unverified email</option>
+    </select>
+    <select class="input status-select" bind:value={typeFilter} aria-label="Filter by account type">
+      <option value="all">All types</option>
+      <option value="user">Users</option>
+      <option value="page">Pages</option>
+      <option value="group">Groups</option>
+      <option value="bot">Bots</option>
     </select>
   </div>
 
