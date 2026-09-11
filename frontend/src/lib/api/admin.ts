@@ -763,3 +763,41 @@ export function previewEmailTemplate(
 ): Promise<EmailTemplatePreview> {
   return api.post<EmailTemplatePreview>(`/api/v1/admin/email_templates/${key}/preview`, draft || {});
 }
+
+/**
+ * Followers of any identity — including a page or group, whose followers were
+ * previously only a count in the admin panel with no way to see them (#167).
+ */
+export function getAdminUserFollowers(
+  id: string,
+  params?: { limit?: string; offset?: string },
+): Promise<{ data: AdminUser[] }> {
+  return api.get(`/api/v1/admin/users/${id}/followers`, params as Record<string, string>);
+}
+
+/**
+ * Severs a follow. Needs `users.moderate`, not just `users.view` — the usual
+ * reason to do this is cutting a harasser off from someone's posts. A remote
+ * follower is sent an Undo{Follow} so their instance stops delivering too.
+ */
+export function removeAdminUserFollower(id: string, followerId: string): Promise<void> {
+  return api.delete(`/api/v1/admin/users/${id}/followers/${followerId}`);
+}
+
+export interface AdminGroupMember {
+  id: string;
+  role: 'owner' | 'admin' | 'moderator' | 'member';
+  status: string;
+  joined_at: string;
+  account: AdminUser | null;
+}
+
+/**
+ * Members of a group, addressed by the group's *actor identity* id (what the
+ * admin views hold). Read-only: changing roles is in-group governance, which
+ * instance staff deliberately don't get — they moderate the group as an
+ * entity, they don't run it.
+ */
+export function getAdminGroupMembers(id: string): Promise<{ data: AdminGroupMember[] }> {
+  return api.get(`/api/v1/admin/users/${id}/group_members`);
+}

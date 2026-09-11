@@ -491,6 +491,22 @@ defmodule Hybridsocial.Groups do
     |> Repo.aggregate(:count)
   end
 
+  @doc """
+  Finds a group by its **actor identity** id rather than its own primary key.
+
+  A group has two ids: the `groups` row id and the `identities` row id of the
+  actor it posts as. Anything that starts from an identity — the admin account
+  views, federation, an @handle lookup — only holds the latter, and handing
+  that to `get_group/1` silently returns nil. This is the bridge.
+  """
+  def get_group_by_identity(identity_id) when is_binary(identity_id) do
+    Group
+    |> where([g], g.identity_id == ^identity_id and is_nil(g.deleted_at))
+    |> Repo.one()
+  end
+
+  def get_group_by_identity(_identity_id), do: nil
+
   def get_members(group_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, @default_page_size)
     status = Keyword.get(opts, :status, :approved)

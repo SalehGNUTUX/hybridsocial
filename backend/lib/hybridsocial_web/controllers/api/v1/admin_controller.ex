@@ -1249,6 +1249,96 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
 
   defp maybe_put_identity_type(opts, _type), do: opts
 
+  # GET /api/v1/admin/users/:id/followers
+  #
+  # Who follows this account. Works for any identity, which is the point —
+  # a page's or group's followers were visible only as a count with no way
+  # to see or act on them (#167 item 2).
+  def account_followers(conn, %{"id" => id} = params) do
+    with :ok <- require_permission(conn, "users.view") do
+      followers =
+        Hybridsocial.Social.followers(id,
+          limit: clamp_limit(params["limit"]),
+          offset: parse_int(params["offset"], 0)
+        )
+
+      conn
+      |> put_status(:ok)
+      |> json(%{data: Enum.map(followers, &serialize_account/1)})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  # DELETE /api/v1/admin/users/:id/followers/:follower_id
+  #
+  # Severs a follow. `users.moderate` rather than `users.view`: forcibly
+  # removing a follower is a moderation action (the usual case is cutting a
+  # harasser off from someone's posts), not an administrative read.
+  #
+  # Delegates to `Social.unfollow/2`, so a remote follower also gets an
+  # Undo{Follow} federated to them — otherwise their instance would keep
+  # showing the follow and keep delivering our posts to them.
+  def remove_account_follower(conn, %{"id" => id, "follower_id" => follower_id}) do
+    with :ok <- require_permission(conn, "users.moderate") do
+      :ok = Hybridsocial.Social.unfollow(follower_id, id)
+
+      Moderation.log(
+        conn.assigns.current_identity.id,
+        "account.remove_follower",
+        "account",
+        id,
+        %{"follower_id" => follower_id},
+        conn.remote_ip |> :inet.ntoa() |> to_string()
+      )
+
+      conn |> put_status(:ok) |> json(%{message: "follower.removed"})
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
+  # GET /api/v1/admin/users/:id/group_members
+  #
+  # Members of a group, addressed by the group's **actor identity** id —
+  # which is what the admin account views hold. A group has two ids and the
+  # `groups` row id isn't reachable from here, hence
+  # `Groups.get_group_by_identity/1`.
+  #
+  # Read-only on purpose: changing a member's role is in-group governance,
+  # which per the project's permission model instance staff deliberately do
+  # not get. Staff moderate the group as an entity (suspend / silence /
+  # take down); they don't run it.
+  def account_group_members(conn, %{"id" => id} = params) do
+    with :ok <- require_permission(conn, "users.view") do
+      case Hybridsocial.Groups.get_group_by_identity(id) do
+        nil ->
+          conn |> put_status(:not_found) |> json(%{error: "group.not_found"})
+
+        group ->
+          members =
+            Hybridsocial.Groups.get_members(group.id, limit: clamp_limit(params["limit"]))
+
+          conn
+          |> put_status(:ok)
+          |> json(%{
+            data:
+              Enum.map(members, fn m ->
+                %{
+                  id: m.id,
+                  role: m.role,
+                  status: m.status,
+                  joined_at: m.inserted_at,
+                  account: m.identity && serialize_account(m.identity)
+                }
+              end)
+          })
+      end
+    else
+      {:error, perm} -> deny(conn, perm)
+    end
+  end
+
   def account_action(conn, %{"id" => id, "action" => action} = params) do
     required =
       case action do
