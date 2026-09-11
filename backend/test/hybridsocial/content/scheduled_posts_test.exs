@@ -171,4 +171,133 @@ defmodule Hybridsocial.Content.ScheduledPostsTest do
       assert count == 0
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Group re-check at publish time
+  #
+  # The group authorization in `Posts.create_post/3` runs when the post is
+  # *scheduled*. Without re-evaluating it here, anything queued before a ban
+  # simply outlives the ban.
+  # ---------------------------------------------------------------------------
+
+  describe "publish_due_posts/0 re-checks group membership" do
+    alias Hybridsocial.Groups
+
+    setup do
+      owner = create_user("sched_owner", "sched_owner@test.com")
+      member = create_user("sched_member", "sched_member@test.com")
+
+      {:ok, group} =
+        Groups.create_group(owner.id, %{
+          "name" => "Sched Group",
+          "handle" => "schedgroup",
+          "visibility" => "private",
+          "join_policy" => "open"
+        })
+
+      {:ok, _} = Groups.join_group(group.id, member.id)
+
+      %{owner: owner, member: member, group: group}
+    end
+
+    defp schedule_group_post(identity_id, group_id) do
+      {:ok, post} =
+        ScheduledPosts.schedule_post(identity_id, %{
+          "content" => "queued for the group",
+          "visibility" => "group",
+          "group_id" => group_id,
+          "scheduled_at" => future_time(3600)
+        })
+
+      # Drag it into the past so the next tick considers it due.
+      past = DateTime.utc_now() |> DateTime.add(-60, :second) |> DateTime.truncate(:microsecond)
+
+      post
+      |> Ecto.Changeset.change(scheduled_at: past)
+      |> Repo.update!()
+    end
+
+    defp membership_row(group_id, identity_id) do
+      Repo.get_by(Hybridsocial.Groups.GroupMember,
+        group_id: group_id,
+        identity_id: identity_id
+      )
+    end
+
+    defp published?(post_id) do
+      not is_nil(Repo.get!(Hybridsocial.Social.Post, post_id).published_at)
+    end
+
+    test "a still-approved member's scheduled group post publishes", %{
+      member: member,
+      group: group
+    } do
+      post = schedule_group_post(member.id, group.id)
+
+      assert ScheduledPosts.publish_due_posts() >= 1
+      assert published?(post.id)
+    end
+
+    test "a post scheduled BEFORE a ban does not publish after it", %{
+      owner: owner,
+      member: member,
+      group: group
+    } do
+      post = schedule_group_post(member.id, group.id)
+      {:ok, _} = Groups.ban_member(group.id, owner.id, membership_row(group.id, member.id).id)
+
+      assert ScheduledPosts.publish_due_posts() == 0
+      refute published?(post.id), "a ban must not be outlived by anything queued before it"
+    end
+
+    test "the held post is kept, not deleted", %{owner: owner, member: member, group: group} do
+      post = schedule_group_post(member.id, group.id)
+      {:ok, _} = Groups.ban_member(group.id, owner.id, membership_row(group.id, member.id).id)
+
+      ScheduledPosts.publish_due_posts()
+
+      still_there = Repo.get!(Hybridsocial.Social.Post, post.id)
+      assert is_nil(still_there.deleted_at)
+      assert still_there.group_id == group.id, "must not be silently re-addressed"
+    end
+
+    test "it publishes once the ban is lifted", %{owner: owner, member: member, group: group} do
+      post = schedule_group_post(member.id, group.id)
+      {:ok, _} = Groups.ban_member(group.id, owner.id, membership_row(group.id, member.id).id)
+
+      assert ScheduledPosts.publish_due_posts() == 0
+
+      # Rejoin (the ban row is replaced by an approved membership again).
+      membership_row(group.id, member.id)
+      |> Ecto.Changeset.change(status: :approved)
+      |> Repo.update!()
+
+      assert ScheduledPosts.publish_due_posts() >= 1
+      assert published?(post.id)
+    end
+
+    test "a post to a deleted group is held back", %{owner: owner, member: member, group: group} do
+      post = schedule_group_post(member.id, group.id)
+      {:ok, _} = Groups.delete_group(group.id, owner.id)
+
+      assert ScheduledPosts.publish_due_posts() == 0
+      refute published?(post.id)
+    end
+
+    test "an ordinary scheduled post is unaffected by any of this" do
+      loner = create_user("sched_loner", "sched_loner@test.com")
+
+      {:ok, post} =
+        ScheduledPosts.schedule_post(loner.id, %{
+          "content" => "no group involved",
+          "scheduled_at" => future_time(3600)
+        })
+
+      past = DateTime.utc_now() |> DateTime.add(-60, :second) |> DateTime.truncate(:microsecond)
+      post |> Ecto.Changeset.change(scheduled_at: past) |> Repo.update!()
+
+      assert ScheduledPosts.publish_due_posts() >= 1
+      assert published?(post.id)
+    end
+  end
 end

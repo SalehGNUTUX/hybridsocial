@@ -3,6 +3,7 @@ defmodule Hybridsocial.Content.ScheduledPosts do
   Context module for managing scheduled posts.
   """
   import Ecto.Query
+  require Logger
   alias Hybridsocial.Repo
   alias Hybridsocial.Social.Post
 
@@ -104,19 +105,44 @@ defmodule Hybridsocial.Content.ScheduledPosts do
       |> where([p], is_nil(p.deleted_at))
       |> Repo.all()
 
-    Enum.each(due_posts, fn post ->
+    {publishable, held} = Enum.split_with(due_posts, &group_post_still_allowed?/1)
+
+    if held != [] do
+      Logger.info(
+        "Scheduled publish: held back #{length(held)} group post(s) — " <>
+          "author no longer permitted to post in the target group"
+      )
+    end
+
+    Enum.each(publishable, fn post ->
       case post |> Post.publish_changeset(now) |> Repo.update() do
         {:ok, published} ->
           Hybridsocial.Social.Posts.run_post_published_hooks(published)
 
         {:error, reason} ->
-          require Logger
           Logger.warning("Scheduled publish failed for #{post.id}: #{inspect(reason)}")
       end
     end)
 
-    length(due_posts)
+    length(publishable)
   end
+
+  # The group check in `Posts.create_post/3` runs when the post is *scheduled*.
+  # Between then and the publish tick the author can be banned, can leave, or
+  # the group can be deleted — so it has to be re-evaluated here, or a ban is
+  # trivially outlived by anything queued before it.
+  #
+  # Held back rather than deleted or stripped of its group: the author keeps
+  # their content, nothing is silently re-addressed to a different audience,
+  # and if the ban is lifted the post publishes on a later tick. A permanently
+  # banned author's post simply stays in their scheduled list, where they can
+  # delete it themselves.
+  defp group_post_still_allowed?(%Post{group_id: group_id, identity_id: identity_id})
+       when is_binary(group_id) do
+    Hybridsocial.Groups.can_post_in?(group_id, identity_id)
+  end
+
+  defp group_post_still_allowed?(_post), do: true
 
   # --- Private helpers ---
 
