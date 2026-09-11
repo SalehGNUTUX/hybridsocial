@@ -121,6 +121,29 @@ defmodule HybridsocialWeb.Api.V1.ReportController do
     end
   end
 
+  # POST /api/v1/reports/:id/escalate
+  #
+  # Hands a group-tier report up to instance staff. Open to the reporter and
+  # to the group's own moderators; the authorization itself lives in
+  # Moderation.escalate_report/2 so it can't drift from the context rule.
+  def escalate(conn, %{"id" => id}) do
+    actor_id = conn.assigns.current_identity.id
+
+    case Moderation.escalate_report(id, actor_id) do
+      {:ok, report} ->
+        conn |> put_status(:ok) |> json(%{id: report.id, tier: report.tier})
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "report.not_found"})
+
+      {:error, :forbidden} ->
+        conn |> put_status(:forbidden) |> json(%{error: "report.forbidden"})
+
+      {:error, _changeset} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: "validation.failed"})
+    end
+  end
+
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Regex.replace(~r"%{(\w+)}", msg, fn _, key ->

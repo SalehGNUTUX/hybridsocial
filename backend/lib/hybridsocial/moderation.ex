@@ -30,7 +30,7 @@ defmodule Hybridsocial.Moderation do
   def create_report(reporter_id, attrs) do
     result =
       %Report{}
-      |> Report.changeset(Map.put(attrs, "reporter_id", reporter_id))
+      |> Report.changeset(attrs |> Map.put("reporter_id", reporter_id) |> force_instance_tier())
       |> Repo.insert()
 
     with {:ok, report} <- result do
@@ -44,6 +44,155 @@ defmodule Hybridsocial.Moderation do
     end
 
     result
+  end
+
+  # A group can decide what's off-topic in its own space. It cannot decide
+  # that illegal content or hate speech is acceptable there, and the instance
+  # carries that responsibility regardless of which button the reporter chose
+  # — a reporter under stress is not making a legal classification. So these
+  # categories are pulled to the instance tier no matter what was requested.
+  #
+  # `group_id` is kept, so the group still sees it in their queue as context;
+  # it's the *ownership* that moves.
+  defp force_instance_tier(attrs) do
+    category = Map.get(attrs, "category") || Map.get(attrs, :category)
+
+    cond do
+      category in Report.always_instance_categories() -> Map.put(attrs, "tier", "instance")
+      not group_tier_target_valid?(attrs) -> Map.put(attrs, "tier", "instance")
+      true -> attrs
+    end
+  end
+
+  # `tier` and `group_id` come straight off the request, so without this a
+  # client could aim a group-tier report at any group — spamming an unrelated
+  # group's moderation queue with content that isn't theirs. A group-tier
+  # report has to be about a post that actually lives in that group.
+  #
+  # Falls back to the instance tier rather than rejecting: the complaint is
+  # probably genuine and mis-routed, and dropping it would be worse than
+  # sending it to staff.
+  defp group_tier_target_valid?(attrs) do
+    tier = Map.get(attrs, "tier") || Map.get(attrs, :tier)
+    group_id = Map.get(attrs, "group_id") || Map.get(attrs, :group_id)
+
+    if tier != "group" or is_nil(group_id) do
+      true
+    else
+      target_type = Map.get(attrs, "target_type") || Map.get(attrs, :target_type)
+      target_id = Map.get(attrs, "target_id") || Map.get(attrs, :target_id)
+
+      target_type == "post" and is_binary(target_id) and
+        Repo.exists?(
+          from(p in Hybridsocial.Social.Post,
+            where:
+              p.id == type(^target_id, Ecto.UUID) and p.group_id == type(^group_id, Ecto.UUID)
+          )
+        )
+    end
+  end
+
+  @doc """
+  How long an untouched group-tier report waits before instance staff can see
+  it. DB-backed per the no-hardcoded-limits convention.
+
+  This is the anti-capture mechanism. Without it, a group admin who is
+  themselves the subject of a report can simply never action it and instance
+  staff never learn it existed — "ignore it" becomes a winning strategy.
+  72h balances group autonomy against how long harm continues while a report
+  sits; lower it on an instance that wants a tighter leash.
+  """
+  def group_report_escalation_hours do
+    case Hybridsocial.Config.get("group_report_escalation_hours", 72) do
+      n when is_integer(n) and n >= 0 -> n
+      n when is_binary(n) -> String.to_integer(n)
+      _ -> 72
+    end
+  rescue
+    ArgumentError -> 72
+  end
+
+  @doc """
+  Reports for a group's own moderation queue. Requires moderator-tier rights
+  in that group (`Groups.can_moderate?/2`).
+
+  Includes reports forced to the instance tier by category: the group still
+  needs to see that something was reported in their space even when the
+  instance owns the decision.
+  """
+  def list_group_reports(group_id, actor_id, opts \\ []) do
+    if Hybridsocial.Groups.can_moderate?(group_id, actor_id) do
+      reports =
+        Report
+        |> where([r], r.group_id == ^group_id)
+        |> filter_reports_by_status(opts[:status])
+        |> order_by([r], desc: r.inserted_at)
+        |> paginate(opts)
+        |> Repo.all()
+        |> Repo.preload([:reporter, :reported])
+
+      {:ok, reports}
+    else
+      {:error, :forbidden}
+    end
+  end
+
+  @doc """
+  Escalates a group-tier report to the instance tier.
+
+  Allowed for the **reporter** (their complaint, their call if the group isn't
+  acting) and for any **group moderator** (handing up something out of their
+  depth shouldn't require an accusation). Instance staff don't need this —
+  they can already see escalated and aged-out reports.
+
+  Idempotent: escalating an already-instance-tier report is a no-op success.
+  """
+  def escalate_report(report_id, actor_id) do
+    case Repo.get(Report, report_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Report{tier: "instance"} = report ->
+        {:ok, report}
+
+      %Report{} = report ->
+        if may_escalate?(report, actor_id) do
+          report |> Report.escalate_changeset(actor_id) |> Repo.update()
+        else
+          {:error, :forbidden}
+        end
+    end
+  end
+
+  defp may_escalate?(%Report{reporter_id: reporter_id}, actor_id) when reporter_id == actor_id,
+    do: true
+
+  defp may_escalate?(%Report{group_id: group_id}, actor_id) when is_binary(group_id),
+    do: Hybridsocial.Groups.can_moderate?(group_id, actor_id)
+
+  defp may_escalate?(_report, _actor_id), do: false
+
+  @doc """
+  Counts of open group-tier reports per group, for instance staff.
+
+  **Metadata only — no contents.** This is what makes a captured queue
+  visible without putting every group's internal business in front of
+  instance staff. Returns `[%{group_id:, open:, oldest_at:, overdue:}]`.
+  """
+  def group_report_overview(opts \\ []) do
+    cutoff = DateTime.add(DateTime.utc_now(), -group_report_escalation_hours() * 3600, :second)
+
+    Report
+    |> where([r], r.tier == "group" and r.status in ["pending", "investigating"])
+    |> group_by([r], r.group_id)
+    |> select([r], %{
+      group_id: r.group_id,
+      open: count(r.id),
+      oldest_at: min(r.inserted_at),
+      overdue: filter(count(r.id), r.inserted_at < ^cutoff)
+    })
+    |> paginate(opts)
+    |> Repo.all()
   end
 
   defp bump_post_open_report_count(post_id, delta) when is_integer(delta) do
@@ -77,11 +226,31 @@ defmodule Hybridsocial.Moderation do
 
   def list_reports(opts \\ []) do
     Report
+    |> visible_to_instance_staff()
     |> filter_reports_by_status(opts[:status])
     |> order_by([r], desc: r.inserted_at)
     |> paginate(opts)
     |> Repo.all()
     |> Repo.preload([:reporter, :reported])
+  end
+
+  # What instance staff see. Group-tier reports are group business and are
+  # excluded by default — otherwise staff drown in other people's squabbles,
+  # and group-internal disputes land in front of the instance by default,
+  # which members don't expect.
+  #
+  # Two exceptions, and they're the whole point of the tiering:
+  #   * escalated — someone with standing asked for instance eyes
+  #   * aged out — open past `group_report_escalation_hours`, so a group that
+  #     simply never acts can't bury a complaint
+  defp visible_to_instance_staff(query) do
+    cutoff = DateTime.add(DateTime.utc_now(), -group_report_escalation_hours() * 3600, :second)
+
+    where(
+      query,
+      [r],
+      r.tier == "instance" or not is_nil(r.escalated_at) or r.inserted_at < ^cutoff
+    )
   end
 
   @doc """

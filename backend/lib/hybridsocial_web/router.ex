@@ -477,6 +477,9 @@ defmodule HybridsocialWeb.Router do
 
     get "/:id/screening", GroupController, :screening
     patch "/:id/screening", GroupController, :update_screening
+
+    # The group's own moderation queue (moderator-tier).
+    get "/:id/reports", GroupController, :reports
   end
 
   # Pages (authenticated)
@@ -724,6 +727,10 @@ defmodule HybridsocialWeb.Router do
     pipe_through [:api, :authenticated]
 
     post "/", ReportController, :create
+
+    # Hand a group-tier report up to instance staff. Open to the reporter and
+    # to the group's own moderators — see Moderation.escalate_report/2.
+    post "/:id/escalate", ReportController, :escalate
   end
 
   # Appeals (authenticated — user-facing)
@@ -843,6 +850,9 @@ defmodule HybridsocialWeb.Router do
 
     # Reports
     get "/reports", AdminController, :list_reports
+    # Metadata only (counts / oldest / overdue per group), so staff can spot a
+    # group sitting on complaints without reading group-internal business.
+    get "/reports/group_overview", AdminController, :group_report_overview
     get "/reports/:id", AdminController, :show_report
     post "/reports/:id/resolve", AdminController, :resolve_report
     post "/reports/:id/dismiss", AdminController, :dismiss_report

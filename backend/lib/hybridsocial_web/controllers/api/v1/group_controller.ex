@@ -663,6 +663,50 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
   # forward-friendly.
   defp tag_status(role, status), do: "#{role || "member"}:#{status}"
 
+  # GET /api/v1/groups/:id/reports — the group's own moderation queue.
+  # Moderator-tier; the check lives in Moderation.list_group_reports/3.
+  def reports(conn, %{"id" => id} = params) do
+    identity = conn.assigns.current_identity
+    opts = [status: params["status"], limit: clamp_limit(params["limit"])]
+
+    case Hybridsocial.Moderation.list_group_reports(id, identity.id, opts) do
+      {:ok, reports} ->
+        conn |> put_status(:ok) |> json(Enum.map(reports, &serialize_group_report/1))
+
+      {:error, :forbidden} ->
+        conn |> put_status(:forbidden) |> json(%{error: "group.forbidden"})
+    end
+  end
+
+  defp serialize_group_report(r) do
+    %{
+      id: r.id,
+      category: r.category,
+      description: r.description,
+      status: r.status,
+      tier: r.tier,
+      target_type: r.target_type,
+      target_id: r.target_id,
+      # Surfaced so a group mod can see at a glance that a report has already
+      # gone to instance staff — either escalated, or pulled by category.
+      escalated_at: r.escalated_at,
+      created_at: r.inserted_at,
+      reporter: brief_account(r.reporter),
+      reported: brief_account(r.reported)
+    }
+  end
+
+  defp brief_account(nil), do: nil
+
+  defp brief_account(identity) do
+    %{
+      id: identity.id,
+      handle: identity.handle,
+      display_name: identity.display_name,
+      avatar_url: identity.avatar_url
+    }
+  end
+
   defp now_utc, do: DateTime.utc_now()
 
   defp serialize_member(member) do
