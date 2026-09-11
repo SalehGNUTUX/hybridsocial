@@ -153,13 +153,19 @@
     // Prefer above (existing behavior). Only flip if above is too
     // tight AND below has more room — keeps the popover stable when
     // both sides are roomy.
-    reactionPickerBelow =
-      spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
+    //
+    // Held in a local first: reading `reactionPickerBelow` back inside the
+    // same $effect that writes it makes the effect depend on its own output
+    // and schedules a redundant re-run (the shape behind
+    // effect_update_depth_exceeded). The local is the same value, minus the
+    // dependency edge.
+    const below = spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
+    reactionPickerBelow = below;
 
     if (menuFixed) {
       // Center over the trigger; sit above it, or below when the top is tight.
       const cx = Math.round(rect.left + rect.width / 2);
-      const vert = reactionPickerBelow
+      const vert = below
         ? `top: ${Math.round(rect.bottom + 8)}px`
         : `bottom: ${Math.round(window.innerHeight - rect.top + 8)}px`;
       reactionPickerFixedStyle =
@@ -828,6 +834,60 @@
   });
 
   let menuRootEl: HTMLDivElement | undefined = $state();
+  // The ⋯ button this menu is anchored to. Kept so the fixed/portaled menu can
+  // be re-measured on scroll/resize, not just at open time.
+  let menuTriggerEl: HTMLElement | undefined;
+
+  // Keep the portaled menu glued to its trigger. A `position: fixed` node in
+  // <body> doesn't move with the page, so without this it stays at the
+  // coordinates it had when opened — stranded mid-screen after any scroll.
+  // Mirrors what the shared `Dropdown` does (#184).
+  $effect(() => {
+    if (!showMoreMenu || !menuFixed) return;
+    function reposition(e?: Event) {
+      // The menu itself scrolls when its list overflows; that must not
+      // re-anchor it.
+      if (e && menuEl && e.target instanceof Node && menuEl.contains(e.target)) return;
+      positionFixedMenu();
+    }
+    // Capture, so a scroll on any ancestor container reaches us — the Streams
+    // clip list scrolls, not the window.
+    window.addEventListener('scroll', reposition, { capture: true, passive: true });
+    window.addEventListener('resize', reposition, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', reposition, { capture: true });
+      window.removeEventListener('resize', reposition);
+    };
+  });
+
+  // Measure the trigger and write the fixed coords. Also recomputes the
+  // upward/downward flip, so a menu opened near the bottom still flips if the
+  // trigger scrolls toward the top (and vice versa).
+  function positionFixedMenu() {
+    if (!menuTriggerEl) return;
+    const rect = menuTriggerEl.getBoundingClientRect();
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const bottomReserved = isMobile ? 64 : 0;
+    const headerReserved = 64;
+    const padding = 12;
+    const spaceBelow = window.innerHeight - rect.bottom - bottomReserved - padding;
+    const spaceAbove = rect.top - headerReserved - padding;
+    menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
+    const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
+    const cap = Math.min(available, 360);
+    menuMaxHeight = `${cap}px`;
+
+    // Aligned to the button's inline-end edge (right in LTR, left in RTL) so
+    // it reads the same as the absolute menu.
+    const rtl = document.documentElement.dir === 'rtl' || document.dir === 'rtl';
+    const horiz = rtl
+      ? `left: ${Math.round(rect.left)}px`
+      : `right: ${Math.round(window.innerWidth - rect.right)}px`;
+    const vert = menuOpenUpward
+      ? `bottom: ${Math.round(window.innerHeight - rect.top + 4)}px`
+      : `top: ${Math.round(rect.bottom + 4)}px`;
+    menuFixedStyle = `position: fixed; ${vert}; ${horiz}; max-height: ${cap}px; z-index: 9999;`;
+  }
 
   function toggleMoreMenu(e: MouseEvent) {
     e.stopPropagation();
@@ -840,38 +900,31 @@
       return;
     }
 
-    // Check if the button is near the bottom of the viewport.
-    // On mobile (<=768px) the BottomTabs bar takes the bottom 64px,
-    // so subtract that from the downward budget — otherwise we'd
-    // happily open downward into the tab bar and clip the lower menu
-    // items behind it.
-    const btn = e.currentTarget as HTMLElement;
-    const rect = btn.getBoundingClientRect();
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    const bottomReserved = isMobile ? 64 : 0;
-    const headerReserved = 64;
-    const padding = 12;
-    const spaceBelow = window.innerHeight - rect.bottom - bottomReserved - padding;
-    const spaceAbove = rect.top - headerReserved - padding;
-    // Open upward when there's notably more room above. Either way,
-    // bound the menu height to whatever space we actually have so
-    // long lists scroll inside the menu instead of overflowing.
-    menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
-    const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
-    const cap = Math.min(available, 360);
-    menuMaxHeight = `${cap}px`;
+    menuTriggerEl = e.currentTarget as HTMLElement;
 
     if (menuFixed) {
-      // Fixed coords from the trigger, aligned to the button's inline-end edge
-      // (right in LTR, left in RTL) so it reads the same as the absolute menu.
-      const rtl = document.documentElement.dir === 'rtl' || document.dir === 'rtl';
-      const horiz = rtl
-        ? `left: ${Math.round(rect.left)}px`
-        : `right: ${Math.round(window.innerWidth - rect.right)}px`;
-      const vert = menuOpenUpward
-        ? `bottom: ${Math.round(window.innerHeight - rect.top + 4)}px`
-        : `top: ${Math.round(rect.bottom + 4)}px`;
-      menuFixedStyle = `position: fixed; ${vert}; ${horiz}; max-height: ${cap}px; z-index: 9999;`;
+      // One source of truth for the portaled menu's placement, shared with the
+      // scroll/resize handler so open-time and re-anchor can't drift apart.
+      positionFixedMenu();
+    } else {
+      // Check if the button is near the bottom of the viewport.
+      // On mobile (<=768px) the BottomTabs bar takes the bottom 64px,
+      // so subtract that from the downward budget — otherwise we'd
+      // happily open downward into the tab bar and clip the lower menu
+      // items behind it.
+      const rect = menuTriggerEl.getBoundingClientRect();
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      const bottomReserved = isMobile ? 64 : 0;
+      const headerReserved = 64;
+      const padding = 12;
+      const spaceBelow = window.innerHeight - rect.bottom - bottomReserved - padding;
+      const spaceAbove = rect.top - headerReserved - padding;
+      // Open upward when there's notably more room above. Either way,
+      // bound the menu height to whatever space we actually have so
+      // long lists scroll inside the menu instead of overflowing.
+      menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
+      const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
+      menuMaxHeight = `${Math.min(available, 360)}px`;
     }
 
     // Claim the global slot — every other PostActions instance sees
