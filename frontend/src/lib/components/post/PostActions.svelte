@@ -20,9 +20,17 @@
     onedit,
     oncomment,
     viewerContext = null,
+    menuFixed = false,
   }: {
     post: Post;
     onedit?: () => void;
+    /**
+     * Render the ⋯ menu into <body> with fixed positioning instead of
+     * absolutely inside the action bar. Needed where an ancestor clips overflow
+     * (the Streams clip frame + its scrollable action row) — otherwise the menu
+     * opens but is clipped to nothing. The feed leaves this off.
+     */
+    menuFixed?: boolean;
     // When provided, the reply/comment button calls this instead of opening
     // the global composer. Streams uses it to open an in-place comments sheet
     // (view + reply) rather than only launching a reply composer. Other call
@@ -133,6 +141,9 @@
   let reactionTriggerEl: HTMLButtonElement | undefined = $state();
   let reactionPickerBelow = $state(false);
   const REACTION_PICKER_ESTIMATED_HEIGHT = 130;
+  // When menuFixed (Streams), the anchored hover/tap grid would be clipped by
+  // the clip's overflow, so it's portaled to <body> with these fixed coords.
+  let reactionPickerFixedStyle = $state('');
 
   $effect(() => {
     if (!showReactionPicker || !reactionTriggerEl) return;
@@ -142,8 +153,24 @@
     // Prefer above (existing behavior). Only flip if above is too
     // tight AND below has more room — keeps the popover stable when
     // both sides are roomy.
-    reactionPickerBelow =
-      spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
+    //
+    // Held in a local first: reading `reactionPickerBelow` back inside the
+    // same $effect that writes it makes the effect depend on its own output
+    // and schedules a redundant re-run (the shape behind
+    // effect_update_depth_exceeded). The local is the same value, minus the
+    // dependency edge.
+    const below = spaceAbove < REACTION_PICKER_ESTIMATED_HEIGHT && spaceBelow > spaceAbove;
+    reactionPickerBelow = below;
+
+    if (menuFixed) {
+      // Center over the trigger; sit above it, or below when the top is tight.
+      const cx = Math.round(rect.left + rect.width / 2);
+      const vert = below
+        ? `top: ${Math.round(rect.bottom + 8)}px`
+        : `bottom: ${Math.round(window.innerHeight - rect.top + 8)}px`;
+      reactionPickerFixedStyle =
+        `position: fixed; left: ${cx}px; transform: translateX(-50%); ${vert}; z-index: 9999;`;
+    }
   });
   let showMoreMenu = $state(false);
   let bounceReaction = $state(false);
@@ -200,6 +227,14 @@
     const state = get(authStore);
     return state.user?.id === post.account.id;
   });
+
+  // A post authored *as a page* carries the page identity in `post.account`,
+  // so the strict author check above is false for the page's own managers —
+  // which is why Edit / Delete / Pin silently vanished from a page owner's
+  // own posts. The serializer sets `post.page.can_edit` for any viewer the
+  // backend's `Pages.can_edit?` accepts (owner / admin / editor); trust it so
+  // the manage actions show exactly where the server already authorizes them.
+  let canManagePost = $derived(() => isOwnPost() || post.page?.can_edit === true);
 
   let isRemotePost = $derived(() => {
     const acct = post.account.acct || post.account.handle;
@@ -675,6 +710,27 @@
   // which sits below --z-sticky (20). Set as inline style when we
   // toggle so the cap reflects the actual trigger position.
   let menuMaxHeight = $state<string>('');
+  // Full inline style for the fixed/portaled menu (position + coords + cap),
+  // computed from the trigger rect in toggleMoreMenu. Only used when menuFixed.
+  let menuFixedStyle = $state<string>('');
+  // The menu element itself — tracked so the outside-click handler treats a
+  // portaled (out-of-tree) menu as "inside" and doesn't close on its own items.
+  let menuEl = $state<HTMLDivElement>();
+
+  // Move the node to <body> so no clipping ancestor can hide it. A no-op (stays
+  // in place) when `enabled` is false — the feed keeps its absolute menu.
+  function portal(node: HTMLElement, enabled: boolean) {
+    let moved = false;
+    if (enabled) {
+      document.body.appendChild(node);
+      moved = true;
+    }
+    return {
+      destroy() {
+        if (moved) node.remove();
+      },
+    };
+  }
 
   // A unique tag per PostActions instance so the global `openMenuId`
   // store can identify which menu is currently expanded across the
@@ -766,8 +822,10 @@
     if (!showMoreMenu) return;
     function onDocClick(e: MouseEvent) {
       const t = e.target as Node | null;
-      // Click inside the menu or its trigger? Leave it open.
+      // Click inside the trigger, or inside the menu (which may be portaled to
+      // <body>, i.e. outside menuRootEl)? Leave it open.
       if (t && menuRootEl && menuRootEl.contains(t)) return;
+      if (t && menuEl && menuEl.contains(t)) return;
       openMenuId.set(null);
     }
     function onKey(e: KeyboardEvent) {
@@ -784,6 +842,60 @@
   });
 
   let menuRootEl: HTMLDivElement | undefined = $state();
+  // The ⋯ button this menu is anchored to. Kept so the fixed/portaled menu can
+  // be re-measured on scroll/resize, not just at open time.
+  let menuTriggerEl: HTMLElement | undefined;
+
+  // Keep the portaled menu glued to its trigger. A `position: fixed` node in
+  // <body> doesn't move with the page, so without this it stays at the
+  // coordinates it had when opened — stranded mid-screen after any scroll.
+  // Mirrors what the shared `Dropdown` does (#184).
+  $effect(() => {
+    if (!showMoreMenu || !menuFixed) return;
+    function reposition(e?: Event) {
+      // The menu itself scrolls when its list overflows; that must not
+      // re-anchor it.
+      if (e && menuEl && e.target instanceof Node && menuEl.contains(e.target)) return;
+      positionFixedMenu();
+    }
+    // Capture, so a scroll on any ancestor container reaches us — the Streams
+    // clip list scrolls, not the window.
+    window.addEventListener('scroll', reposition, { capture: true, passive: true });
+    window.addEventListener('resize', reposition, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', reposition, { capture: true });
+      window.removeEventListener('resize', reposition);
+    };
+  });
+
+  // Measure the trigger and write the fixed coords. Also recomputes the
+  // upward/downward flip, so a menu opened near the bottom still flips if the
+  // trigger scrolls toward the top (and vice versa).
+  function positionFixedMenu() {
+    if (!menuTriggerEl) return;
+    const rect = menuTriggerEl.getBoundingClientRect();
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const bottomReserved = isMobile ? 64 : 0;
+    const headerReserved = 64;
+    const padding = 12;
+    const spaceBelow = window.innerHeight - rect.bottom - bottomReserved - padding;
+    const spaceAbove = rect.top - headerReserved - padding;
+    menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
+    const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
+    const cap = Math.min(available, 360);
+    menuMaxHeight = `${cap}px`;
+
+    // Aligned to the button's inline-end edge (right in LTR, left in RTL) so
+    // it reads the same as the absolute menu.
+    const rtl = document.documentElement.dir === 'rtl' || document.dir === 'rtl';
+    const horiz = rtl
+      ? `left: ${Math.round(rect.left)}px`
+      : `right: ${Math.round(window.innerWidth - rect.right)}px`;
+    const vert = menuOpenUpward
+      ? `bottom: ${Math.round(window.innerHeight - rect.top + 4)}px`
+      : `top: ${Math.round(rect.bottom + 4)}px`;
+    menuFixedStyle = `position: fixed; ${vert}; ${horiz}; max-height: ${cap}px; z-index: 9999;`;
+  }
 
   function toggleMoreMenu(e: MouseEvent) {
     e.stopPropagation();
@@ -796,25 +908,32 @@
       return;
     }
 
-    // Check if the button is near the bottom of the viewport.
-    // On mobile (<=768px) the BottomTabs bar takes the bottom 64px,
-    // so subtract that from the downward budget — otherwise we'd
-    // happily open downward into the tab bar and clip the lower menu
-    // items behind it.
-    const btn = e.currentTarget as HTMLElement;
-    const rect = btn.getBoundingClientRect();
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    const bottomReserved = isMobile ? 64 : 0;
-    const headerReserved = 64;
-    const padding = 12;
-    const spaceBelow = window.innerHeight - rect.bottom - bottomReserved - padding;
-    const spaceAbove = rect.top - headerReserved - padding;
-    // Open upward when there's notably more room above. Either way,
-    // bound the menu height to whatever space we actually have so
-    // long lists scroll inside the menu instead of overflowing.
-    menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
-    const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
-    menuMaxHeight = `${Math.min(available, 360)}px`;
+    menuTriggerEl = e.currentTarget as HTMLElement;
+
+    if (menuFixed) {
+      // One source of truth for the portaled menu's placement, shared with the
+      // scroll/resize handler so open-time and re-anchor can't drift apart.
+      positionFixedMenu();
+    } else {
+      // Check if the button is near the bottom of the viewport.
+      // On mobile (<=768px) the BottomTabs bar takes the bottom 64px,
+      // so subtract that from the downward budget — otherwise we'd
+      // happily open downward into the tab bar and clip the lower menu
+      // items behind it.
+      const rect = menuTriggerEl.getBoundingClientRect();
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      const bottomReserved = isMobile ? 64 : 0;
+      const headerReserved = 64;
+      const padding = 12;
+      const spaceBelow = window.innerHeight - rect.bottom - bottomReserved - padding;
+      const spaceAbove = rect.top - headerReserved - padding;
+      // Open upward when there's notably more room above. Either way,
+      // bound the menu height to whatever space we actually have so
+      // long lists scroll inside the menu instead of overflowing.
+      menuOpenUpward = spaceAbove > spaceBelow && spaceAbove > 200;
+      const available = Math.max(160, menuOpenUpward ? spaceAbove : spaceBelow);
+      menuMaxHeight = `${Math.min(available, 360)}px`;
+    }
 
     // Claim the global slot — every other PostActions instance sees
     // the change via $openMenuId and closes its own menu.
@@ -1311,7 +1430,12 @@
       </button>
 
       {#if showReactionPicker}
-        <div class="picker-anchor" class:picker-anchor-below={reactionPickerBelow}>
+        <div
+          use:portal={menuFixed}
+          class="picker-anchor"
+          class:picker-anchor-below={reactionPickerBelow && !menuFixed}
+          style={menuFixed ? reactionPickerFixedStyle : ''}
+        >
           <ReactionPicker
             selected={currentReaction}
             onselect={handleReaction}
@@ -1425,7 +1549,14 @@
     </button>
 
     {#if showMoreMenu}
-      <div class="more-menu" class:more-menu-upward={menuOpenUpward} role="menu" style:max-height={menuMaxHeight}>
+      <div
+        bind:this={menuEl}
+        use:portal={menuFixed}
+        class="more-menu"
+        class:more-menu-upward={menuOpenUpward && !menuFixed}
+        role="menu"
+        style={menuFixed ? menuFixedStyle : `max-height: ${menuMaxHeight}`}
+      >
         {#if isRemotePost()}
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleDisplayOnInstance}>
             <span class="material-symbols-outlined menu-icon">open_in_new</span>
@@ -1458,7 +1589,7 @@
           <span class="material-symbols-outlined menu-icon">{isPostMuted ? 'notifications_active' : 'notifications_off'}</span>
           {isPostMuted ? $t('post.unmute_notifications') : $t('post.mute_notifications')}
         </button>
-        {#if isOwnPost()}
+        {#if canManagePost()}
           {#if !isPinned || viewerContext === null || viewerContext === pinScope}
             {@const pinLabel = isPinned
               ? (pinScope === 'group'
@@ -1493,7 +1624,7 @@
             {$t('post.edit_history')}
           </button>
         {/if}
-        {#if !isOwnPost()}
+        {#if !canManagePost()}
           <div class="more-menu-divider"></div>
           <button type="button" class="more-menu-item" role="menuitem" onclick={handleMentionUser}>
             <span class="material-symbols-outlined menu-icon">alternate_email</span>
