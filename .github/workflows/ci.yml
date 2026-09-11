@@ -210,6 +210,11 @@ jobs:
             context: backend/
           - name: frontend
             context: frontend/
+          # The Coraza WAF image. Changes rarely, but publishing it removes
+          # the last reason production builds anything itself — and means a
+          # WAF rebuild no longer needs the source on the host.
+          - name: caddy
+            context: caddy/
 
     steps:
       - name: Checkout code

@@ -58,9 +58,10 @@ with the GHCR publishing job — it catches a broken Dockerfile or dependency, b
 ## Deploying
 
 Application images are **built by CI and pulled**, not built on the production box
-(`.github/workflows/ci.yml` publishes `ghcr.io/qfiber/hybridsocial-{backend,frontend}`
+(`.github/workflows/ci.yml` publishes `ghcr.io/qfiber/hybridsocial-{backend,frontend,caddy}`
 on every `main` push, tagged by commit SHA and `latest`). The repo is public so the
-packages are public — the host needs no registry credentials.
+packages are public — the host needs no registry credentials. **Nothing is built on the
+production host.**
 
 `IMAGE_TAG` in the host `.env` pins what runs. Set it to a commit SHA; that is the
 record of what is deployed and the rollback lever.
@@ -70,15 +71,14 @@ record of what is deployed and the rollback lever.
 IMAGE_TAG=<commit sha>
 
 # 2. pull + restart
-docker compose -f docker-compose-production.yml pull backend backend-migrate frontend
+docker compose -f docker-compose-production.yml pull
 docker compose -f docker-compose-production.yml run --rm backend-migrate   # only if migrating
 docker compose -f docker-compose-production.yml up -d --no-deps backend frontend
+# caddy only when the WAF image itself changed — it drops the edge briefly
+docker compose -f docker-compose-production.yml up -d --no-deps caddy
 ```
 
 Rollback is the same sequence with an older SHA.
-
-**Caddy still builds on the host** (`build: ./caddy`, the Coraza WAF image) and is not
-published, so WAF changes still need the source there and `build caddy`.
 
 **Config comes from git, not rsync.** The host has a sparse checkout at
 `/root/hs-config` (`caddy caddy-conf crowdsec docker scripts` + root files), so a config
@@ -90,8 +90,9 @@ commit is deployed and `git status` shows local drift — neither was knowable u
 name (compose derives it from the dir otherwise, and moving the checkout would silently
 create a parallel stack instead of adopting the running one).
 
-Application source is no longer on the host at all — `backend/` and `frontend/` ship as
-images. The only build left there is `caddy` (Coraza WAF).
+No application or image source is on the host at all — everything ships as a published
+image. The checkout exists only for the compose file and the mounted config
+(`caddy-conf/Caddyfile`, `crowdsec/*.yaml`).
 
 **Migrations do not run at boot** — the backend container starts `bin/hybridsocial start`.
 They run via the one-shot `backend-migrate` service. That service now shares one pulled
