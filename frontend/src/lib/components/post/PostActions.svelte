@@ -944,13 +944,36 @@
   // The post's video attachment, if any — gates the "Download video" item
   // (present on Streams clips and any video post).
   let postVideo = $derived(post.media_attachments?.find((m) => m.type === 'video'));
+  let downloadingVideo = $state(false);
+
+  const DOWNLOADABLE_VIDEO_EXTS = ['mp4', 'webm', 'mov', 'm4v', 'ogv'];
+
+  // Name the file after what it actually is. Hardcoding .mp4 mislabels a webm
+  // and some players refuse it. Falls back to mp4 only when the URL carries no
+  // usable extension.
+  function videoFilename(url: string): string {
+    const path = url.split(/[?#]/)[0];
+    const ext = /\.([a-z0-9]{2,5})$/i.exec(path)?.[1]?.toLowerCase();
+    return `video-${post.id}.${ext && DOWNLOADABLE_VIDEO_EXTS.includes(ext) ? ext : 'mp4'}`;
+  }
 
   async function handleDownloadVideo(e: MouseEvent) {
     e.stopPropagation();
     showMoreMenu = false;
-    const url = postVideo?.url || (postVideo as any)?.remote_url;
+    if (downloadingVideo) return;
+
+    // Prefer `url`: the serializer already rewrites a federated clip to our
+    // media-proxy URL, which sends CORS headers. `remote_url` is the raw
+    // upstream host and is a last resort — it usually won't allow the fetch.
+    const url = postVideo?.url || postVideo?.remote_url;
     if (!url) return;
-    const name = `stream-${post.id}.mp4`;
+
+    downloadingVideo = true;
+    // A clip can be tens of MB and the whole thing is buffered before the save
+    // dialog appears, so say something — otherwise the menu just closes and
+    // nothing visibly happens.
+    addToast(translate('post.download_video_started'), 'info');
+
     try {
       // Fetch → blob so the browser saves the file even for a cross-origin
       // (federated) URL, where an <a download> would just navigate.
@@ -960,14 +983,20 @@
       const obj = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = obj;
-      a.download = name;
+      a.download = videoFilename(url);
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(obj);
+      // Revoking synchronously after click() can cancel an in-flight save of a
+      // large file in Chromium, so hand the blob back on a later task instead.
+      setTimeout(() => URL.revokeObjectURL(obj), 60_000);
     } catch {
-      // CORS / network error → open in a new tab so the viewer can still save it.
+      // CORS / network error → open in a new tab so the viewer can still save
+      // it manually. Say so, rather than silently opening a tab.
+      addToast(translate('post.download_video_fallback'), 'info');
       window.open(url, '_blank', 'noopener');
+    } finally {
+      downloadingVideo = false;
     }
   }
 

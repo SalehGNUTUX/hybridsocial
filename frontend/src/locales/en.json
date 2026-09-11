@@ -75,6 +75,8 @@
   "post.quote_post": "Quote post",
   "post.share": "Share",
   "post.download_video": "Download video",
+  "post.download_video_started": "Preparing your download…",
+  "post.download_video_fallback": "Couldn't download it directly. Opening the video in a new tab so you can save it.",
   "post.share_title": "Post by {name}",
   "post.remove_bookmark": "Remove bookmark",
   "post.mute_notifications": "Mute notifications",

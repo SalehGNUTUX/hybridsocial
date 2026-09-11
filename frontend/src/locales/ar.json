@@ -250,6 +250,8 @@
   "post.quote_post": "اقتباس المنشور",
   "post.share": "مشاركة",
   "post.download_video": "تنزيل المقطع",
+  "post.download_video_started": "جارٍ تجهيز التنزيل…",
+  "post.download_video_fallback": "تعذّر التنزيل مباشرة. سيُفتح المقطع في تبويب جديد لتتمكّن من حفظه.",
   "post.share_title": "منشور بواسطة {name}",
   "post.remove_bookmark": "إزالة من المحفوظات",
   "post.mute_notifications": "كتم الإشعارات",
