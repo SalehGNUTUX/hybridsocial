@@ -242,9 +242,13 @@ services:
   # ---- Reverse Proxy + WAF ----
 
   caddy:
-    build:
-      context: ./caddy
-      dockerfile: Dockerfile
+    # Published by CI like the app images. The Caddyfile itself is still a
+    # bind mount (caddy-conf/) — only the image with the Coraza/CrowdSec
+    # plugins compiled in comes from the registry.
+    image: ghcr.io/qfiber/hybridsocial-caddy:${IMAGE_TAG:-latest}
+    # build:
+    #   context: ./caddy
+    #   dockerfile: Dockerfile
     container_name: hs_caddy
     restart: unless-stopped
     ports:
