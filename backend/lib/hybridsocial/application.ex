@@ -51,6 +51,10 @@ defmodule Hybridsocial.Application do
             Hybridsocial.Federation.DeadActorWorker,
             # Story expiry (hard-deletes expired ephemeral stories)
             Hybridsocial.Social.StoryExpiryWorker,
+            # Clears lapsed group sanctions (timed / partial bans). Cleanup
+            # only — the authorization path already honours expiry at read
+            # time, so a late tick can't keep anyone sanctioned.
+            Hybridsocial.Groups.GroupSanctionExpiryWorker,
             # Media proxy cache TTL + LRU eviction
             Hybridsocial.Media.MediaProxyCacheWorker,
             # Hard-deletes media soft-deleted >7 days ago — covers

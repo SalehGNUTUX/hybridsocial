@@ -9,6 +9,9 @@
     getGroupMembers,
     updateMemberRole,
     banMember,
+    restrictMember,
+    unrestrictMember,
+    type GroupRestriction,
     inviteToGroup,
     getGroupApplications,
     approveApplication,
@@ -218,6 +221,95 @@
       addToast('Role updated', 'success');
     } catch {
       addToast('Could not change role', 'error');
+    }
+  }
+
+  // --- Partial / timed bans (#86) ---------------------------------------
+  // A full ban removes someone; these withhold specific actions while leaving
+  // them in the group, optionally lapsing on their own.
+  const RESTRICTABLE: { value: GroupRestriction; label: string }[] = [
+    { value: 'post', label: 'Posting' },
+    { value: 'comment', label: 'Replying' },
+    { value: 'react', label: 'Reacting' },
+  ];
+
+  const DURATIONS: { value: string; label: string }[] = [
+    { value: '', label: 'Until lifted' },
+    { value: '3600', label: '1 hour' },
+    { value: '86400', label: '1 day' },
+    { value: '604800', label: '1 week' },
+    { value: '2592000', label: '30 days' },
+  ];
+
+  let restrictOpenFor = $state<string | null>(null);
+  let draftRestrictions = $state<GroupRestriction[]>([]);
+  let draftDuration = $state('');
+  let draftReason = $state('');
+  let restrictSaving = $state(false);
+
+  function toggleRestrict(m: GroupMember) {
+    if (restrictOpenFor === m.id) {
+      restrictOpenFor = null;
+      return;
+    }
+    restrictOpenFor = m.id ?? null;
+    draftRestrictions = [...(m.restrictions ?? [])];
+    draftDuration = '';
+    draftReason = m.restriction_reason ?? '';
+  }
+
+  function toggleDraftRestriction(action: GroupRestriction) {
+    draftRestrictions = draftRestrictions.includes(action)
+      ? draftRestrictions.filter((a) => a !== action)
+      : [...draftRestrictions, action];
+  }
+
+  // Only ever in force when non-empty. The backend already excludes lapsed
+  // sanctions from `restrictions`, so no expiry maths is needed here.
+  function activeSanction(m: GroupMember): boolean {
+    return (m.restrictions?.length ?? 0) > 0;
+  }
+
+  function sanctionLabel(m: GroupMember): string {
+    const names = (m.restrictions ?? [])
+      .map((r) => RESTRICTABLE.find((a) => a.value === r)?.label ?? r)
+      .join(', ');
+    const when = m.restricted_until
+      ? `until ${new Date(m.restricted_until).toLocaleString()}`
+      : 'until lifted';
+    return `Restricted: ${names} — ${when}`;
+  }
+
+  async function handleRestrict(memberId: string) {
+    restrictSaving = true;
+    try {
+      const until = draftDuration
+        ? new Date(Date.now() + Number(draftDuration) * 1000).toISOString()
+        : null;
+
+      const updated = await restrictMember(groupId, memberId, {
+        restrictions: draftRestrictions,
+        until,
+        reason: draftReason || undefined,
+      });
+
+      members = members.map((m) => (m.id === memberId ? { ...m, ...updated } : m));
+      restrictOpenFor = null;
+      addToast('Restrictions applied', 'success');
+    } catch {
+      addToast('Could not apply restrictions', 'error');
+    } finally {
+      restrictSaving = false;
+    }
+  }
+
+  async function handleUnrestrict(memberId: string) {
+    try {
+      const updated = await unrestrictMember(groupId, memberId);
+      members = members.map((m) => (m.id === memberId ? { ...m, ...updated } : m));
+      addToast('Restrictions lifted', 'success');
+    } catch {
+      addToast('Could not lift restrictions', 'error');
     }
   }
 
@@ -517,11 +609,79 @@
                     </select>
                     <button
                       type="button"
+                      class="btn btn-sm btn-outline"
+                      aria-expanded={restrictOpenFor === m.id}
+                      onclick={() => toggleRestrict(m)}
+                    >
+                      Restrict
+                    </button>
+                    <button
+                      type="button"
                       class="btn btn-sm btn-danger-outline"
                       onclick={() => handleBan(m.id!)}
                     >
                       Remove
                     </button>
+                  </div>
+                {/if}
+
+                {#if activeSanction(m)}
+                  <p class="sanction-note">
+                    {sanctionLabel(m)}
+                    <button type="button" class="linkbtn" onclick={() => handleUnrestrict(m.id!)}>
+                      Lift
+                    </button>
+                  </p>
+                {/if}
+
+                {#if restrictOpenFor === m.id}
+                  <div class="restrict-panel">
+                    <fieldset class="restrict-actions">
+                      <legend class="restrict-legend">Withhold</legend>
+                      {#each RESTRICTABLE as action (action.value)}
+                        <label class="restrict-check">
+                          <input
+                            type="checkbox"
+                            checked={draftRestrictions.includes(action.value)}
+                            onchange={() => toggleDraftRestriction(action.value)}
+                          />
+                          {action.label}
+                        </label>
+                      {/each}
+                    </fieldset>
+
+                    <label class="restrict-field">
+                      <span class="restrict-legend">Duration</span>
+                      <select class="input input-compact" bind:value={draftDuration}>
+                        {#each DURATIONS as d (d.value)}
+                          <option value={d.value}>{d.label}</option>
+                        {/each}
+                      </select>
+                    </label>
+
+                    <input
+                      class="input input-compact restrict-reason"
+                      placeholder="Reason (optional)"
+                      bind:value={draftReason}
+                    />
+
+                    <div class="restrict-buttons">
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-primary"
+                        disabled={draftRestrictions.length === 0 || restrictSaving}
+                        onclick={() => handleRestrict(m.id!)}
+                      >
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-ghost"
+                        onclick={() => (restrictOpenFor = null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 {/if}
               </li>
@@ -952,6 +1112,80 @@
     display: flex;
     gap: var(--space-2);
     align-items: center;
+  }
+
+  /* Partial/timed ban editor. Sits under its member row and spans the grid so
+     it doesn't squeeze the row's own columns. */
+  .restrict-panel {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
+    margin-block-start: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+  }
+
+  .restrict-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .restrict-legend {
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-block-end: 4px;
+  }
+
+  .restrict-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-sm);
+    /* Touch targets: the checkbox alone is too small on a phone. */
+    min-height: 32px;
+  }
+
+  .restrict-field {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .restrict-reason {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+
+  .restrict-buttons {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .sanction-note {
+    grid-column: 1 / -1;
+    margin: 4px 0 0;
+    font-size: var(--text-xs);
+    color: var(--color-warning, var(--color-text-secondary));
+  }
+
+  .linkbtn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-inline-start: var(--space-2);
+    color: var(--color-primary);
+    font-size: inherit;
+    cursor: pointer;
+    text-decoration: underline;
   }
 
   .input-compact {

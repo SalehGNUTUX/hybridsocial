@@ -736,6 +736,83 @@ defmodule Hybridsocial.Social.PostsTest do
                })
     end
 
+    test "a :post restriction blocks top-level posts but not replies", %{
+      owner: owner,
+      member: member,
+      group: group
+    } do
+      {:ok, parent} = group_post(owner.id, group.id, "thread root")
+
+      {:ok, _} =
+        Groups.restrict_member(group.id, owner.id, membership_row(group.id, member.id).id,
+          restrictions: ["post"]
+        )
+
+      assert {:error, :group_forbidden} = group_post(member.id, group.id, "new topic")
+
+      # A reply is a distinct sanction — still allowed.
+      assert {:ok, _} =
+               Posts.create_post(member.id, %{
+                 "content" => "replying is still fine",
+                 "visibility" => "group",
+                 "group_id" => group.id,
+                 "parent_id" => parent.id
+               })
+    end
+
+    test "a :comment restriction blocks replies but not top-level posts", %{
+      owner: owner,
+      member: member,
+      group: group
+    } do
+      {:ok, parent} = group_post(owner.id, group.id, "thread root")
+
+      {:ok, _} =
+        Groups.restrict_member(group.id, owner.id, membership_row(group.id, member.id).id,
+          restrictions: ["comment"]
+        )
+
+      assert {:ok, _} = group_post(member.id, group.id, "new topic is fine")
+
+      assert {:error, :group_forbidden} =
+               Posts.create_post(member.id, %{
+                 "content" => "but not this reply",
+                 "visibility" => "group",
+                 "group_id" => group.id,
+                 "parent_id" => parent.id
+               })
+    end
+
+    test "a :react restriction blocks reacting but not posting", %{
+      owner: owner,
+      member: member,
+      group: group
+    } do
+      {:ok, post} = group_post(owner.id, group.id, "react to me")
+
+      {:ok, _} =
+        Groups.restrict_member(group.id, owner.id, membership_row(group.id, member.id).id,
+          restrictions: ["react"]
+        )
+
+      assert {:error, :group_forbidden} = Posts.react(post.id, member.id, "like")
+      assert {:ok, _} = group_post(member.id, group.id, "posting still works")
+    end
+
+    test "a lapsed timed restriction stops blocking without the sweeper", %{
+      owner: owner,
+      member: member,
+      group: group
+    } do
+      {:ok, _} =
+        Groups.restrict_member(group.id, owner.id, membership_row(group.id, member.id).id,
+          restrictions: ["post"],
+          until: DateTime.add(DateTime.utc_now(), -60, :second)
+        )
+
+      assert {:ok, _} = group_post(member.id, group.id, "my time is served")
+    end
+
     test "an ordinary post with no group_id is unaffected", %{outsider: outsider} do
       assert {:ok, post} =
                Posts.create_post(outsider.id, %{"content" => "normal", "visibility" => "public"})
