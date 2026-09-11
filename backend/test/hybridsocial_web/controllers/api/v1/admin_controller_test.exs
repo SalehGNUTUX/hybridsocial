@@ -511,4 +511,109 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       assert put(conn, "/api/v1/admin/translation", %{"backend" => "deepl"}).status in [401, 403]
     end
   end
+
+  # #167: pages and groups are Identity rows, so they were always in this list.
+  # The filter is what makes them findable.
+  describe "admin account list — identity type filter" do
+    setup %{conn: conn} do
+      admin = create_user("at_admin", "at_admin@test.com") |> make_admin()
+      owner = create_user("at_owner", "at_owner@test.com")
+
+      {:ok, page} =
+        Hybridsocial.Pages.create_page(owner.id, %{
+          "handle" => "at_page",
+          "display_name" => "A Page",
+          "category" => "tech"
+        })
+
+      {:ok, group} =
+        Hybridsocial.Groups.create_group(owner.id, %{
+          "name" => "A Group",
+          "handle" => "at_group",
+          "visibility" => "public",
+          "join_policy" => "open"
+        })
+
+      %{conn: admin_conn(conn, admin), page: page, group: group, owner: owner}
+    end
+
+    defp listed_types(conn, query) do
+      conn
+      |> get("/api/v1/admin/users" <> query)
+      |> json_response(200)
+      |> Map.fetch!("data")
+      |> Enum.map(& &1["type"])
+      |> Enum.uniq()
+      |> Enum.sort()
+    end
+
+    test "unfiltered still returns every identity type", %{conn: conn} do
+      types = listed_types(conn, "")
+      assert "user" in types
+      assert "page" in types
+      assert "group" in types
+    end
+
+    # The API says "page"; the column says "organization". The filter has to
+    # speak the API's language or admins can't use what they see.
+    test "type=page returns only pages", %{conn: conn, page: page} do
+      assert listed_types(conn, "?type=page") == ["page"]
+
+      ids =
+        conn
+        |> get("/api/v1/admin/users?type=page")
+        |> json_response(200)
+        |> Map.fetch!("data")
+        |> Enum.map(& &1["id"])
+
+      assert page.id in ids
+    end
+
+    test "type=group returns only groups", %{conn: conn, group: group} do
+      assert listed_types(conn, "?type=group") == ["group"]
+
+      ids =
+        conn
+        |> get("/api/v1/admin/users?type=group")
+        |> json_response(200)
+        |> Map.fetch!("data")
+        |> Enum.map(& &1["id"])
+
+      assert group.identity_id in ids
+    end
+
+    test "type=user excludes pages and groups", %{conn: conn} do
+      assert listed_types(conn, "?type=user") == ["user"]
+    end
+
+    test "an unrecognised type is ignored rather than erroring", %{conn: conn} do
+      assert length(listed_types(conn, "?type=nonsense")) > 1
+    end
+
+    test "the detail view works for a page", %{conn: conn, page: page} do
+      body = json_response(get(conn, "/api/v1/admin/users/#{page.id}"), 200)
+      data = body["data"] || body
+
+      assert data["type"] == "page"
+      assert is_integer(data["post_count"])
+      assert is_integer(data["followers_count"])
+    end
+
+    test "the detail view works for a group", %{conn: conn, group: group} do
+      body = json_response(get(conn, "/api/v1/admin/users/#{group.identity_id}"), 200)
+      data = body["data"] || body
+
+      assert data["type"] == "group"
+    end
+
+    test "the filter still requires users.view", %{page: _page} do
+      stranger = create_user("at_nosy", "at_nosy@test.com")
+
+      conn =
+        auth_conn(Phoenix.ConnTest.build_conn(), stranger)
+        |> get("/api/v1/admin/users?type=page")
+
+      assert conn.status in [401, 403]
+    end
+  end
 end

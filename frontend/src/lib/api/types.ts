@@ -527,6 +527,13 @@ export interface NotificationPreferences {
 export interface AdminUser {
   id: string;
   handle: string;
+  /**
+   * Identity kind as the API names it — note `page`, not the stored
+   * `organization` (see the backend's `Helpers.Account.api_type/1`). Pages,
+   * groups and bots are Identity rows, so they appear in the admin account
+   * list alongside users.
+   */
+  type?: 'user' | 'bot' | 'group' | 'page';
   email: string | null;
   display_name: string | null;
   bio: string | null;

@@ -1221,6 +1221,8 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
           _ -> []
         end
 
+      opts = maybe_put_identity_type(opts, params["type"])
+
       accounts = Accounts.list_identities(opts)
 
       conn
@@ -1230,6 +1232,22 @@ defmodule HybridsocialWeb.Api.V1.AdminController do
       {:error, perm} -> deny(conn, perm)
     end
   end
+
+  # Pages and groups are Identity rows, so they were always in this list —
+  # just indistinguishable from users with no way to isolate them. This is
+  # what makes them findable (#167).
+  #
+  # The API calls an organization identity a "page" (see
+  # `Helpers.Account.api_type/1`), so the filter speaks the API's language and
+  # translates at the boundary rather than leaking the storage name to admins.
+  # Anything unrecognised is ignored rather than erroring — a bad filter
+  # showing everything is friendlier than a 422, and can't be used to probe.
+  defp maybe_put_identity_type(opts, "page"), do: Keyword.put(opts, :type, "organization")
+
+  defp maybe_put_identity_type(opts, type) when type in ~w(user bot group organization),
+    do: Keyword.put(opts, :type, type)
+
+  defp maybe_put_identity_type(opts, _type), do: opts
 
   def account_action(conn, %{"id" => id, "action" => action} = params) do
     required =

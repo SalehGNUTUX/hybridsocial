@@ -124,6 +124,20 @@
 
   let isLocal = $derived(!!user?.is_local);
 
+  // Pages, groups and bots are subaccounts: Identity rows with no `users`
+  // row, so they own no email, no password and no 2FA — they act under their
+  // parent's login. Gating the credential UI on `is_local` alone made every
+  // one of them render "Email unverified" plus a password-reset button, which
+  // reads as an outstanding action an admin can never resolve.
+  //
+  // `parent_identity_id` is the reliable marker (a subaccount type always has
+  // a parent — see Identity.validate_subaccount_type/1); `type` is belt and
+  // braces for payloads that predate it.
+  let isSubaccount = $derived(
+    !!user?.parent_identity_id || (!!user?.type && user.type !== 'user'),
+  );
+  let ownsCredentials = $derived(isLocal && !isSubaccount);
+
   // Where this account's public profile lives: local accounts on this
   // instance, remote ones on their origin server.
   let profileHref = $derived(
@@ -350,11 +364,20 @@
           {#if user.is_silenced}<span class="pill pill-warn">Silenced</span>{/if}
           {#if user.is_shadow_banned}<span class="pill pill-warn">Shadow-banned</span>{/if}
           {#if user.force_sensitive}<span class="pill pill-warn">Force-sensitive</span>{/if}
-          {#if user.is_local}
+          {#if ownsCredentials}
             {#if user.email_confirmed || user.confirmed_at}<span class="pill pill-ok">Email verified</span>
             {:else}<span class="pill pill-warn">Email unverified</span>{/if}
+          {:else if isSubaccount}
+            <span class="pill pill-neutral">Subaccount</span>
           {/if}
         </div>
+        {#if isSubaccount && user.parent_identity_id}
+          <p class="overview-parent">
+            Acts under
+            <a href="/admin/user-management/users/{user.parent_identity_id}">its owner's account</a>,
+            which holds the email, password and 2FA.
+          </p>
+        {/if}
         <a
           class="btn btn-sm btn-outline visit-profile"
           href={profileHref}
@@ -513,8 +536,9 @@
       </section>
     {/if}
 
-    {#if isLocal}
-      <!-- Account & security -->
+    {#if ownsCredentials}
+      <!-- Account & security. Subaccounts are excluded: they have no `users`
+           row, so email / password / 2FA all belong to the parent account. -->
       <section class="card sect">
         <h2 class="sect-title">Account &amp; security</h2>
         <div class="inline-form">
@@ -692,6 +716,12 @@
   .overview-main { flex: 1; min-width: 200px; }
   .overview-name { margin: 0; font-size: var(--text-xl); font-weight: 700; }
   .overview-handle { margin: 2px 0 10px; color: var(--color-text-secondary); font-size: var(--text-sm); }
+  .overview-parent {
+    margin: 6px 0 0;
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+  }
+
   .ov-domain { color: var(--color-text-tertiary); }
 
   .pills { display: flex; flex-wrap: wrap; gap: 6px; }
