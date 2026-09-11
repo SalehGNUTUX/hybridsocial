@@ -230,8 +230,21 @@ services:
       DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
       MEDIA_DOMAIN: ${MEDIA_DOMAIN:-}
       CROWDSEC_BOUNCER_CADDY_KEY: ${CROWDSEC_BOUNCER_CADDY_KEY:?Run 'sh docker/generate-secrets.sh .env' first}
+    # The default CMD points at /etc/caddy/Caddyfile; our config lives in the
+    # mounted directory instead (see the volumes note below).
+    command: ["caddy", "run", "--config", "/etc/caddy/conf/Caddyfile", "--adapter", "caddyfile"]
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
+      # Mount the DIRECTORY, not the file. Docker binds a single-file mount by
+      # inode, and rsync/scp replace a file by writing a temp copy and renaming
+      # over it — which allocates a new inode. The host path then shows the new
+      # content while the container keeps reading the old, unlinked one, and
+      # `caddy validate` / `caddy reload` both succeed against the stale copy.
+      # That silently ate a Permissions-Policy fix for weeks (#180, #186).
+      #
+      # Mounted at /etc/caddy/conf rather than /etc/caddy because the image
+      # bakes /etc/caddy/coraza/ (CRS rules) and /etc/caddy/waf.caddy — mounting
+      # over /etc/caddy would shadow both and silently disable the WAF.
+      - ./caddy-conf:/etc/caddy/conf:ro,z
       - caddy_data:/data
       - caddy_config:/config
       - caddy_logs:/var/log/caddy
