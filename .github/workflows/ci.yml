@@ -178,14 +178,38 @@ jobs:
       - name: Run Sobelow
         run: mix sobelow --config
 
+  # Build the deployable images and publish them to GHCR.
+  #
+  # This job already existed but discarded what it built (`push: false`), so
+  # production rebuilt the same images itself — on a 4-core box, competing
+  # with live traffic. Publishing here is step 1 of moving deploys off rsync:
+  # nothing consumes these tags yet, so this change is inert in production.
+  #
+  # Tagged by commit SHA (immutable — what a deploy should pin to) and by
+  # `latest`/`main` for convenience. The repo is public, so the packages are
+  # public too and the host needs no registry credentials to pull.
   docker:
-    name: Build Docker Image
+    name: Build & Publish Images
     runs-on: ubuntu-latest
     needs: [test, security]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-    defaults:
-      run:
-        working-directory: backend/
+    # Runs on PRs too, but only *pushes* from main/tags (see `push:` below).
+    # Previously this was skipped entirely on PRs, so a Dockerfile or
+    # dependency break only surfaced after merge — and the frontend image was
+    # never built in CI at all, only on the production host.
+    permissions:
+      contents: read
+      # Required for GITHUB_TOKEN to push to GHCR.
+      packages: write
+
+    strategy:
+      # Don't let one image failing hide whether the other built.
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: backend/
+          - name: frontend
+            context: frontend/
 
     steps:
       - name: Checkout code
@@ -194,13 +218,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ghcr.io requires a lowercase path; the owner/repo may not be.
+      - name: Compute image name
+        id: img
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
-          context: backend/
-          push: false
+          context: ${{ matrix.context }}
+          # Build everywhere, publish only from main/tags. Keeps PR feedback
+          # without filling the registry with per-PR images.
+          push: ${{ github.event_name != 'pull_request' }}
+          # The frontend bakes the short SHA into the bundle so the footer can
+          # report which commit is deployed; harmless for the backend.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           tags: |
-            hybridsocial-backend:${{ github.sha }}
-            hybridsocial-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ steps.img.outputs.name }}:${{ github.sha }}
+            ${{ steps.img.outputs.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
