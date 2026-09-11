@@ -800,4 +800,247 @@ defmodule Hybridsocial.GroupsTest do
                Groups.authorize_group_post(%{group_id: group.id}, carol.id)
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Partial and timed bans (#86)
+  # ---------------------------------------------------------------------------
+
+  describe "restrict_member/4 — partial bans" do
+    setup %{alice: alice, bob: bob} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{
+          "name" => "Sanctions",
+          "handle" => "sanctions",
+          "visibility" => "private",
+          "join_policy" => "open"
+        })
+
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+      %{group: group, bob_mid: membership_id(group.id, bob.id)}
+    end
+
+    test "withholding :post stops posting but not reacting", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, _} = Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"])
+
+      refute Groups.can_do_in_group?(g.id, bob.id, :post)
+      assert Groups.can_do_in_group?(g.id, bob.id, :react)
+      assert Groups.can_do_in_group?(g.id, bob.id, :comment)
+    end
+
+    test "withholding :react stops only reacting", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, _} = Groups.restrict_member(g.id, alice.id, mid, restrictions: ["react"])
+
+      assert Groups.can_do_in_group?(g.id, bob.id, :post)
+      refute Groups.can_do_in_group?(g.id, bob.id, :react)
+    end
+
+    test "a restricted member is still an approved member", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, member} = Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"])
+
+      assert member.status == :approved
+      # Still reads the group — a partial ban is not a removal.
+      assert Groups.member?(g.id, bob.id)
+    end
+
+    test "unrestrict clears it", %{group: g, alice: alice, bob: bob, bob_mid: mid} do
+      {:ok, _} = Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post", "react"])
+      refute Groups.can_do_in_group?(g.id, bob.id, :post)
+
+      {:ok, cleared} = Groups.unrestrict_member(g.id, alice.id, mid)
+
+      assert cleared.restrictions == []
+      assert Groups.can_do_in_group?(g.id, bob.id, :post)
+    end
+
+    test "an unknown action is rejected rather than silently stored", %{
+      group: g,
+      alice: alice,
+      bob_mid: mid
+    } do
+      assert {:error, {:invalid_restrictions, ["reactions"]}} =
+               Groups.restrict_member(g.id, alice.id, mid, restrictions: ["reactions"])
+    end
+
+    test "a plain member cannot sanction anyone", %{group: g, bob: bob, carol: carol} do
+      {:ok, _} = Groups.join_group(g.id, carol.id)
+      carol_mid = membership_id(g.id, carol.id)
+
+      assert {:error, :forbidden} =
+               Groups.restrict_member(g.id, bob.id, carol_mid, restrictions: ["post"])
+    end
+
+    test "a moderator can sanction — this is moderation, not governance", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      carol: carol
+    } do
+      {:ok, _} =
+        Groups.update_member_role(g.id, alice.id, membership_id(g.id, bob.id), "moderator")
+
+      {:ok, _} = Groups.join_group(g.id, carol.id)
+
+      assert {:ok, _} =
+               Groups.restrict_member(g.id, bob.id, membership_id(g.id, carol.id),
+                 restrictions: ["post"]
+               )
+    end
+
+    test "a moderator cannot sanction the owner", %{group: g, alice: alice, bob: bob} do
+      {:ok, _} =
+        Groups.update_member_role(g.id, alice.id, membership_id(g.id, bob.id), "moderator")
+
+      assert {:error, :forbidden} =
+               Groups.restrict_member(g.id, bob.id, membership_id(g.id, alice.id),
+                 restrictions: ["post"]
+               )
+    end
+  end
+
+  describe "timed sanctions expire at read time" do
+    setup %{alice: alice, bob: bob} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{
+          "name" => "Timed",
+          "handle" => "timedgroup",
+          "visibility" => "private",
+          "join_policy" => "open"
+        })
+
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+      %{group: group, bob_mid: membership_id(group.id, bob.id)}
+    end
+
+    defp ago(seconds), do: DateTime.utc_now() |> DateTime.add(-seconds, :second)
+    defp ahead(seconds), do: DateTime.utc_now() |> DateTime.add(seconds, :second)
+
+    test "a future expiry keeps the sanction in force", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, _} =
+        Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"], until: ahead(3600))
+
+      refute Groups.can_do_in_group?(g.id, bob.id, :post)
+    end
+
+    # The whole point: correctness must not depend on the sweeper having run.
+    test "a lapsed partial ban is lifted WITHOUT the sweeper running", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, _} =
+        Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"], until: ago(60))
+
+      assert Groups.can_do_in_group?(g.id, bob.id, :post),
+             "a late or dead sweeper tick must not keep a member sanctioned past their time"
+    end
+
+    test "a lapsed full ban is lifted WITHOUT the sweeper running", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, banned} = Groups.restrict_member(g.id, alice.id, mid, full: true, until: ago(60))
+
+      # The row still says banned...
+      assert banned.status == :banned
+      # ...but every path honours the expiry, not just the write check.
+      # If these disagreed, a member could post to a group they can't read.
+      assert Groups.can_do_in_group?(g.id, bob.id, :post)
+      assert Groups.member?(g.id, bob.id)
+      assert Groups.member_role(g.id, bob.id) == :member
+    end
+
+    test "a permanent sanction (no until) never lapses", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, _} = Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"], until: nil)
+      refute Groups.can_do_in_group?(g.id, bob.id, :post)
+    end
+  end
+
+  describe "sweep_expired_sanctions/1" do
+    setup %{alice: alice, bob: bob} do
+      {:ok, group} =
+        Groups.create_group(alice.id, %{
+          "name" => "Sweep",
+          "handle" => "sweepgroup",
+          "visibility" => "private",
+          "join_policy" => "open"
+        })
+
+      {:ok, _} = Groups.join_group(group.id, bob.id)
+      %{group: group, bob_mid: membership_id(group.id, bob.id)}
+    end
+
+    test "tidies a lapsed partial ban", %{group: g, alice: alice, bob: bob, bob_mid: mid} do
+      {:ok, _} =
+        Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"], until: ago(60))
+
+      assert Groups.sweep_expired_sanctions() >= 1
+
+      row = Repo.get!(Hybridsocial.Groups.GroupMember, mid)
+      assert row.restrictions == []
+      assert is_nil(row.restricted_until)
+      assert Groups.can_do_in_group?(g.id, bob.id, :post)
+    end
+
+    test "restores a lapsed full ban to approved", %{
+      group: g,
+      alice: alice,
+      bob: bob,
+      bob_mid: mid
+    } do
+      {:ok, _} = Groups.restrict_member(g.id, alice.id, mid, full: true, until: ago(60))
+
+      Groups.sweep_expired_sanctions()
+
+      row = Repo.get!(Hybridsocial.Groups.GroupMember, mid)
+      assert row.status == :approved
+      assert Groups.member?(g.id, bob.id)
+    end
+
+    test "leaves an in-force sanction alone", %{group: g, alice: alice, bob_mid: mid} do
+      {:ok, _} =
+        Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"], until: ahead(3600))
+
+      Groups.sweep_expired_sanctions()
+
+      row = Repo.get!(Hybridsocial.Groups.GroupMember, mid)
+      assert row.restrictions == ["post"]
+    end
+
+    test "leaves a permanent sanction alone", %{group: g, alice: alice, bob_mid: mid} do
+      {:ok, _} = Groups.restrict_member(g.id, alice.id, mid, restrictions: ["post"])
+
+      Groups.sweep_expired_sanctions()
+
+      row = Repo.get!(Hybridsocial.Groups.GroupMember, mid)
+      assert row.restrictions == ["post"]
+    end
+  end
 end

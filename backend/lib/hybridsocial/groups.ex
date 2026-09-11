@@ -550,6 +550,114 @@ defmodule Hybridsocial.Groups do
     end
   end
 
+  @doc """
+  Applies a sanction to a member: a **partial ban** (withhold some actions) or
+  a **timed full ban**, replacing the all-or-nothing `ban_member/3`.
+
+  `opts`:
+    * `:restrictions` — subset of `~w(post comment react)`. Non-empty means a
+      partial ban: the member stays approved but can't take those actions.
+      Empty (with `:full` false) clears the sanction.
+    * `:full` — `true` for a full ban (`status: :banned`).
+    * `:until` — `DateTime` when the sanction lapses. `nil` = permanent.
+    * `:reason` — recorded on the row for accountability.
+
+  Moderator-tier, like `ban_member/3`: this is moderation, not governance, so
+  `@moderate_roles` is correct and instance staff ride the same path. Owners
+  are protected by the same `authorize_ban/2` guard — a moderator must not be
+  able to mute the owner.
+  """
+  def restrict_member(group_id, actor_id, member_id, opts \\ []) do
+    restrictions = opts |> Keyword.get(:restrictions, []) |> Enum.map(&to_string/1)
+    full? = Keyword.get(opts, :full, false)
+    until = Keyword.get(opts, :until)
+
+    with {:ok, actor_role} <- require_role(group_id, actor_id, @moderate_roles),
+         member when not is_nil(member) <- get_member_by_id(member_id, group_id),
+         :ok <- authorize_ban(actor_role, member.role),
+         :ok <- validate_sanction(restrictions, full?),
+         :ok <- ensure_not_sole_owner_if_full(group_id, member, full?) do
+      was_approved = member.status == :approved
+      new_status = if full?, do: :banned, else: :approved
+
+      attrs = %{
+        status: new_status,
+        restrictions: if(full?, do: [], else: restrictions),
+        restricted_until: until,
+        restricted_by: actor_id,
+        restriction_reason: Keyword.get(opts, :reason)
+      }
+
+      case member |> GroupMember.sanction_changeset(attrs) |> Repo.update() do
+        {:ok, updated} ->
+          # member_count tracks approved members only, mirroring ban_member/3.
+          cond do
+            was_approved and new_status == :banned -> update_member_count(group_id, -1)
+            not was_approved and new_status == :approved -> update_member_count(group_id, 1)
+            true -> :ok
+          end
+
+          {:ok, updated}
+
+        error ->
+          error
+      end
+    else
+      nil -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Clears any sanction, returning the member to good standing."
+  def unrestrict_member(group_id, actor_id, member_id) do
+    restrict_member(group_id, actor_id, member_id, restrictions: [], full: false, until: nil)
+  end
+
+  # A sanction that withholds nothing and isn't a full ban is a *clear*, which
+  # is valid. What's rejected is an unknown action, so a typo'd "reactions"
+  # can't be stored as a restriction that never matches anything.
+  defp validate_sanction(restrictions, _full?) do
+    case Enum.reject(restrictions, &(&1 in GroupMember.restrictable_actions())) do
+      [] -> :ok
+      bad -> {:error, {:invalid_restrictions, bad}}
+    end
+  end
+
+  defp ensure_not_sole_owner_if_full(group_id, member, true),
+    do: ensure_not_sole_owner(group_id, member)
+
+  defp ensure_not_sole_owner_if_full(_group_id, _member, false), do: :ok
+
+  @doc """
+  Clears sanctions whose `restricted_until` has passed. Pure cleanup — the
+  authorization path already treats a lapsed sanction as lifted (see
+  `can_do_in_group?/3`), so this only tidies rows and can safely be late.
+  """
+  def sweep_expired_sanctions(now \\ DateTime.utc_now()) do
+    expired =
+      GroupMember
+      |> where([m], not is_nil(m.restricted_until) and m.restricted_until <= ^now)
+      |> Repo.all()
+
+    # Row-wise rather than one `update_all`: a lapsed *full* ban also has to
+    # restore the group's `member_count`, which only counts approved members.
+    # A bulk update can't do that, and doing it in two bulk passes is a trap —
+    # clearing `restricted_until` first hides the very rows the second pass
+    # needs to find. Expired sanctions per tick are a handful, so the row-wise
+    # cost is irrelevant next to getting the counter right.
+    Enum.each(expired, fn member ->
+      attrs = %{restrictions: [], restricted_until: nil, restriction_reason: nil}
+      attrs = if member.status == :banned, do: Map.put(attrs, :status, :approved), else: attrs
+
+      case member |> GroupMember.sanction_changeset(attrs) |> Repo.update() do
+        {:ok, _} -> if member.status == :banned, do: update_member_count(member.group_id, 1)
+        {:error, _} -> :ok
+      end
+    end)
+
+    length(expired)
+  end
+
   # Banning the only owner would leave the group ownerless (no one could then
   # grant owner or delete it) — the same state `leave_group` guards against.
   defp ensure_not_sole_owner(group_id, %GroupMember{role: :owner}) do
@@ -580,11 +688,24 @@ defmodule Hybridsocial.Groups do
 
   def member?(group_id, identity_id) do
     GroupMember
-    |> where(
-      [m],
-      m.group_id == ^group_id and m.identity_id == ^identity_id and m.status == :approved
-    )
+    |> where([m], m.group_id == ^group_id and m.identity_id == ^identity_id)
+    |> where(^effectively_approved())
     |> Repo.exists?()
+  end
+
+  # Approved, *or* banned with a lapsed timed ban. Expiry has to be honoured
+  # here in SQL and not only in `can_do_in_group?/3`, or the two disagree for
+  # up to a sweeper interval: a member whose timed ban had lapsed would be
+  # allowed to post (read-time check) while still being denied read access to
+  # the group (`Posts.group_member?/2` delegates here). Same rule, both paths.
+  defp effectively_approved do
+    now = DateTime.utc_now()
+
+    dynamic(
+      [m],
+      m.status == :approved or
+        (m.status == :banned and not is_nil(m.restricted_until) and m.restricted_until <= ^now)
+    )
   end
 
   @doc "Returns the GroupMember row for the given pair, or nil."
@@ -596,10 +717,8 @@ defmodule Hybridsocial.Groups do
 
   def member_role(group_id, identity_id) do
     GroupMember
-    |> where(
-      [m],
-      m.group_id == ^group_id and m.identity_id == ^identity_id and m.status == :approved
-    )
+    |> where([m], m.group_id == ^group_id and m.identity_id == ^identity_id)
+    |> where(^effectively_approved())
     |> select([m], m.role)
     |> Repo.one()
   end
@@ -626,7 +745,14 @@ defmodule Hybridsocial.Groups do
         :ok
 
       group_id ->
-        if can_post_in?(group_id, identity_id), do: :ok, else: {:error, :group_forbidden}
+        # A reply is a different sanction from a top-level post: a member who
+        # derails threads can be stopped from replying while still able to
+        # start their own topics.
+        action = if reply?(attrs), do: :comment, else: :post
+
+        if can_do_in_group?(group_id, identity_id, action),
+          do: :ok,
+          else: {:error, :group_forbidden}
     end
   end
 
@@ -636,12 +762,45 @@ defmodule Hybridsocial.Groups do
   Approved membership in a group that still exists. Deliberately stricter than
   `member?/2` alone: a soft-deleted group keeps its membership rows, and those
   must not remain writable.
+
+  Shorthand for `can_do_in_group?(group_id, identity_id, :post)`.
   """
-  def can_post_in?(group_id, identity_id) when is_binary(group_id) and is_binary(identity_id) do
-    not is_nil(get_group(group_id)) and member?(group_id, identity_id)
+  def can_post_in?(group_id, identity_id), do: can_do_in_group?(group_id, identity_id, :post)
+
+  @doc """
+  True when the identity may take `action` (`:post`, `:comment`, `:react`) in
+  the group.
+
+  Three things have to hold: the group still exists, the member is effectively
+  approved, and the action isn't withheld by a partial ban.
+
+  Expiry is evaluated **here**, at read time, not left to the sweeper. The
+  sweeper is a plain self-ticking GenServer; if it's late or dead, a timed
+  sanction must still lapse on schedule. It only tidies rows — this decides.
+  """
+  def can_do_in_group?(group_id, identity_id, action)
+      when is_binary(group_id) and is_binary(identity_id) do
+    now = DateTime.utc_now()
+
+    with false <- is_nil(get_group(group_id)),
+         %GroupMember{} = member <- get_member(group_id, identity_id),
+         :approved <- GroupMember.effective_status(member, now) do
+      to_string(action) not in GroupMember.effective_restrictions(member, now)
+    else
+      _ -> false
+    end
   end
 
-  def can_post_in?(_group_id, _identity_id), do: false
+  def can_do_in_group?(_group_id, _identity_id, _action), do: false
+
+  defp reply?(attrs) when is_map(attrs) do
+    case Map.get(attrs, "parent_id") || Map.get(attrs, :parent_id) do
+      id when is_binary(id) and id != "" -> true
+      _ -> false
+    end
+  end
+
+  defp reply?(_attrs), do: false
 
   # Attrs reach us string-keyed from the controllers and atom-keyed from a few
   # internal callers; accept both rather than silently skipping the check.

@@ -437,6 +437,87 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
     end
   end
 
+  # POST /api/v1/groups/:id/members/:mid/restrict
+  #
+  # Partial or timed ban. Body:
+  #   restrictions: ["post", "comment", "react"]  — withhold these actions
+  #   full: true                                   — full ban instead
+  #   until: ISO8601                               — lapses then; omit = permanent
+  #   reason: string
+  #
+  # An empty `restrictions` with `full: false` clears the sanction, which is
+  # what DELETE on the same path does more explicitly.
+  def restrict_member(conn, %{"id" => id, "mid" => mid} = params) do
+    identity = conn.assigns.current_identity
+
+    with {:ok, until} <- parse_until(params["until"]) do
+      opts = [
+        restrictions: params["restrictions"] || [],
+        full: params["full"] == true,
+        until: until,
+        reason: params["reason"]
+      ]
+
+      case Groups.restrict_member(id, identity.id, mid, opts) do
+        {:ok, member} ->
+          conn |> put_status(:ok) |> json(serialize_member(member))
+
+        {:error, :not_found} ->
+          conn |> put_status(:not_found) |> json(%{error: "member.not_found"})
+
+        {:error, :forbidden} ->
+          conn |> put_status(:forbidden) |> json(%{error: "group.forbidden"})
+
+        {:error, :owner_must_transfer} ->
+          conn |> put_status(:unprocessable_entity) |> json(%{error: "group.owner_must_transfer"})
+
+        {:error, {:invalid_restrictions, bad}} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "group.invalid_restrictions", invalid: bad})
+
+        {:error, changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "validation.failed", details: format_errors(changeset)})
+      end
+    else
+      {:error, :bad_until} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: "group.invalid_until"})
+    end
+  end
+
+  # DELETE /api/v1/groups/:id/members/:mid/restrict — lift any sanction.
+  def unrestrict_member(conn, %{"id" => id, "mid" => mid}) do
+    identity = conn.assigns.current_identity
+
+    case Groups.unrestrict_member(id, identity.id, mid) do
+      {:ok, member} ->
+        conn |> put_status(:ok) |> json(serialize_member(member))
+
+      {:error, :not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "member.not_found"})
+
+      {:error, :forbidden} ->
+        conn |> put_status(:forbidden) |> json(%{error: "group.forbidden"})
+
+      {:error, _} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: "validation.failed"})
+    end
+  end
+
+  defp parse_until(nil), do: {:ok, nil}
+  defp parse_until(""), do: {:ok, nil}
+
+  defp parse_until(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, dt, _} -> {:ok, DateTime.truncate(dt, :microsecond)}
+      _ -> {:error, :bad_until}
+    end
+  end
+
+  defp parse_until(_), do: {:error, :bad_until}
+
   # DELETE /api/v1/groups/:id/members/:mid
   def remove_member(conn, %{"id" => id, "mid" => mid}) do
     identity = conn.assigns.current_identity
@@ -582,6 +663,8 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
   # forward-friendly.
   defp tag_status(role, status), do: "#{role || "member"}:#{status}"
 
+  defp now_utc, do: DateTime.utc_now()
+
   defp serialize_member(member) do
     identity = Hybridsocial.Accounts.get_identity(member.identity_id)
 
@@ -591,6 +674,13 @@ defmodule HybridsocialWeb.Api.V1.GroupController do
       identity_id: member.identity_id,
       role: member.role,
       status: member.status,
+      # Effective values, so the client shows what's actually in force rather
+      # than a row that hasn't been swept yet: a lapsed sanction reads as
+      # cleared here even before the expiry worker tidies it.
+      effective_status: Hybridsocial.Groups.GroupMember.effective_status(member, now_utc()),
+      restrictions: Hybridsocial.Groups.GroupMember.effective_restrictions(member, now_utc()),
+      restricted_until: member.restricted_until,
+      restriction_reason: member.restriction_reason,
       created_at: member.inserted_at,
       account:
         if(identity,

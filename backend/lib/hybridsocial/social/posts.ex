@@ -1111,7 +1111,7 @@ defmodule Hybridsocial.Social.Posts do
   # remote actor who *is* an approved member still passes.
   defp check_group_reaction_allowed(%Post{group_id: gid, visibility: "group"}, identity_id)
        when is_binary(gid) do
-    if Hybridsocial.Groups.can_post_in?(gid, identity_id),
+    if Hybridsocial.Groups.can_do_in_group?(gid, identity_id, :react),
       do: :ok,
       else: {:error, :group_forbidden}
   end

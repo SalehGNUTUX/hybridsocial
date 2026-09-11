@@ -15,6 +15,19 @@ export interface GroupMember {
   account: Identity;
   role: 'owner' | 'admin' | 'moderator' | 'member';
   joined_at: string;
+  status?: 'pending' | 'approved' | 'rejected' | 'banned';
+  /**
+   * Status with a lapsed timed ban already taken into account — prefer this
+   * over `status` for display. The row isn't rewritten until the expiry
+   * sweeper runs, so `status` can read `banned` for a ban that is no longer
+   * being enforced.
+   */
+  effective_status?: 'pending' | 'approved' | 'rejected' | 'banned';
+  /** Actions currently withheld. Already excludes lapsed sanctions. */
+  restrictions?: GroupRestriction[];
+  /** When the sanction lapses; null = permanent. */
+  restricted_until?: string | null;
+  restriction_reason?: string | null;
 }
 
 export interface GroupApplication {
@@ -168,8 +181,46 @@ export function updateMemberRole(groupId: string, memberId: string, role: string
   return api.patch(`/api/v1/groups/${groupId}/members/${memberId}`, { role });
 }
 
+/**
+ * Full ban. This POSTed to `/members/:mid/ban`, which has never existed in the
+ * router — so banning from the UI 404'd from all three call sites. The real
+ * endpoint is DELETE on the member, which the backend maps to `ban_member/3`.
+ */
 export function banMember(groupId: string, memberId: string): Promise<void> {
-  return api.post(`/api/v1/groups/${groupId}/members/${memberId}/ban`);
+  return api.delete(`/api/v1/groups/${groupId}/members/${memberId}`);
+}
+
+/** Which actions a partial ban can withhold. Must match the backend's list. */
+export type GroupRestriction = 'post' | 'comment' | 'react';
+
+/**
+ * Partial or timed ban.
+ *
+ * `restrictions` withholds specific actions while leaving the member in the
+ * group; `full` bans outright. `until` (ISO8601) makes it lapse on its own —
+ * omit for permanent. Passing neither restrictions nor `full` clears it.
+ */
+export function restrictMember(
+  groupId: string,
+  memberId: string,
+  opts: {
+    restrictions?: GroupRestriction[];
+    full?: boolean;
+    until?: string | null;
+    reason?: string;
+  },
+): Promise<GroupMember> {
+  return api.post(`/api/v1/groups/${groupId}/members/${memberId}/restrict`, {
+    restrictions: opts.restrictions ?? [],
+    full: opts.full ?? false,
+    until: opts.until ?? null,
+    reason: opts.reason ?? null,
+  });
+}
+
+/** Lift any sanction, returning the member to good standing. */
+export function unrestrictMember(groupId: string, memberId: string): Promise<GroupMember> {
+  return api.delete(`/api/v1/groups/${groupId}/members/${memberId}/restrict`);
 }
 
 export function searchGroups(query: string, cursor?: string): Promise<PaginatedResponse<Group>> {

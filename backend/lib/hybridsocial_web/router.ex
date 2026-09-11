@@ -470,6 +470,11 @@ defmodule HybridsocialWeb.Router do
     patch "/:id/members/:mid", GroupController, :update_member
     delete "/:id/members/:mid", GroupController, :remove_member
 
+    # Partial / timed bans. Moderator-tier, like the full ban behind
+    # DELETE /members/:mid.
+    post "/:id/members/:mid/restrict", GroupController, :restrict_member
+    delete "/:id/members/:mid/restrict", GroupController, :unrestrict_member
+
     get "/:id/screening", GroupController, :screening
     patch "/:id/screening", GroupController, :update_screening
   end
