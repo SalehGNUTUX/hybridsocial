@@ -50,30 +50,49 @@ docker compose up
 Backend (Elixir 1.18 / OTP 28, against Postgres 17 + Valkey 8):
 `mix compile --warnings-as-errors` · `mix format --check-formatted` · `mix credo --strict`
 · `mix test --partitions 4` · `mix sobelow --config` · `mix deps.audit`.
-Frontend: `node scripts/check-i18n.mjs`. (CI does not build the frontend beyond the i18n
-check, but run `npm run check` locally — it must report 0 errors.) `mix precommit` covers
-the core backend gates in one shot.
+Frontend: `node scripts/check-i18n.mjs`, plus the frontend **Docker image build** (added
+with the GHCR publishing job — it catches a broken Dockerfile or dependency, but it does
+**not** run `svelte-check`, so run `npm run check` locally and get 0 errors).
+`mix precommit` covers the core backend gates in one shot.
 
-## Deploying a migration
+## Deploying
 
-Migrations do **not** run at boot — the backend container starts `bin/hybridsocial start`.
-They run via the one-shot `backend-migrate` compose service
-(`eval "Hybridsocial.Release.migrate()"`).
+Application images are **built by CI and pulled**, not built on the production box
+(`.github/workflows/ci.yml` publishes `ghcr.io/qfiber/hybridsocial-{backend,frontend}`
+on every `main` push, tagged by commit SHA and `latest`). The repo is public so the
+packages are public — the host needs no registry credentials.
 
-**`backend-migrate` has its own `build:` entry, so `build backend` does not rebuild it.**
-Skip it and the migrate container runs a stale image and prints `Migrations already up` —
-true of *that image*, while production stays un-migrated. It reports success and does
-nothing. (Same failure shape as the single-file bind mount: the tool succeeds against a
-stale copy. Hit on 2026-09-11.)
+`IMAGE_TAG` in the host `.env` pins what runs. Set it to a commit SHA; that is the
+record of what is deployed and the rollback lever.
 
 ```bash
-# after rsyncing backend/ to the host
-docker compose -f docker-compose-production.yml build backend backend-migrate   # BOTH
-docker compose -f docker-compose-production.yml run --rm backend-migrate
-docker compose -f docker-compose-production.yml up -d --no-deps backend
+# 1. pin the version (host .env)
+IMAGE_TAG=<commit sha>
+
+# 2. pull + restart
+docker compose -f docker-compose-production.yml pull backend backend-migrate frontend
+docker compose -f docker-compose-production.yml run --rm backend-migrate   # only if migrating
+docker compose -f docker-compose-production.yml up -d --no-deps backend frontend
 ```
 
-Verify against the database, not the migrator's output:
+Rollback is the same sequence with an older SHA.
+
+**Caddy still builds on the host** (`build: ./caddy`, the Coraza WAF image) and is not
+published, so WAF changes still need the source there and `build caddy`.
+
+**Config is still rsynced**: `caddy-conf/`, `docker-compose-production.yml`, `crowdsec/`.
+Scope rsync to what changed, always `--dry-run --itemize-changes` first, and exclude
+`.env*`, `priv/uploads/`, `priv/backups/`, `tmp/` — rsync mirrors the working directory,
+not what git tracks, and each of those has reached the host by accident at least once.
+
+**Migrations do not run at boot** — the backend container starts `bin/hybridsocial start`.
+They run via the one-shot `backend-migrate` service. That service now shares one pulled
+tag with `backend`, which removes the trap that used to exist here: when both were
+`build:`, `build backend` left the migrator on a stale image and it printed
+`Migrations already up` — true of *that image* — while the database stayed un-migrated
+(hit on 2026-09-11; same shape as the single-file bind mount, #186).
+
+Verify a migration against the database, not the migrator's output:
 `docker exec hs_db psql -U hybridsocial -d hybridsocial_prod -tAc "\d <table>"` (or query
 `information_schema.columns`) before and after.
 
