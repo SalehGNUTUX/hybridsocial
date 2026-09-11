@@ -237,6 +237,11 @@ defmodule Hybridsocial.Media.Video do
 
   defp extract_frame(path, at_seconds, out) do
     args = [
+      # Bound network reads so a slow or dead remote host can't hang a worker
+      # slot indefinitely — posters are extracted straight from a URL during
+      # backfill. Matches the timeout DimensionBackfill uses for ffprobe.
+      "-rw_timeout",
+      "30000000",
       # -ss before -i seeks by keyframe, which is much cheaper than decoding
       # up to the timestamp and is plenty accurate for a thumbnail.
       "-ss",

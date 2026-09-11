@@ -72,10 +72,7 @@ defmodule Hybridsocial.Media.PosterBackfill do
   end
 
   defp poster_and_update(%MediaFile{} = media) do
-    # `media_url/1` resolves whichever backend the blob actually lives on, so
-    # this works for local disk and S3/R2 alike. ffmpeg reads the URL
-    # directly rather than us downloading the whole file first.
-    with url when is_binary(url) <- Media.media_url(media),
+    with url when is_binary(url) <- source_url(media),
          {:ok, poster_path} <- Video.poster(url),
          {:ok, stored} <- store_poster(poster_path, media.identity_id) do
       media
@@ -91,6 +88,20 @@ defmodule Hybridsocial.Media.PosterBackfill do
       Logger.debug("[poster-backfill] #{media.id} error: #{inspect(e)}")
       :error
   end
+
+  # Where ffmpeg should read the video from.
+  #
+  # `Media.media_url/1` is the right answer for a *browser* — for remote media
+  # it returns our `/proxy/media/...` URL so the viewer's IP never reaches the
+  # origin. It's the wrong answer for a server-side job: the box would fetch
+  # its own public hostname, back out through Cloudflare and in again, which
+  # is both pointless and unreliable from inside the network (hairpin NAT).
+  # That's what made the first backfill run fail every row in under a second.
+  #
+  # So go to the origin directly when there is one, and fall back to
+  # `media_url/1` for locally-stored blobs.
+  defp source_url(%MediaFile{remote_url: url}) when is_binary(url) and url != "", do: url
+  defp source_url(%MediaFile{} = media), do: Media.media_url(media)
 
   defp store_poster(poster_path, identity_id) do
     upload = %Plug.Upload{path: poster_path, content_type: "image/jpeg", filename: "poster.jpg"}
