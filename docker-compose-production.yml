@@ -78,11 +78,34 @@ services:
 
   # ---- Application ----
 
+  # Images are built and published by CI (.github/workflows/ci.yml) and pulled
+  # here rather than built on this box. Three reasons:
+  #   * production stopped competing with itself — a build used all 4 cores
+  #     while serving traffic
+  #   * the image contains only what the Dockerfile COPYs, so no rsync
+  #     exclusion list to forget (priv/uploads, priv/backups, test tmp/ have
+  #     all leaked to this host at least once)
+  #   * IMAGE_TAG records exactly what is running, and a rollback is one
+  #     value change + `docker compose up -d`
+  #
+  # Set IMAGE_TAG=<commit sha> in .env to pin. Deploy is:
+  #   docker compose -f docker-compose-production.yml pull backend backend-migrate frontend
+  #   docker compose -f docker-compose-production.yml run --rm backend-migrate   # if migrating
+  #   docker compose -f docker-compose-production.yml up -d --no-deps backend frontend
+  #
+  # To build locally again (escape hatch), uncomment the `build:` block and
+  # comment out `image:`.
   backend-migrate:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      network: host
+    # MUST stay identical to `backend` below. When both were `build:`, running
+    # `build backend` left this one on a stale image, so the migrator printed
+    # "Migrations already up" — true of that image — while the database went
+    # un-migrated (#186 has the same shape). Sharing one pulled tag makes that
+    # drift impossible.
+    image: ghcr.io/qfiber/hybridsocial-backend:${IMAGE_TAG:-latest}
+    # build:
+    #   context: ./backend
+    #   dockerfile: Dockerfile
+    #   network: host
     container_name: hs_migrate
     environment:
       DATABASE_URL: "ecto://${DB_USER:-hybridsocial}:${DB_PASSWORD:?}@postgresql/${DB_NAME:-hybridsocial_prod}"
@@ -99,10 +122,11 @@ services:
     restart: "no"
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      network: host
+    image: ghcr.io/qfiber/hybridsocial-backend:${IMAGE_TAG:-latest}
+    # build:
+    #   context: ./backend
+    #   dockerfile: Dockerfile
+    #   network: host
     container_name: hs_backend
     restart: unless-stopped
     depends_on:
@@ -170,10 +194,11 @@ services:
       - "127.0.0.1:4000:4000"
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      network: host
+    image: ghcr.io/qfiber/hybridsocial-frontend:${IMAGE_TAG:-latest}
+    # build:
+    #   context: ./frontend
+    #   dockerfile: Dockerfile
+    #   network: host
     container_name: hs_frontend
     restart: unless-stopped
     environment:
