@@ -201,5 +201,47 @@ defmodule HybridsocialWeb.Serializers.PostSerializerTest do
       serialized = PostSerializer.serialize(post)
       assert serialized.page.can_edit == false
     end
+
+    # The prewarmed public/global first page is serialized once with no viewer,
+    # so `can_edit` is baked false in the snapshot. apply_viewer_state/2 has to
+    # recompute it, or a page's own managers lose Edit/Delete on exactly the
+    # timelines that get prewarmed.
+    test "apply_viewer_state recomputes it on a prewarmed snapshot", %{
+      owner: owner,
+      stranger: stranger,
+      post: post
+    } do
+      snapshot =
+        [post]
+        |> PostSerializer.serialize_many()
+        |> round_trip_through_cache()
+
+      assert [%{"page" => %{"can_edit" => false}}] = snapshot
+
+      assert [%{"page" => %{"can_edit" => true}}] =
+               PostSerializer.apply_viewer_state(snapshot, owner.id)
+
+      assert [%{"page" => %{"can_edit" => false}}] =
+               PostSerializer.apply_viewer_state(snapshot, stranger.id)
+    end
+
+    test "apply_viewer_state leaves a post with no page alone", %{owner: owner} do
+      {:ok, plain} =
+        Posts.create_post(owner.id, %{"content" => "no page", "visibility" => "public"})
+
+      reloaded = Repo.get!(Hybridsocial.Social.Post, plain.id) |> Repo.preload(:identity)
+
+      snapshot = [reloaded] |> PostSerializer.serialize_many() |> round_trip_through_cache()
+
+      assert [patched] = PostSerializer.apply_viewer_state(snapshot, owner.id)
+      refute Map.has_key?(patched, "page") and is_map(patched["page"])
+    end
+
+    # apply_viewer_state/2 consumes the cache-round-tripped snapshot, which is
+    # string-keyed. Mimic that rather than passing atom-keyed structs it would
+    # never see in production.
+    defp round_trip_through_cache(serialized) do
+      serialized |> Jason.encode!() |> Jason.decode!()
+    end
   end
 end
