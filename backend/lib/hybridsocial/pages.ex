@@ -370,6 +370,52 @@ defmodule Hybridsocial.Pages do
   end
 
   @doc """
+  Batch form of `can_edit?/2`: of the given page ids, returns a MapSet of the
+  ones `identity_id` may edit.
+
+  Two queries total regardless of how many pages are asked about, so a caller
+  serializing a whole timeline doesn't pay `can_edit?/2` (up to three queries)
+  per post. Mirrors `can_edit?/2` exactly: parent owner OR org owner OR an
+  admin/editor role row. Keep the two in sync.
+  """
+  def editable_page_ids(page_identity_ids, identity_id)
+
+  def editable_page_ids([], _identity_id), do: MapSet.new()
+  def editable_page_ids(_page_identity_ids, nil), do: MapSet.new()
+
+  def editable_page_ids(page_identity_ids, identity_id) do
+    ids = Enum.uniq(page_identity_ids)
+
+    owned =
+      Identity
+      |> join(:left, [i], o in Organization, on: o.identity_id == i.id)
+      |> where(
+        [i, o],
+        i.id in ^ids and i.type == "organization" and is_nil(i.deleted_at) and
+          (i.parent_identity_id == ^identity_id or o.owner_id == ^identity_id)
+      )
+      |> select([i], i.id)
+      |> Repo.all()
+
+    # A role row can outlive its page's soft-delete, so join back to Identity
+    # and re-apply the same live-page filter rather than trusting the role row.
+    # Without this, an editor would keep edit rights on a deleted page —
+    # `can_edit?/2` gets this right via `get_page/1` returning nil.
+    roled =
+      OrganizationRole
+      |> join(:inner, [r], i in Identity, on: i.id == r.organization_id)
+      |> where(
+        [r, i],
+        r.organization_id in ^ids and r.identity_id == ^identity_id and
+          r.role in ["admin", "editor"] and i.type == "organization" and is_nil(i.deleted_at)
+      )
+      |> select([r], r.organization_id)
+      |> Repo.all()
+
+    MapSet.new(owned ++ roled)
+  end
+
+  @doc """
   Resolves who a status is authored as. A status carrying a `page_id` is
   authored AS the page, not the acting user — but only when that user has
   edit rights on the page (parent owner / org owner / admin / editor).

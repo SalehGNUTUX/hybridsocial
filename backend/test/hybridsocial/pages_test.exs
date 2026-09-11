@@ -402,6 +402,121 @@ defmodule Hybridsocial.PagesTest do
     end
   end
 
+  describe "editable_page_ids/2 — the batch form of can_edit?/2" do
+    test "agrees with can_edit?/2 for every role, in one call" do
+      owner = create_user("pg_bce1", "pg_bce1@example.com")
+      admin = create_user("pg_bce2", "pg_bce2@example.com")
+      editor = create_user("pg_bce3", "pg_bce3@example.com")
+      moderator = create_user("pg_bce4", "pg_bce4@example.com")
+      rando = create_user("pg_bce5", "pg_bce5@example.com")
+
+      page = create_test_page(owner, "bce_page1")
+      {:ok, _} = Pages.add_role(page.id, owner.id, admin.id, "admin")
+      {:ok, _} = Pages.add_role(page.id, owner.id, editor.id, "editor")
+      {:ok, _} = Pages.add_role(page.id, owner.id, moderator.id, "moderator")
+
+      # A moderator can moderate but NOT edit, so it must stay out of the set.
+      for identity <- [owner, admin, editor, moderator, rando] do
+        batched = MapSet.member?(Pages.editable_page_ids([page.id], identity.id), page.id)
+        assert batched == Pages.can_edit?(page.id, identity.id)
+      end
+    end
+
+    test "returns only the pages the viewer may edit, across a mixed batch" do
+      owner = create_user("pg_bce6", "pg_bce6@example.com")
+      other = create_user("pg_bce7", "pg_bce7@example.com")
+
+      mine = create_test_page(owner, "bce_mine")
+      as_editor = create_test_page(other, "bce_editor")
+      theirs = create_test_page(other, "bce_theirs")
+      {:ok, _} = Pages.add_role(as_editor.id, other.id, owner.id, "editor")
+
+      editable = Pages.editable_page_ids([mine.id, as_editor.id, theirs.id], owner.id)
+
+      assert MapSet.member?(editable, mine.id)
+      assert MapSet.member?(editable, as_editor.id)
+      refute MapSet.member?(editable, theirs.id)
+    end
+
+    test "excludes a soft-deleted page even when a role row survives it" do
+      owner = create_user("pg_bce8", "pg_bce8@example.com")
+      editor = create_user("pg_bce9", "pg_bce9@example.com")
+      page = create_test_page(owner, "bce_deleted")
+      {:ok, _} = Pages.add_role(page.id, owner.id, editor.id, "editor")
+
+      {:ok, _} = Pages.delete_page(page.id, owner.id)
+
+      assert Pages.editable_page_ids([page.id], editor.id) == MapSet.new()
+      refute Pages.can_edit?(page.id, editor.id)
+    end
+
+    test "handles empty input and an anonymous viewer without querying" do
+      owner = create_user("pg_bce10", "pg_bce10@example.com")
+      page = create_test_page(owner, "bce_empty")
+
+      assert Pages.editable_page_ids([], owner.id) == MapSet.new()
+      assert Pages.editable_page_ids([page.id], nil) == MapSet.new()
+    end
+
+    test "cost is constant in the number of pages — this is the whole point" do
+      # Spread over several owners: max_organizations_per_user defaults to 2.
+      owners =
+        for n <- 1..5, do: create_user("pg_bce_o#{n}", "pg_bce_o#{n}@example.com")
+
+      ids =
+        owners
+        |> Enum.flat_map(fn o ->
+          [
+            create_test_page(o, "bce_bulk_#{o.handle}_a"),
+            create_test_page(o, "bce_bulk_#{o.handle}_b")
+          ]
+        end)
+        |> Enum.map(& &1.id)
+
+      owner = hd(owners)
+
+      # Two queries, whether you ask about one page or ten. Asserted absolutely
+      # rather than just "one == ten" so the test can't pass vacuously if the
+      # telemetry event ever stops firing.
+      #
+      # For scale: looping can_edit?/2 over these same ten ids costs 28 queries.
+      # That is what the serializer used to do per page-anchored post on the
+      # prewarmed timeline, and it is the regression this guards.
+      assert count_queries(fn -> Pages.editable_page_ids([hd(ids)], owner.id) end) == 2
+      assert count_queries(fn -> Pages.editable_page_ids(ids, owner.id) end) == 2
+    end
+
+    # Counts Repo queries issued by `fun` on this process.
+    defp count_queries(fun) do
+      ref = make_ref()
+      test_pid = self()
+      handler_id = {:query_counter, ref}
+
+      :telemetry.attach(
+        handler_id,
+        [:hybridsocial, :repo, :query],
+        fn _event, _measurements, _metadata, _config -> send(test_pid, {ref, :query}) end,
+        nil
+      )
+
+      try do
+        fun.()
+      after
+        :telemetry.detach(handler_id)
+      end
+
+      drain_queries(ref, 0)
+    end
+
+    defp drain_queries(ref, acc) do
+      receive do
+        {^ref, :query} -> drain_queries(ref, acc + 1)
+      after
+        0 -> acc
+      end
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Branding
   # ---------------------------------------------------------------------------
