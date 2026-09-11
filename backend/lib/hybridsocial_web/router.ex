@@ -775,6 +775,13 @@ defmodule HybridsocialWeb.Router do
     # Read for the moderation panel
     get "/users/:id", AdminController, :show_account
     get "/users/:id/statuses", AdminController, :account_statuses
+    # Followers of any identity — a page's or group's were previously only a
+    # count with no way to see or act on them (#167).
+    get "/users/:id/followers", AdminController, :account_followers
+    delete "/users/:id/followers/:follower_id", AdminController, :remove_account_follower
+    # Members of a group, addressed by its actor identity id. Read-only:
+    # in-group governance is not a staff power.
+    get "/users/:id/group_members", AdminController, :account_group_members
 
     # Account-level moderation actions
     post "/accounts/:id/action", AdminController, :account_action

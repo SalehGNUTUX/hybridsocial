@@ -7,6 +7,10 @@
   import {
     getAdminUser,
     getAdminUserStatuses,
+    getAdminUserFollowers,
+    removeAdminUserFollower,
+    getAdminGroupMembers,
+    type AdminGroupMember,
     deleteUser,
     suspendUser,
     unsuspendUser,
@@ -123,6 +127,57 @@
   }
 
   let isLocal = $derived(!!user?.is_local);
+
+
+  // --- Followers / group members (#167 item 2) --------------------------
+  // A page's or group's followers were only ever a number here. These make
+  // them visible, and let staff sever a follow (the usual case is cutting a
+  // harasser off from someone's posts).
+  let followers = $state<AdminUser[]>([]);
+  let followersLoading = $state(false);
+  let followersLoaded = $state(false);
+
+  let groupMembers = $state<AdminGroupMember[]>([]);
+  let groupMembersLoading = $state(false);
+
+  let isGroup = $derived(user?.type === 'group');
+
+  async function loadFollowers() {
+    if (followersLoading) return;
+    followersLoading = true;
+    try {
+      followers = (await getAdminUserFollowers(userId, { limit: '100' })).data;
+      followersLoaded = true;
+    } catch {
+      addToast('Could not load followers', 'error');
+    } finally {
+      followersLoading = false;
+    }
+  }
+
+  async function handleRemoveFollower(followerId: string, handle: string) {
+    if (!confirm(`Remove @${handle} as a follower? They will stop receiving these posts.`)) return;
+    try {
+      await removeAdminUserFollower(userId, followerId);
+      followers = followers.filter((f) => f.id !== followerId);
+      if (user) user = { ...user, followers_count: Math.max(0, (user.followers_count ?? 1) - 1) };
+      addToast('Follower removed', 'success');
+    } catch {
+      addToast('Could not remove follower', 'error');
+    }
+  }
+
+  async function loadGroupMembers() {
+    if (groupMembersLoading) return;
+    groupMembersLoading = true;
+    try {
+      groupMembers = (await getAdminGroupMembers(userId)).data;
+    } catch {
+      addToast('Could not load members', 'error');
+    } finally {
+      groupMembersLoading = false;
+    }
+  }
 
   // Pages, groups and bots are subaccounts: Identity rows with no `users`
   // row, so they own no email, no password and no 2FA — they act under their
@@ -398,6 +453,82 @@
         <div><span class="stat-n">{fmtDate(user.last_active_at)}</span><span class="stat-l">last active</span></div>
       </div>
     </section>
+
+    <!-- Followers (#167 item 2). Previously just a number on the stat row,
+         with no way to see who they were or act on one. -->
+    <section class="card sect">
+      <h2 class="sect-title">Followers <span class="sect-count">{user.followers_count ?? 0}</span></h2>
+
+      {#if !followersLoaded}
+        <button class="btn btn-secondary" disabled={followersLoading} onclick={loadFollowers}>
+          {followersLoading ? 'Loading…' : 'Show followers'}
+        </button>
+      {:else if followers.length === 0}
+        <p class="muted">No followers.</p>
+      {:else}
+        <ul class="admin-people">
+          {#each followers as f (f.id)}
+            <li class="admin-person">
+              <Avatar src={f.avatar_url} name={f.display_name || f.handle} size="sm" />
+              <div class="admin-person-meta">
+                <a class="admin-person-name" href="/admin/user-management/users/{f.id}">
+                  {f.display_name || f.handle}
+                </a>
+                <span class="admin-person-handle">@{f.handle}</span>
+              </div>
+              <button
+                class="btn btn-sm btn-danger-outline"
+                onclick={() => handleRemoveFollower(f.id, f.handle)}
+              >
+                Remove
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
+    {#if isGroup}
+      <!-- Group members. Read-only on purpose: changing roles is in-group
+           governance, which instance staff deliberately don't get. Staff
+           moderate the group as an entity; they don't run it. -->
+      <section class="card sect">
+        <h2 class="sect-title">Group members</h2>
+        <p class="muted sect-help">
+          Read-only. Roles are the group's own governance — staff can suspend, silence or take
+          down the group, but not run it.
+        </p>
+
+        {#if groupMembers.length === 0 && !groupMembersLoading}
+          <button class="btn btn-secondary" onclick={loadGroupMembers}>Show members</button>
+        {:else if groupMembersLoading}
+          <p class="muted">Loading…</p>
+        {:else}
+          <ul class="admin-people">
+            {#each groupMembers as m (m.id)}
+              <li class="admin-person">
+                <Avatar
+                  src={m.account?.avatar_url}
+                  name={m.account?.display_name || m.account?.handle || '?'}
+                  size="sm"
+                />
+                <div class="admin-person-meta">
+                  {#if m.account}
+                    <a class="admin-person-name" href="/admin/user-management/users/{m.account.id}">
+                      {m.account.display_name || m.account.handle}
+                    </a>
+                    <span class="admin-person-handle">@{m.account.handle}</span>
+                  {:else}
+                    <span class="admin-person-name">Unknown account</span>
+                  {/if}
+                </div>
+                <span class="pill pill-neutral">{m.role}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+    {/if}
 
     <!-- Content (issue #166): what this account has posted -->
     <section class="card sect">
@@ -716,6 +847,53 @@
   .overview-main { flex: 1; min-width: 200px; }
   .overview-name { margin: 0; font-size: var(--text-xl); font-weight: 700; }
   .overview-handle { margin: 2px 0 10px; color: var(--color-text-secondary); font-size: var(--text-sm); }
+  .admin-people {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .admin-person {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .admin-person-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .admin-person-name {
+    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .admin-person-name:hover {
+    text-decoration: underline;
+  }
+
+  .admin-person-handle {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+  }
+
+  .sect-count {
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+
   .overview-parent {
     margin: 6px 0 0;
     font-size: var(--text-xs);

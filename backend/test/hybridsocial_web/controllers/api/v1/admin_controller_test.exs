@@ -616,4 +616,131 @@ defmodule HybridsocialWeb.Api.V1.AdminControllerTest do
       assert conn.status in [401, 403]
     end
   end
+
+  # #167 item 2: a page's or group's followers were visible only as a count.
+  describe "admin followers view" do
+    setup %{conn: conn} do
+      admin = create_user("fv_admin", "fv_admin@test.com") |> make_admin()
+      owner = create_user("fv_owner", "fv_owner@test.com")
+      fan = create_user("fv_fan", "fv_fan@test.com")
+
+      {:ok, page} =
+        Hybridsocial.Pages.create_page(owner.id, %{
+          "handle" => "fv_page",
+          "display_name" => "Followed Page",
+          "category" => "tech"
+        })
+
+      {:ok, _} = Hybridsocial.Social.follow(fan.id, page.id)
+
+      %{conn: admin_conn(conn, admin), page: page, fan: fan, owner: owner}
+    end
+
+    test "lists a page's followers", %{conn: conn, page: page, fan: fan} do
+      data =
+        conn
+        |> get("/api/v1/admin/users/#{page.id}/followers")
+        |> json_response(200)
+        |> Map.fetch!("data")
+
+      assert fan.id in Enum.map(data, & &1["id"])
+    end
+
+    test "an admin can sever a follow", %{conn: conn, page: page, fan: fan} do
+      assert json_response(
+               delete(conn, "/api/v1/admin/users/#{page.id}/followers/#{fan.id}"),
+               200
+             )
+
+      data =
+        conn
+        |> get("/api/v1/admin/users/#{page.id}/followers")
+        |> json_response(200)
+        |> Map.fetch!("data")
+
+      refute fan.id in Enum.map(data, & &1["id"])
+    end
+
+    test "removing a follower is audited", %{conn: conn, page: page, fan: fan} do
+      delete(conn, "/api/v1/admin/users/#{page.id}/followers/#{fan.id}")
+
+      entry =
+        Hybridsocial.Repo.get_by(Hybridsocial.Moderation.AuditLog,
+          action: "account.remove_follower"
+        )
+
+      assert entry
+      assert entry.target_id == page.id
+      assert entry.details["follower_id"] == fan.id
+    end
+
+    # Viewing is a read; severing someone's follow is a moderation action.
+    test "viewing needs users.view, removing needs users.moderate", %{page: page, fan: fan} do
+      stranger = create_user("fv_nosy", "fv_nosy@test.com")
+      c = auth_conn(Phoenix.ConnTest.build_conn(), stranger)
+
+      assert get(c, "/api/v1/admin/users/#{page.id}/followers").status in [401, 403]
+
+      assert delete(
+               auth_conn(Phoenix.ConnTest.build_conn(), stranger),
+               "/api/v1/admin/users/#{page.id}/followers/#{fan.id}"
+             ).status in [401, 403]
+    end
+  end
+
+  describe "admin group members view" do
+    setup %{conn: conn} do
+      admin = create_user("gm_admin", "gm_admin@test.com") |> make_admin()
+      owner = create_user("gm_owner", "gm_owner@test.com")
+      member = create_user("gm_member", "gm_member@test.com")
+
+      {:ok, group} =
+        Hybridsocial.Groups.create_group(owner.id, %{
+          "name" => "Admin Viewed",
+          "handle" => "gm_group",
+          "visibility" => "public",
+          "join_policy" => "open"
+        })
+
+      {:ok, _} = Hybridsocial.Groups.join_group(group.id, member.id)
+
+      %{conn: admin_conn(conn, admin), group: group, owner: owner, member: member}
+    end
+
+    # The admin views hold the *identity* id; a group's own primary key isn't
+    # reachable from there, which is what get_group_by_identity/1 bridges.
+    test "lists members when addressed by the group's identity id", %{
+      conn: conn,
+      group: group,
+      owner: owner,
+      member: member
+    } do
+      data =
+        conn
+        |> get("/api/v1/admin/users/#{group.identity_id}/group_members")
+        |> json_response(200)
+        |> Map.fetch!("data")
+
+      ids = Enum.map(data, & &1["account"]["id"])
+      assert owner.id in ids
+      assert member.id in ids
+
+      owner_row = Enum.find(data, &(&1["account"]["id"] == owner.id))
+      assert owner_row["role"] == "owner"
+    end
+
+    test "404s for an identity that isn't a group", %{conn: conn, member: member} do
+      assert json_response(get(conn, "/api/v1/admin/users/#{member.id}/group_members"), 404)
+    end
+
+    test "requires users.view", %{group: group} do
+      stranger = create_user("gm_nosy", "gm_nosy@test.com")
+
+      conn =
+        auth_conn(Phoenix.ConnTest.build_conn(), stranger)
+        |> get("/api/v1/admin/users/#{group.identity_id}/group_members")
+
+      assert conn.status in [401, 403]
+    end
+  end
 end
