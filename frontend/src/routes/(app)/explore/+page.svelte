@@ -101,6 +101,11 @@
 
   let feedTab = $derived(exploreTabs.find((t) => t.id === topTab) ?? exploreTabs[0]);
 
+  // Height of the sticky Local/Global/Trending switcher, fed to
+  // `--timeline-sticky-offset` so the feed's own sticky sort chips stack
+  // directly beneath it instead of colliding at the same offset.
+  let topTabsH = $state(0);
+
   onMount(() => {
     try {
       const saved = localStorage.getItem(TOP_TAB_KEY);
@@ -175,7 +180,7 @@
   <title>Explore - {$instanceName}</title>
 </svelte:head>
 
-<div class="explore-page">
+<div class="explore-page" style="--timeline-sticky-offset: {topTabsH}px">
   {#if hasSearched}
     <Tabs tabs={searchTabs} bind:active={searchTab}>
       {#if searching}
@@ -242,7 +247,7 @@
       {/if}
     </Tabs>
   {:else}
-    <div class="explore-toptabs">
+    <div class="explore-toptabs" bind:clientHeight={topTabsH}>
       <FeedTabs tabs={TOP_TABS} active={topTab} onchange={changeTopTab} />
     </div>
     {#if topTab === 'trending'}
@@ -264,6 +269,20 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+  }
+
+  /* Keep the Local/Global/Trending switcher pinned under the header so it
+     stays reachable after scrolling deep into a feed (previously it scrolled
+     away with the content and never came back). The feed's own sort chips
+     stack just below it via --timeline-sticky-offset. */
+  .explore-toptabs {
+    position: sticky;
+    inset-block-start: var(--header-height);
+    z-index: 21;
+    background: var(--color-surface-base, var(--color-bg));
+    padding-block: var(--space-2);
+    /* Absorb the page's flex gap so the pinned bar has no seam above it. */
+    margin-block-start: calc(-1 * var(--space-2));
   }
 
   .search-loading {
