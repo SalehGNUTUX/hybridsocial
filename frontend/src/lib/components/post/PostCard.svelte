@@ -848,7 +848,12 @@
                     : $t('explore.follow')}
               </button>
             {/if}
-            {#each accountBadgeView.nonTier as badge (badge.type)}
+            <!-- Keyed by type + label + position, not type alone: a group/page post
+               carries the author's instance badges plus their role there, so an
+               instance admin who also admins the group has two `admin` badges.
+               A duplicate key throws and aborts the render (the whole profile
+               stayed on its skeleton). -->
+            {#each accountBadgeView.nonTier as badge, i (`${badge.type}:${badge.label}:${i}`)}
               <RoleBadge type={badge.type} label={badge.label} size="sm" />
             {/each}
             {#if accountBadgeView.highestTier}
