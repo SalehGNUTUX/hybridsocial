@@ -1462,16 +1462,18 @@
 
       // Confirm the publish. A scheduled post isn't live yet, so only offer a
       // "View post" link for a real, immediately-visible one.
+      // A reply is confirmed as a reply, not as a new post.
       const newPostId = (newPost as { id?: string } | null)?.id;
+      const isReply = !!body.parent_id;
       if (body.scheduled_at) {
-        addToast(translate('composer.post_scheduled'), 'success');
+        addToast(translate(isReply ? 'composer.reply_scheduled' : 'composer.post_scheduled'), 'success');
       } else if (newPostId) {
-        addToast(translate('composer.post_published'), 'success', 5000, undefined, {
-          label: translate('composer.view_post'),
+        addToast(translate(isReply ? 'composer.reply_published' : 'composer.post_published'), 'success', 5000, undefined, {
+          label: translate(isReply ? 'composer.view_reply' : 'composer.view_post'),
           href: `/post/${newPostId}`,
         });
       } else {
-        addToast(translate('composer.post_published'), 'success');
+        addToast(translate(isReply ? 'composer.reply_published' : 'composer.post_published'), 'success');
       }
     } catch (err) {
       const message = publishErrorMessage(err);
@@ -2099,9 +2101,9 @@
         >
           {#if loading}
             <span class="spinner" aria-hidden="true"></span>
-            {$t('post.posting')}
+            {replyTo ? $t('composer.replying') : $t('post.posting')}
           {:else}
-            {$t('composer.post_action')}
+            {replyTo ? $t('composer.reply_action') : $t('composer.post_action')}
           {/if}
         </button>
       </div>
