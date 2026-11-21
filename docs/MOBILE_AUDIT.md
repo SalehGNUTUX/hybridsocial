@@ -3,11 +3,11 @@
 Date: 2026-07-11 (reconciled against `main` 2026-07-17; status updated 2026-11-10)
 Scope: `frontend/` (SvelteKit + Svelte 5)
 
-> **Status (2026-11-10):** every batch has landed — #1, #13 and the `theme-color`
+> **Status (2026-11-21): complete.** Every batch has landed — #1, #13 and the `theme-color`
 > half of #10 via #65 (PR-A); #3, #8 via #66 (PR-B); #2, #12 via #237 (PR-C);
 > #4, #9 via #240 (PR-D); #5, #15 via #238 (PR-E); #6, #7 and the rest of #10 via
-> #245 (PR-F). Only **#11** and **#14** remain open. Resolved rows are struck
-> through below.
+> #245 (PR-F); #11 via #250 and #14 via #251. Resolved rows are struck through
+> below.
 
 Goal: make the platform behave correctly and feel native across **all devices and
 screen sizes** — phones, tablets, and desktops — not phone-only. Every fix below
@@ -36,10 +36,10 @@ The issues below are concentrated and mostly small.
 | 8 | ~~Primary feed action buttons (~28px) are under the 44px touch-target guidance~~ **RESOLVED (PR-B, #66):** transparent 44px `::after` hit-area on coarse pointers | `src/lib/components/post/PostActions.svelte:1640` | Med-high | High | `min-height/min-width: 44px` hit-area |
 | 9 | ~~No body-scroll-lock behind modals / sheets — the page scrolls underneath on touch~~ **RESOLVED (PR-D, #240):** shared `utils/scroll-lock.ts` locks `<html>` (a body lock doesn't reach the viewport under the root's `overflow-x: clip`) for Modal, the More sheet and the lightbox | `src/lib/components/ui/Modal.svelte`, `src/lib/components/layout/BottomTabs.svelte:146` | Med | High | Shared `overflow: hidden` + `overscroll-behavior: contain` while open |
 | 10 | ~~iOS `apple-touch-icon` is an SVG (renders blank on iOS); needs a 180px PNG~~ **RESOLVED (PR-F, #245):** 180px PNG default, or the instance's derived 180px icon. (The dark-mode `theme_color` sync is **already RESOLVED in main via #65**: `src/app.html:11-24` seeds/syncs `theme-color` to the resolved mode.) | `src/app.html:44`, `static/manifest.json` | Med | High | Add a 180px PNG apple-touch-icon |
-| 11 | Fullscreen/modal heights use `vh` not `dvh`, overshooting the visible viewport when browser chrome shows | `src/lib/components/ui/Modal.svelte:124`, `ImageLightbox.svelte:508`, `StoryViewer.svelte:409` | Med | Med | Use `dvh` with a `vh` fallback |
+| 11 | ~~Fullscreen/modal heights use `vh` not `dvh`, overshooting the visible viewport when browser chrome shows~~ **RESOLVED (#250):** `dvh` declared after each `vh` fallback (26 places, 18 files) | `src/lib/components/ui/Modal.svelte:124`, `ImageLightbox.svelte:508`, `StoryViewer.svelte:409` | Med | Med | Use `dvh` with a `vh` fallback |
 | 12 | ~~Back / chevron icons don't mirror in RTL~~ **RESOLVED (PR-C):** global `.rtl-mirror` utility in `app.css` on back arrows, chevrons, reply/undo; lightbox prev/next use logical sides and arrow keys follow them | `src/routes/(app)/post/[id]/+page.svelte:128` and others | Med | High | `[dir="rtl"] .back-icon { transform: scaleX(-1) }` |
 | 13 | ~~`<html lang>` never updates~~ **RESOLVED (already in main via #65):** `src/routes/+layout.svelte:65` sets `document.documentElement.lang = $locale` alongside `dir` | `src/routes/+layout.svelte:65` | n/a | n/a | No action |
-| 14 | Push permission requested automatically right after login (no user gesture) → often auto-denied | `src/routes/(auth)/login/+page.svelte:71` | Med | Med | Gate behind an explicit "Enable notifications" action |
+| 14 | ~~Push permission requested automatically right after login (no user gesture) → often auto-denied~~ **RESOLVED (#251):** login only re-syncs an already-granted subscription; permission is asked from an explicit "Enable notifications" button (settings + a dismissible banner on Notifications) | `src/routes/(auth)/login/+page.svelte:71` | Med | Med | Gate behind an explicit "Enable notifications" action |
 | 15 | ~~Fonts are render-blocking Google Fonts (blocks first paint on slow networks; privacy)~~ **RESOLVED for text fonts (PR-E):** Manrope, Rubik, Inter and Cascadia Code are bundled via `@fontsource-variable/*` (`font-display: swap`); only the Material Symbols icon font still loads from Google | `src/app.html` (fonts link) | Med | High | Self-host + `preload` a woff2 subset, `font-display: swap` |
 
 Lower-priority leftovers: ~~DM reaction overlay uses physical left/right
@@ -81,7 +81,7 @@ These are designed to adapt across phone / tablet / desktop, not to be mobile-on
 - **PR-F — PWA offline + install** (#6, #7, #10 apple-touch-icon PNG): **landed via
   #245**, together with the instance-branded manifest.
 
-Still open: **#11** (`vh` → `dvh`) and **#14** (push prompt without a user gesture).
+All items are resolved: #11 landed via #250, #14 via #251.
 
 ### Related fixes found while testing the batches on devices
 
