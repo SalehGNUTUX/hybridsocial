@@ -161,19 +161,19 @@
     fieldErrors = {};
 
     if (handleInvalid) {
-      fieldErrors.handle = 'Only letters, numbers, and underscores';
+      fieldErrors.handle = $t('register.err_handle_chars');
       return;
     }
     if (emailInvalid) {
-      fieldErrors.email = 'Please enter a valid email address';
+      fieldErrors.email = $t('register.err_email');
       return;
     }
     if (password.length < 16) {
-      fieldErrors.password = 'Password must be at least 16 characters';
+      fieldErrors.password = $t('register.err_password_short');
       return;
     }
     if (password !== passwordConfirm) {
-      fieldErrors.password_confirm = 'Passwords do not match';
+      fieldErrors.password_confirm = $t('register.err_password_mismatch');
       return;
     }
 
@@ -202,7 +202,7 @@
           }
         }
       } else {
-        error = 'An unexpected error occurred. Please try again.';
+        error = $t('login.error_unexpected');
       }
     } finally {
       loading = false;
@@ -210,24 +210,24 @@
   }
 
   function formatPrice(cents: number, currency: string): string {
-    if (cents === 0) return 'Free';
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100);
+    if (cents === 0) return $t('register.free');
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100);
   }
 
   function formatEditWindow(seconds: number): string {
-    if (seconds === 0) return 'Unlimited';
-    if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
-    if (seconds < 86400) return `${Math.round(seconds / 3600)} hours`;
-    return `${Math.round(seconds / 86400)} days`;
+    if (seconds === 0) return $t('register.unlimited');
+    if (seconds < 3600) return $t('register.minutes', { n: Math.round(seconds / 60) });
+    if (seconds < 86400) return $t('register.hours', { n: Math.round(seconds / 3600) });
+    return $t('register.days', { n: Math.round(seconds / 86400) });
   }
 
   function formatFollows(limit: number): string {
-    return limit === 0 ? 'Unlimited' : String(limit);
+    return limit === 0 ? $t('register.unlimited') : String(limit);
   }
 </script>
 
 <svelte:head>
-  <title>Create account - {$instanceName}</title>
+  <title>{$t('register.page_title')} - {$instanceName}</title>
 </svelte:head>
 
 {#if success}
@@ -238,13 +238,13 @@
         <polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
     </div>
-    <h1 class="auth-title" style="text-align: center;">Check your email</h1>
+    <h1 class="auth-title" style="text-align: center;">{$t('register.check_email')}</h1>
     <p class="auth-subtitle" style="text-align: center;">
-      We sent a confirmation link to <strong>{email}</strong>.
-      Please check your inbox and click the link to activate your account.
+      {$t('register.sent_to')} <strong dir="ltr">{email}</strong>.
+      {$t('register.sent_hint')}
     </p>
     <p class="auth-footer">
-      <a href="/login" class="auth-footer-link">Back to login</a>
+      <a href="/login" class="auth-footer-link">{$t('register.back_to_login')}</a>
     </p>
   </div>
 {:else}
@@ -255,8 +255,8 @@
         <BrandMark size={40} />
       </div>
 
-      <h1 class="auth-title">Create your account</h1>
-      <p class="auth-subtitle">Join the conversation</p>
+      <h1 class="auth-title">{$t('register.title')}</h1>
+      <p class="auth-subtitle">{$t('register.subtitle')}</p>
 
       {#if registrationMode === 'closed'}
         <div class="reg-notice reg-notice-closed" role="status">
@@ -265,10 +265,9 @@
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
           <div>
-            <h2 class="reg-notice-title">Registrations are closed</h2>
+            <h2 class="reg-notice-title">{$t('register.closed_title')}</h2>
             <p class="reg-notice-text">
-              This instance isn't accepting new sign-ups right now. Existing accounts are unaffected —
-              you can still <a href="/login">log in</a>.
+              {$t('register.closed_text')} <a href="/login">{$t('register.closed_login')}</a>.
             </p>
           </div>
         </div>
@@ -280,9 +279,9 @@
               <polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
             <div>
-              <h2 class="reg-notice-title">Invite required</h2>
+              <h2 class="reg-notice-title">{$t('register.invite_title')}</h2>
               <p class="reg-notice-text">
-                This instance is invite-only. You'll need a code from an existing member to sign up.
+                {$t('register.invite_text')}
               </p>
             </div>
           </div>
@@ -293,10 +292,9 @@
               <polyline points="12 6 12 12 16 14"/>
             </svg>
             <div>
-              <h2 class="reg-notice-title">Admin approval required</h2>
+              <h2 class="reg-notice-title">{$t('register.approval_title')}</h2>
               <p class="reg-notice-text">
-                You can apply now, but your account stays pending until an admin reviews it.
-                You'll get an email when it's approved.
+                {$t('register.approval_text')}
               </p>
             </div>
           </div>
@@ -311,23 +309,23 @@
 
         <form onsubmit={handleSubmit} novalidate>
         <div class="auth-field">
-          <label for="handle" class="auth-label">HANDLE</label>
+          <label for="handle" class="auth-label">{$t('auth.handle')}</label>
           <div class="auth-handle-wrap">
             <span class="auth-handle-prefix" aria-hidden="true">@</span>
-            <input id="handle" type="text" class="auth-input auth-handle-input" class:auth-input-error={!!fieldErrors.handle || handleInvalid} placeholder="yourname" bind:value={handle} required disabled={loading} autocomplete="username" pattern="[a-zA-Z0-9_]+" />
+            <input id="handle" type="text" class="auth-input auth-handle-input" class:auth-input-error={!!fieldErrors.handle || handleInvalid} placeholder={$t('register.handle_placeholder')} bind:value={handle} required disabled={loading} autocomplete="username" pattern="[a-zA-Z0-9_]+" />
           </div>
           {#if fieldErrors.handle}
             <p class="auth-field-error" role="alert">{fieldErrors.handle}</p>
           {:else if handleInvalid}
-            <p class="auth-field-error" role="alert">Only letters, numbers, and underscores</p>
+            <p class="auth-field-error" role="alert">{$t('register.err_handle_chars')}</p>
           {/if}
         </div>
 
         <div class="auth-field">
           <label for="reg-invite" class="auth-label">
-            INVITE CODE
+            {$t('register.invite_label')}
             {#if registrationMode !== 'invite_only'}
-              <span class="auth-label-optional">(optional)</span>
+              <span class="auth-label-optional">{$t('register.optional')}</span>
             {/if}
           </label>
           <input
@@ -335,7 +333,7 @@
             type="text"
             class="auth-input"
             class:auth-input-error={!!fieldErrors.invite_code}
-            placeholder={registrationMode === 'invite_only' ? 'Required — ask an admin for a code' : 'If an admin gave you an invite code, enter it here'}
+            placeholder={registrationMode === 'invite_only' ? $t('register.invite_required_ph') : $t('register.invite_optional_ph')}
             bind:value={inviteCode}
             required={registrationMode === 'invite_only'}
             disabled={loading}
@@ -347,30 +345,30 @@
         </div>
 
         <div class="auth-field">
-          <label for="reg-email" class="auth-label">EMAIL</label>
+          <label for="reg-email" class="auth-label">{$t('auth.email')}</label>
           <input id="reg-email" type="email" class="auth-input" class:auth-input-error={!!fieldErrors.email || emailInvalid} placeholder="you@example.com" bind:value={email} required disabled={loading} autocomplete="email" />
           {#if fieldErrors.email}
             <p class="auth-field-error" role="alert">{fieldErrors.email}</p>
           {:else if emailInvalid}
-            <p class="auth-field-error" role="alert">Please enter a valid email address</p>
+            <p class="auth-field-error" role="alert">{$t('register.err_email')}</p>
           {/if}
         </div>
 
         <div class="auth-field">
-          <label for="reg-password" class="auth-label">PASSWORD</label>
-          <input id="reg-password" type="password" class="auth-input" class:auth-input-error={!!fieldErrors.password || passwordTooShort} placeholder="At least 16 characters" bind:value={password} required minlength={16} disabled={loading} autocomplete="new-password" />
+          <label for="reg-password" class="auth-label">{$t('auth.password')}</label>
+          <input id="reg-password" type="password" class="auth-input" class:auth-input-error={!!fieldErrors.password || passwordTooShort} placeholder={$t('register.password_ph')} bind:value={password} required minlength={16} disabled={loading} autocomplete="new-password" />
           {#if fieldErrors.password}
             <p class="auth-field-error" role="alert">{fieldErrors.password}</p>
           {:else if passwordTooShort}
-            <p class="auth-field-error" role="alert">{password.length}/16 characters minimum</p>
+            <p class="auth-field-error" role="alert">{$t('register.password_count', { count: password.length })}</p>
           {/if}
         </div>
 
         <div class="auth-field">
-          <label for="reg-password-confirm" class="auth-label">CONFIRM PASSWORD</label>
-          <input id="reg-password-confirm" type="password" class="auth-input" class:auth-input-error={passwordMismatch} placeholder="Repeat your password" bind:value={passwordConfirm} required disabled={loading} autocomplete="new-password" />
+          <label for="reg-password-confirm" class="auth-label">{$t('auth.confirm_password')}</label>
+          <input id="reg-password-confirm" type="password" class="auth-input" class:auth-input-error={passwordMismatch} placeholder={$t('register.confirm_ph')} bind:value={passwordConfirm} required disabled={loading} autocomplete="new-password" />
           {#if passwordMismatch}
-            <p class="auth-field-error" role="alert">Passwords do not match</p>
+            <p class="auth-field-error" role="alert">{$t('register.err_password_mismatch')}</p>
           {/if}
         </div>
 
@@ -390,8 +388,8 @@
           <label class="auth-checkbox-label">
             <input type="checkbox" bind:checked={agreedToTerms} disabled={loading} class="auth-checkbox" />
             <span class="auth-checkbox-text">
-              I agree to the <a href="/legal/terms" target="_blank" rel="noopener" class="auth-link">Terms of Service</a>
-              and <a href="/legal/privacy" target="_blank" rel="noopener" class="auth-link">Privacy Policy</a>
+              {$t('register.agree')} <a href="/legal/terms" target="_blank" rel="noopener" class="auth-link">{$t('register.terms')}</a>
+              {$t('register.and')} <a href="/legal/privacy" target="_blank" rel="noopener" class="auth-link">{$t('register.privacy')}</a>
             </span>
           </label>
         </div>
@@ -399,31 +397,31 @@
         {#if powSolving}
           <p class="auth-pow-status">
             <span class="auth-spinner-small" aria-hidden="true"></span>
-            Solving challenge...
+            {$t('register.solving')}
           </p>
         {/if}
 
         <button type="submit" class="auth-submit" disabled={loading || !formValid}>
           {#if loading}
             <span class="auth-spinner" aria-hidden="true"></span>
-            Creating account...
+            {$t('register.creating')}
           {:else}
-            Create account
+            {$t('register.page_title')}
           {/if}
         </button>
       </form>
       {/if}
 
       <p class="auth-footer">
-        Already have an account? <a href="/login" class="auth-footer-link">Log in</a>
+        {$t('register.have_account')} <a href="/login" class="auth-footer-link">{$t('auth.login')}</a>
       </p>
     </div>
 
     <!-- Right: Plans & tiers -->
     {#if tiersEnabled && plans.length > 0}
       <div class="plans-section">
-        <h2 class="plans-title">Choose your plan</h2>
-        <p class="plans-subtitle">Start free, upgrade anytime</p>
+        <h2 class="plans-title">{$t('register.plans_title')}</h2>
+        <p class="plans-subtitle">{$t('register.plans_subtitle')}</p>
 
         <div class="plans-grid">
           {#each plans as plan (plan.id)}
@@ -435,52 +433,52 @@
               onclick={() => selectedTier = plan.id}
             >
               {#if plan.id === 'verified_creator'}
-                <span class="plan-badge">Most popular</span>
+                <span class="plan-badge">{$t('register.most_popular')}</span>
               {/if}
 
               <h3 class="plan-name">{plan.name}</h3>
               <div class="plan-price">
                 <span class="plan-amount">{formatPrice(plan.price, plan.currency)}</span>
                 {#if plan.price > 0}
-                  <span class="plan-period">/month</span>
+                  <span class="plan-period">{$t('register.per_month')}</span>
                 {/if}
               </div>
 
               <ul class="plan-features">
                 <li>
                   <span class="plan-check">&#10003;</span>
-                  {plan.limits.char_limit} character limit
+                  {$t('register.feat_chars', { n: plan.limits.char_limit })}
                 </li>
                 <li>
                   <span class="plan-check">&#10003;</span>
-                  {plan.limits.media_per_post} media per post
+                  {$t('register.feat_media', { n: plan.limits.media_per_post })}
                 </li>
                 <li>
                   <span class="plan-check">&#10003;</span>
-                  Edit window: {formatEditWindow(plan.limits.edit_window)}
+                  {$t('register.feat_edit', { window: formatEditWindow(plan.limits.edit_window) })}
                 </li>
                 <li>
                   <span class="plan-check">&#10003;</span>
-                  {plan.limits.pinned_posts} pinned {plan.limits.pinned_posts === 1 ? 'post' : 'posts'}
+                  {$t('register.feat_pinned', { count: plan.limits.pinned_posts })}
                 </li>
                 <li>
                   <span class="plan-check">&#10003;</span>
-                  Follows: {formatFollows(plan.limits.follows_limit)}
+                  {$t('register.feat_follows', { n: formatFollows(plan.limits.follows_limit) })}
                 </li>
                 {#if plan.limits.scheduled_posts}
-                  <li><span class="plan-check">&#10003;</span> Scheduled posts</li>
+                  <li><span class="plan-check">&#10003;</span> {$t('register.feat_scheduled')}</li>
                 {/if}
                 {#if plan.limits.custom_emoji}
-                  <li><span class="plan-check">&#10003;</span> Custom emoji</li>
+                  <li><span class="plan-check">&#10003;</span> {$t('register.feat_custom_emoji')}</li>
                 {/if}
                 {#if plan.limits.markdown !== 'none'}
                   <li><span class="plan-check">&#10003;</span> Markdown ({plan.limits.markdown})</li>
                 {/if}
                 <li class="plan-feature-muted">
-                  Up to {plan.limits.image_size_mb}MB images, {plan.limits.video_size_mb}MB video
+                  {$t('register.feat_sizes', { image: plan.limits.image_size_mb, video: plan.limits.video_size_mb })}
                 </li>
                 {#if plan.limits.video_resolution >= 1080}
-                  <li><span class="plan-check">&#10003;</span> HD video (1080p)</li>
+                  <li><span class="plan-check">&#10003;</span> {$t('register.feat_hd')}</li>
                 {/if}
               </ul>
             </button>
@@ -488,11 +486,11 @@
         </div>
 
         {#if !paymentConfigured && plans.some(p => p.price > 0)}
-          <p class="plans-note">Payment processing coming soon. All accounts start on the Free plan.</p>
+          <p class="plans-note">{$t('register.plans_note')}</p>
         {/if}
 
         <button type="button" class="plans-compare-btn" onclick={() => showTiers = !showTiers}>
-          {showTiers ? 'Hide' : 'Compare all'} features
+          {showTiers ? $t('register.compare_hide') : $t('register.compare_show')}
           <span class="material-symbols-outlined" style="font-size: 18px">{showTiers ? 'expand_less' : 'expand_more'}</span>
         </button>
 
@@ -501,29 +499,29 @@
             <table class="compare-table">
               <thead>
                 <tr>
-                  <th>Feature</th>
+                  <th>{$t('register.col_feature')}</th>
                   {#each plans as plan (plan.id)}
                     <th class:compare-highlight={selectedTier === plan.id}>{plan.name}</th>
                   {/each}
                 </tr>
               </thead>
               <tbody>
-                <tr><td>Character limit</td>{#each plans as p (p.id)}<td>{p.limits.char_limit}</td>{/each}</tr>
-                <tr><td>Media per post</td>{#each plans as p (p.id)}<td>{p.limits.media_per_post}</td>{/each}</tr>
-                <tr><td>Image size</td>{#each plans as p (p.id)}<td>{p.limits.image_size_mb} MB</td>{/each}</tr>
-                <tr><td>Video size</td>{#each plans as p (p.id)}<td>{p.limits.video_size_mb} MB</td>{/each}</tr>
-                <tr><td>Video quality</td>{#each plans as p (p.id)}<td>{p.limits.video_resolution}p</td>{/each}</tr>
-                <tr><td>Video duration</td>{#each plans as p (p.id)}<td>{Math.round(p.limits.video_duration / 60)} min</td>{/each}</tr>
-                <tr><td>Poll options</td>{#each plans as p (p.id)}<td>{p.limits.poll_options}</td>{/each}</tr>
-                <tr><td>Edit window</td>{#each plans as p (p.id)}<td>{formatEditWindow(p.limits.edit_window)}</td>{/each}</tr>
-                <tr><td>Pinned posts</td>{#each plans as p (p.id)}<td>{p.limits.pinned_posts}</td>{/each}</tr>
-                <tr><td>Profile fields</td>{#each plans as p (p.id)}<td>{p.limits.profile_fields}</td>{/each}</tr>
-                <tr><td>Follows limit</td>{#each plans as p (p.id)}<td>{formatFollows(p.limits.follows_limit)}</td>{/each}</tr>
-                <tr><td>Scheduled posts</td>{#each plans as p (p.id)}<td>{p.limits.scheduled_posts ? '&#10003;' : '&#10007;'}</td>{/each}</tr>
-                <tr><td>{$t('register.plan_timed_posts')}</td>{#each plans as p (p.id)}<td>{p.limits.post_expiry ? '&#10003;' : '&#10007;'}</td>{/each}</tr>
-                <tr><td>Custom emoji</td>{#each plans as p (p.id)}<td>{p.limits.custom_emoji ? '&#10003;' : '&#10007;'}</td>{/each}</tr>
+                <tr><td>{$t('register.row_chars')}</td>{#each plans as p (p.id)}<td>{p.limits.char_limit}</td>{/each}</tr>
+                <tr><td>{$t('register.row_media')}</td>{#each plans as p (p.id)}<td>{p.limits.media_per_post}</td>{/each}</tr>
+                <tr><td>{$t('register.row_image')}</td>{#each plans as p (p.id)}<td>{p.limits.image_size_mb} MB</td>{/each}</tr>
+                <tr><td>{$t('register.row_video_size')}</td>{#each plans as p (p.id)}<td>{p.limits.video_size_mb} MB</td>{/each}</tr>
+                <tr><td>{$t('register.row_video_quality')}</td>{#each plans as p (p.id)}<td>{p.limits.video_resolution}p</td>{/each}</tr>
+                <tr><td>{$t('register.row_video_duration')}</td>{#each plans as p (p.id)}<td>{$t('register.minutes', { n: Math.round(p.limits.video_duration / 60) })}</td>{/each}</tr>
+                <tr><td>{$t('register.row_poll')}</td>{#each plans as p (p.id)}<td>{p.limits.poll_options}</td>{/each}</tr>
+                <tr><td>{$t('register.row_edit')}</td>{#each plans as p (p.id)}<td>{formatEditWindow(p.limits.edit_window)}</td>{/each}</tr>
+                <tr><td>{$t('register.row_pinned')}</td>{#each plans as p (p.id)}<td>{p.limits.pinned_posts}</td>{/each}</tr>
+                <tr><td>{$t('register.row_fields')}</td>{#each plans as p (p.id)}<td>{p.limits.profile_fields}</td>{/each}</tr>
+                <tr><td>{$t('register.row_follows')}</td>{#each plans as p (p.id)}<td>{formatFollows(p.limits.follows_limit)}</td>{/each}</tr>
+                <tr><td>{$t('register.feat_scheduled')}</td>{#each plans as p (p.id)}<td>{p.limits.scheduled_posts ? '✓' : '✗'}</td>{/each}</tr>
+                <tr><td>{$t('register.plan_timed_posts')}</td>{#each plans as p (p.id)}<td>{p.limits.post_expiry ? '✓' : '✗'}</td>{/each}</tr>
+                <tr><td>{$t('register.feat_custom_emoji')}</td>{#each plans as p (p.id)}<td>{p.limits.custom_emoji ? '✓' : '✗'}</td>{/each}</tr>
                 <tr><td>Markdown</td>{#each plans as p (p.id)}<td>{p.limits.markdown}</td>{/each}</tr>
-                <tr><td class="compare-price-row">Price</td>{#each plans as p (p.id)}<td class="compare-price-row">{formatPrice(p.price, p.currency)}{p.price > 0 ? '/mo' : ''}</td>{/each}</tr>
+                <tr><td class="compare-price-row">{$t('register.row_price')}</td>{#each plans as p (p.id)}<td class="compare-price-row">{formatPrice(p.price, p.currency)}{p.price > 0 ? $t('register.per_month_short') : ''}</td>{/each}</tr>
               </tbody>
             </table>
           </div>

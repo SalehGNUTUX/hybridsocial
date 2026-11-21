@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/stores/i18n.js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/api/client.js';
@@ -196,7 +197,7 @@
       } else if (err instanceof ApiError) {
         error = err.body.error_description || tError(err.body.error);
       } else {
-        error = 'An unexpected error occurred. Please try again.';
+        error = $t('login.error_unexpected');
       }
       // PoW + captcha tokens are single-use; refresh them so a retry
       // (e.g. after a wrong password) isn't rejected as a stale challenge.
@@ -215,12 +216,12 @@
     resendMsg = '';
     try {
       await api.post('/api/v1/auth/resend_confirmation', { email: unconfirmedEmail });
-      resendMsg = 'Sent. Check your inbox (and spam) for the activation link.';
+      resendMsg = $t('login.resend_sent');
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
-        resendMsg = "You've hit the resend limit (2 per hour). Please wait, or contact support below.";
+        resendMsg = $t('login.resend_limited');
       } else {
-        resendMsg = 'Could not resend right now. Please try again shortly.';
+        resendMsg = $t('login.resend_failed');
       }
     } finally {
       resending = false;
@@ -242,7 +243,7 @@
 
   async function passkeyNext() {
     if (!passkeyEmail.trim()) {
-      passkeyError = 'Please enter your email.';
+      passkeyError = $t('login.passkey_need_email');
       return;
     }
     passkeyStep = 'key';
@@ -252,7 +253,7 @@
 
   async function loginWithPasskey() {
     if (!navigator.credentials) {
-      passkeyError = 'WebAuthn is not supported in this browser.';
+      passkeyError = $t('login.passkey_unsupported');
       return;
     }
 
@@ -295,9 +296,9 @@
     } catch (e) {
       passkeyStep = 'email';
       if (e instanceof Error && e.name === 'NotAllowedError') {
-        passkeyError = 'Authentication was cancelled or no matching key found.';
+        passkeyError = $t('login.passkey_cancelled');
       } else {
-        passkeyError = 'Authentication failed. Please check your email and try again.';
+        passkeyError = $t('login.passkey_failed');
       }
     } finally {
       passkeyLoading = false;
@@ -322,7 +323,7 @@
 </script>
 
 <svelte:head>
-  <title>Sign in - {$instanceName}</title>
+  <title>{$t('login.page_title')} - {$instanceName}</title>
 </svelte:head>
 
 <div class="auth-card">
@@ -331,13 +332,13 @@
   </div>
 
   {#if emailUnconfirmed}
-    <h1 class="auth-title">Confirm your email</h1>
+    <h1 class="auth-title">{$t('login.confirm_title')}</h1>
     <p class="auth-subtitle">
-      You need to activate your email before you can use {$instanceName}.
+      {$t('login.confirm_subtitle', { instance: $instanceName })}
     </p>
     <p class="auth-gate-text">
-      We sent a confirmation link to <strong>{unconfirmedEmail}</strong>. Open it to
-      activate your account, then sign in.
+      {$t('login.confirm_sent_to')} <strong dir="ltr">{unconfirmedEmail}</strong>.
+      {$t('login.confirm_open')}
     </p>
 
     {#if resendMsg}
@@ -350,15 +351,15 @@
       disabled={resending}
       onclick={resendConfirmation}
     >
-      {resending ? 'Sending…' : 'Resend activation email'}
+      {resending ? $t('login.resending') : $t('login.resend')}
     </button>
 
     <p class="auth-gate-support">
-      Didn't get it, or can't activate your account?
+      {$t('login.support_question')}
       {#if contactEmail}
-        Email <a href="mailto:{contactEmail}">{contactEmail}</a> and we'll help you out.
+        {$t('login.support_email_before')} <a href="mailto:{contactEmail}" dir="ltr">{contactEmail}</a> {$t('login.support_email_after')}
       {:else}
-        Contact the instance administrator for help.
+        {$t('login.support_admin')}
       {/if}
     </p>
 
@@ -367,11 +368,11 @@
       class="auth-back-btn"
       onclick={() => { emailUnconfirmed = false; resendMsg = ''; }}
     >
-      Back to sign in
+      {$t('login.back_to_signin')}
     </button>
   {:else}
-  <h1 class="auth-title">Sign in to your server</h1>
-  <p class="auth-subtitle">Enter your credentials to continue</p>
+  <h1 class="auth-title">{$t('login.title')}</h1>
+  <p class="auth-subtitle">{$t('login.subtitle')}</p>
 
   {#if $currentUser}
     <!-- Reaching /login (e.g. via "Add another account") does NOT log the
@@ -385,11 +386,11 @@
         size="sm"
       />
       <div class="active-session-text">
-        <span class="active-session-label">Still signed in as</span>
+        <span class="active-session-label">{$t('login.still_signed_in')}</span>
         <span class="active-session-handle">@{$currentUser.handle}</span>
       </div>
       <button type="button" class="active-session-back" onclick={() => goto('/home')}>
-        Back to app
+        {$t('login.back_to_app')}
       </button>
     </div>
   {/if}
@@ -404,12 +405,12 @@
   <form onsubmit={handleSubmit} novalidate>
     {#if !otpRequired}
       <div class="auth-field">
-        <label class="auth-label" for="email">EMAIL OR USERNAME</label>
+        <label class="auth-label" for="email">{$t('login.identifier_label')}</label>
         <input
           id="email"
           type="text"
           class="auth-input"
-          placeholder="Email or username"
+          placeholder={$t('login.identifier_label')}
           bind:value={email}
           required
           disabled={loading}
@@ -418,13 +419,13 @@
       </div>
 
       <div class="auth-field">
-        <label class="auth-label" for="password">PASSWORD</label>
+        <label class="auth-label" for="password">{$t('auth.password')}</label>
         <div class="auth-input-wrap">
           <input
             id="password"
             type={showPassword ? 'text' : 'password'}
             class="auth-input auth-input-password"
-            placeholder="Password"
+            placeholder={$t('auth.password')}
             bind:value={password}
             required
             disabled={loading}
@@ -436,7 +437,7 @@
             class="auth-password-toggle"
             onclick={() => showPassword = !showPassword}
             tabindex={-1}
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-label={showPassword ? $t('login.hide_password') : $t('login.show_password')}
           >
             {#if showPassword}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -453,9 +454,9 @@
           </button>
         </div>
         <div class="auth-field-footer">
-          <a href="/reset-password" class="auth-link">Forgot password?</a>
+          <a href="/reset-password" class="auth-link">{$t('auth.forgot_password')}</a>
           <span class="auth-sep"> · </span>
-          <a href="/recover" class="auth-link">Lost email access?</a>
+          <a href="/recover" class="auth-link">{$t('login.lost_email')}</a>
         </div>
       </div>
 
@@ -473,17 +474,17 @@
     {:else}
       {#if otpExpired}
         <div class="auth-otp-expired">
-          <p class="auth-otp-expired-text">Verification expired. Please try again.</p>
+          <p class="auth-otp-expired-text">{$t('login.otp_expired')}</p>
         </div>
       {:else}
         <div class="auth-field">
           <div class="auth-otp-header">
-            <label for="otp" class="auth-label">TWO-FACTOR CODE</label>
+            <label for="otp" class="auth-label">{$t('login.otp_label')}</label>
             <span class="auth-otp-timer" class:auth-otp-timer-warning={otpCountdown <= 10}>
               {formatCountdown(otpCountdown)}
             </span>
           </div>
-          <p class="auth-hint">Enter the code from your authenticator app</p>
+          <p class="auth-hint">{$t('login.otp_hint')}</p>
           <input
             id="otp"
             type="text"
@@ -504,7 +505,7 @@
 
     {#if otpExpired}
       <button type="button" class="auth-submit" onclick={resetOtp}>
-        Try Again
+        {$t('login.try_again')}
       </button>
     {:else}
       <button
@@ -516,11 +517,11 @@
       >
         {#if loading}
           <span class="auth-spinner" aria-hidden="true"></span>
-          Signing in...
+          {$t('login.signing_in')}
         {:else if otpRequired}
-          Verify
+          {$t('login.verify')}
         {:else}
-          Sign in
+          {$t('login.submit')}
         {/if}
       </button>
     {/if}
@@ -532,21 +533,21 @@
       class="auth-back-btn"
       onclick={resetOtp}
     >
-      Back to sign in
+      {$t('login.back_to_signin')}
     </button>
   {/if}
 
   {#if !otpRequired}
     <div class="auth-divider">
-      <span>or</span>
+      <span>{$t('login.or')}</span>
     </div>
 
     <button type="button" class="auth-passkey-btn" onclick={openPasskeyMode}>
       <span class="material-symbols-outlined" style="font-size: 20px">key</span>
-      Sign in with Security Key
+      {$t('login.passkey_button')}
     </button>
 
-    <a href="/register" class="auth-alt-btn">Create account</a>
+    <a href="/register" class="auth-alt-btn">{$t('login.create_account')}</a>
   {/if}
   {/if}
 </div>
@@ -555,7 +556,7 @@
 {#if passkeyMode}
   <div class="passkey-overlay" onclick={closePasskeyMode} role="presentation">
     <div class="passkey-modal" onclick={(e) => e.stopPropagation()}>
-      <button type="button" class="passkey-close" onclick={closePasskeyMode} aria-label="Close">
+      <button type="button" class="passkey-close" onclick={closePasskeyMode} aria-label={$t('common.close')}>
         <span class="material-symbols-outlined">close</span>
       </button>
 
@@ -564,8 +565,8 @@
       </div>
 
       {#if passkeyStep === 'email'}
-        <h2 class="passkey-title">Sign in with Security Key</h2>
-        <p class="passkey-desc">Enter your email, then use your security key, passkey, or biometric to sign in.</p>
+        <h2 class="passkey-title">{$t('login.passkey_button')}</h2>
+        <p class="passkey-desc">{$t('login.passkey_desc')}</p>
 
         {#if passkeyError}
           <div class="passkey-error">{passkeyError}</div>
@@ -575,21 +576,21 @@
           <input
             type="email"
             class="passkey-input"
-            placeholder="Email address"
+            placeholder={$t('login.email_address')}
             bind:value={passkeyEmail}
             autofocus
           />
           <button type="submit" class="passkey-next-btn" disabled={!passkeyEmail.trim()}>
-            Next
+            {$t('login.next')}
           </button>
         </form>
       {:else}
-        <h2 class="passkey-title">Touch your security key</h2>
+        <h2 class="passkey-title">{$t('login.passkey_touch')}</h2>
         <p class="passkey-desc">
           {#if passkeyLoading}
-            Waiting for your security key, passkey, or biometric...
+            {$t('login.passkey_waiting')}
           {:else}
-            Ready to authenticate.
+            {$t('login.passkey_ready')}
           {/if}
         </p>
 
@@ -601,7 +602,7 @@
 
         <button type="button" class="passkey-back" onclick={() => { passkeyStep = 'email'; passkeyError = ''; }}>
           <span class="material-symbols-outlined rtl-mirror" style="font-size: 16px">arrow_back</span>
-          Use a different email
+          {$t('login.passkey_other_email')}
         </button>
       {/if}
     </div>
@@ -610,12 +611,12 @@
 
 {#if !otpRequired}
   <div class="auth-info-card">
-    <h3 class="auth-info-title">New to {$instanceName}?</h3>
+    <h3 class="auth-info-title">{$t('login.new_to', { instance: $instanceName })}</h3>
     <p class="auth-info-desc">
-      Create your own server in minutes or join a community run by others.
+      {$t('login.new_desc')}
     </p>
-    <a href="/register" class="auth-info-link">Create a server &rarr;</a>
-    <a href="/explore" class="auth-info-link">Explore servers &rarr;</a>
+    <a href="/register" class="auth-info-link">{$t('login.create_server')}</a>
+    <a href="/explore" class="auth-info-link">{$t('login.explore_servers')}</a>
   </div>
 {/if}
 

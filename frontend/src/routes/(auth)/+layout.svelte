@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/stores/i18n.js';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { instanceName } from '$lib/stores/instance.js';
@@ -30,16 +31,14 @@
       </div>
 
       <h1 class="hero-headline">
-        Own your<br />social network<span class="hero-dot">.</span>
+        {$t('landing.headline_1')}<br />{$t('landing.headline_2')}<span class="hero-dot">.</span>
       </h1>
 
       <p class="hero-description">
         {#if $page.data?.instance?.description}
           {$page.data.instance.description}
         {:else}
-          {$instanceName} is a decentralized social platform.
-          Run your own server, control your data, and connect
-          with others across the Fediverse.
+          {$t('landing.description', { instance: $instanceName })}
         {/if}
       </p>
 
@@ -52,8 +51,8 @@
               <path d="M12 17v4" />
             </svg>
           </div>
-          <h3 class="hero-feature-title">You host it</h3>
-          <p class="hero-feature-desc">Run your own server or choose a provider</p>
+          <h3 class="hero-feature-title">{$t('landing.host_title')}</h3>
+          <p class="hero-feature-desc">{$t('landing.host_desc')}</p>
         </div>
         <div class="hero-feature">
           <div class="hero-feature-icon">
@@ -65,8 +64,8 @@
               <path d="M12 12l5 5" />
             </svg>
           </div>
-          <h3 class="hero-feature-title">You own it</h3>
-          <p class="hero-feature-desc">Your data, your rules, your community</p>
+          <h3 class="hero-feature-title">{$t('landing.own_title')}</h3>
+          <p class="hero-feature-desc">{$t('landing.own_desc')}</p>
         </div>
         <div class="hero-feature">
           <div class="hero-feature-icon">
@@ -76,21 +75,21 @@
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
             </svg>
           </div>
-          <h3 class="hero-feature-title">You're connected</h3>
-          <p class="hero-feature-desc">Seamless access across the open social web</p>
+          <h3 class="hero-feature-title">{$t('landing.connected_title')}</h3>
+          <p class="hero-feature-desc">{$t('landing.connected_desc')}</p>
         </div>
       </div>
 
       <!-- Decorative floating cards -->
       <div class="hero-cards" aria-hidden="true">
         <div class="hero-card hero-card-reactions" class:float-a={floatingReady}>
-          <div class="reaction-row"><span>👍</span> Like</div>
-          <div class="reaction-row"><span>❤️</span> Love</div>
-          <div class="reaction-row"><span>🥰</span> Care</div>
-          <div class="reaction-row"><span>😡</span> Angry</div>
-          <div class="reaction-row"><span>😢</span> Sad</div>
-          <div class="reaction-row"><span>😂</span> LOL</div>
-          <div class="reaction-row"><span>😮</span> Wow</div>
+          <div class="reaction-row"><span>👍</span> {$t('landing.r_like')}</div>
+          <div class="reaction-row"><span>❤️</span> {$t('landing.r_love')}</div>
+          <div class="reaction-row"><span>🥰</span> {$t('landing.r_care')}</div>
+          <div class="reaction-row"><span>😡</span> {$t('landing.r_angry')}</div>
+          <div class="reaction-row"><span>😢</span> {$t('landing.r_sad')}</div>
+          <div class="reaction-row"><span>😂</span> {$t('landing.r_lol')}</div>
+          <div class="reaction-row"><span>😮</span> {$t('landing.r_wow')}</div>
         </div>
 
         <div class="hero-card hero-card-post" class:float-b={floatingReady}>
@@ -98,10 +97,10 @@
             <div class="mock-avatar"></div>
             <div>
               <div class="mock-name">John Smith</div>
-              <div class="mock-handle">@john · 2h</div>
+              <div class="mock-handle"><span dir="ltr">@john</span> · {$t('landing.mock_time')}</div>
             </div>
           </div>
-          <p class="mock-text">Just published a new post on my server! Loving the sense of ownership and freedom here. 🌿</p>
+          <p class="mock-text">{$t('landing.mock_text')}</p>
           <div class="mock-image"></div>
           <div class="mock-actions">
             <span>❤️ 42</span>
@@ -112,51 +111,51 @@
         </div>
 
         <div class="hero-card hero-card-visibility" class:float-c={floatingReady}>
-          <div class="vis-title">Post visibility</div>
+          <div class="vis-title">{$t('landing.vis_title')}</div>
           <div class="vis-option vis-active">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
             <div>
-              <div class="vis-label">Public</div>
-              <div class="vis-desc">Anyone on or off the network</div>
+              <div class="vis-label">{$t('landing.vis_public')}</div>
+              <div class="vis-desc">{$t('landing.vis_public_desc')}</div>
             </div>
           </div>
           <div class="vis-option">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
             <div>
-              <div class="vis-label">Followers</div>
-              <div class="vis-desc">Only your followers</div>
+              <div class="vis-label">{$t('landing.vis_followers')}</div>
+              <div class="vis-desc">{$t('landing.vis_followers_desc')}</div>
             </div>
           </div>
           <div class="vis-option">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <div>
-              <div class="vis-label">Group</div>
-              <div class="vis-desc">Members of a group</div>
+              <div class="vis-label">{$t('landing.vis_group')}</div>
+              <div class="vis-desc">{$t('landing.vis_group_desc')}</div>
             </div>
           </div>
           <div class="vis-option">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4z"/></svg>
             <div>
-              <div class="vis-label">Direct</div>
-              <div class="vis-desc">Mentioned users only</div>
+              <div class="vis-label">{$t('landing.vis_direct')}</div>
+              <div class="vis-desc">{$t('landing.vis_direct_desc')}</div>
             </div>
           </div>
         </div>
 
         <div class="hero-card hero-card-group" class:float-d={floatingReady}>
           <div class="group-icon">#</div>
-          <div class="group-name">Photography</div>
-          <div class="group-handle">@photogroup</div>
-          <p class="group-desc">A space for photographers to share and connect.</p>
+          <div class="group-name">{$t('landing.group_name')}</div>
+          <div class="group-handle" dir="ltr">@photogroup</div>
+          <p class="group-desc">{$t('landing.group_desc')}</p>
           <div class="group-meta">
             <div class="group-avatars">
               <div class="group-avatar-dot"></div>
               <div class="group-avatar-dot"></div>
               <div class="group-avatar-dot"></div>
             </div>
-            <span class="group-count">group · 1.2K members</span>
+            <span class="group-count">{$t('landing.group_count')}</span>
           </div>
-          <button class="group-join" tabindex="-1">Request to Join</button>
+          <button class="group-join" tabindex="-1">{$t('landing.group_join')}</button>
         </div>
       </div>
     </div>
@@ -168,9 +167,9 @@
       {@render children()}
 
       <footer class="landing-footer">
-        <a href="/legal/about">About</a>
-        <a href="/legal/privacy">Privacy</a>
-        <a href="/legal/terms">Terms</a>
+        <a href="/legal/about">{$t('landing.about')}</a>
+        <a href="/legal/privacy">{$t('landing.privacy')}</a>
+        <a href="/legal/terms">{$t('landing.terms')}</a>
       </footer>
     </div>
   </div>
